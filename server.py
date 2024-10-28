@@ -1,8 +1,12 @@
 import argparse
 from typing import List, Tuple
-
+import time
 import flwr as fl
 from flwr.common import Metrics
+
+import matplotlib.pyplot as plt
+
+accuracy_plot = []
 
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -39,8 +43,9 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Multiply accuracy of each client by number of examples used
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
-
+    
     # Aggregate and return custom metric (weighted average)
+    accuracy_plot.append(sum(accuracies) / sum(examples))
     return {"accuracy": sum(accuracies) / sum(examples)}
 
 
@@ -70,10 +75,14 @@ def main():
     # Start Flower server
     fl.server.start_server(
         server_address=args.server_address,
-        config=fl.server.ServerConfig(num_rounds=3),
+        config=fl.server.ServerConfig(num_rounds=args.rounds),
         strategy=strategy,
     )
+    print(accuracy_plot)
 
+    plt.figure(1)
+    plt.plot(accuracy_plot)
+    plt.savefig('bar.png')
 
 if __name__ == "__main__":
     main()
