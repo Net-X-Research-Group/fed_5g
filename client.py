@@ -1,7 +1,7 @@
 import argparse
 import warnings
 from collections import OrderedDict
-
+import logging
 import flwr as fl
 import torch
 import torch.nn as nn
