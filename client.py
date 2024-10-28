@@ -35,6 +35,9 @@ parser.add_argument(
 warnings.filterwarnings("ignore", category=UserWarning)
 NUM_CLIENTS = 50
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class Net(nn.Module):
     """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')."""
@@ -67,6 +70,7 @@ def train(net, trainloader, optimizer, epochs, device):
             optimizer.zero_grad()
             criterion(net(images.to(device)), labels.to(device)).backward()
             optimizer.step()
+        logger.info(f'Finished epoch')
 
 
 def test(net, testloader, device):
@@ -82,6 +86,7 @@ def test(net, testloader, device):
             loss += criterion(outputs, labels).item()
             correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
     accuracy = correct / len(testloader.dataset)
+    logger.info(f"Evaluation complete. Loss: {loss:.4f}, Accuracy: {accuracy:.4f}")
     return loss, accuracy
 
 
@@ -132,6 +137,7 @@ class FlowerClient(fl.client.NumPyClient):
         # Determine device
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)  # send model to device
+        logger.info(f"Initialized FlowerClient on device: {self.device}")
 
     def set_parameters(self, params):
         """Set model weights from a list of NumPy ndarrays."""
