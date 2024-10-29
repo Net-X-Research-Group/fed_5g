@@ -3,10 +3,11 @@ from typing import List, Tuple
 import time
 import flwr as fl
 from flwr.common import Metrics
-
+import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 
 accuracy_plot = []
+loss_plot = []
 
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -40,12 +41,15 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     """This function averages the `accuracy` metric sent by the clients in a `evaluate`
     stage (i.e. clients received the global model and evaluate it on their local
     validation sets)."""
-    # Multiply accuracy of each client by number of examples used
+    # Multiply accuracy and loss of each client by number of examples used
+    print(metrics)
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
+    losses = [num_examples * m["loss"] for num_examples, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
     
     # Aggregate and return custom metric (weighted average)
     accuracy_plot.append(sum(accuracies) / sum(examples))
+    loss_plot.append(sum(losses) / sum(examples))
     return {"accuracy": sum(accuracies) / sum(examples)}
 
 
@@ -78,11 +82,23 @@ def main():
         config=fl.server.ServerConfig(num_rounds=args.rounds),
         strategy=strategy,
     )
-    print(accuracy_plot)
 
+    x1 = range(len(accuracy_plot))
     plt.figure(1)
-    plt.plot(accuracy_plot)
-    plt.savefig('bar.png')
+    plt.plot(x1, accuracy_plot, marker='o', linestyle='solid')
+    plt.xlabel('Rounds')
+    plt.ylabel('Accuracy')
+    plt.title('Accuracy vs. Rounds')
+    plt.savefig(f'FedAvg_{args.min_num_clients}C_{args.rounds}R_Accuracy.png')
+
+    x2 = range(len(loss_plot))
+    plt.figure(2)
+    plt.plot(x2, loss_plot, marker='o', linestyle='solid')
+    plt.xlabel('Rounds')
+    plt.ylabel('Loss')
+    plt.title('Loss Function')
+    plt.savefig(f'FedAvg_{args.min_num_clients}C_{args.rounds}R_Loss.png')
+
 
 if __name__ == "__main__":
     main()
