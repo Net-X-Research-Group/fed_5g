@@ -3,6 +3,7 @@ from typing import List, Tuple
 import time
 import flwr as fl
 from flwr.common import Metrics
+from flwr.server import history
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 
@@ -83,6 +84,19 @@ def main():
         strategy=strategy,
     )
 
+    print(f"{history.metrics_centralized = }")
+
+    global_accuracy_centralised = history.metrics_centralized["accuracy"]
+    round = [data[0] for data in global_accuracy_centralised]
+    acc = [100.0 * data[1] for data in global_accuracy_centralised]
+    plt.plot(round, acc)
+    plt.grid()
+    plt.ylabel("Accuracy (%)")
+    plt.xlabel("Round")
+    plt.title("MNIST - IID - 100 clients with 10 clients per round")
+
+
+    '''
     x1 = range(len(accuracy_plot))
     plt.figure(1)
     plt.plot(x1, accuracy_plot, marker='o', linestyle='solid')
@@ -98,7 +112,7 @@ def main():
     plt.ylabel('Loss')
     plt.title('Loss Function')
     plt.savefig(f'FedAvg_{args.min_num_clients}C_{args.rounds}R_Loss.png')
-
+    '''
 
 if __name__ == "__main__":
     main()
