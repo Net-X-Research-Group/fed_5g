@@ -3,7 +3,6 @@ from typing import List, Tuple
 import time
 import flwr as fl
 from flwr.common import Metrics
-from flwr.server import history
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 
@@ -78,15 +77,15 @@ def main():
     )
 
     # Start Flower server
-    fl.server.start_server(
+    server = fl.server.start_server(
         server_address=args.server_address,
         config=fl.server.ServerConfig(num_rounds=args.rounds),
         strategy=strategy,
     )
 
-    print(f"{history.metrics_distributed = }")
+    print(f"{server.metrics_distributed = }")
 
-    global_accuracy_centralised = history.metrics_distributed["accuracy"]
+    global_accuracy_centralised = server.metrics_distributed["accuracy"]
     round = [data[0] for data in global_accuracy_centralised]
     acc = [100.0 * data[1] for data in global_accuracy_centralised]
     plt.plot(round, acc)
