@@ -84,9 +84,9 @@ def main():
         strategy=strategy,
     )
 
-    print(f"{history.metrics_centralized = }")
+    print(f"{history.metrics_distributed = }")
 
-    global_accuracy_centralised = history.metrics_centralized["accuracy"]
+    global_accuracy_centralised = history.metrics_distributed["accuracy"]
     round = [data[0] for data in global_accuracy_centralised]
     acc = [100.0 * data[1] for data in global_accuracy_centralised]
     plt.plot(round, acc)
