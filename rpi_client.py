@@ -213,7 +213,7 @@ class FlowerClient(fl.client.NumPyClient):
         print("Client sampled for evaluate()")
         # Measure communication time (receiving parameters)
         comm_start = time.time()
-        self.set_parameters(parameters)
+        self.get_parameters(parameters)
         comm_time_receive = time.time() - comm_start
 
         # Measure computation time
