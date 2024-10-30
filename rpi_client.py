@@ -134,11 +134,14 @@ class FlowerClient(fl.client.NumPyClient):
         self.model.to(self.device)
         logger.info(f"Initialized FlowerClient on device: {self.device}")
 
+    def get_parameters(self, config):
+        return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
+
     def fit(self, parameters, config):
         print("Client sampled for fit()")
         # Measure communication time (receiving parameters)
         comm_start = time.time()
-        self.set_parameters(parameters)
+        self.get_parameters(parameters)
         comm_time_receive = time.time() - comm_start
 
         # Read hyperparameters from config
