@@ -186,7 +186,7 @@ class FlowerClient(fl.client.NumPyClient):
         # Evaluate
         loss, accuracy = test(self.model, valloader, device=self.device)
         # Return statistics
-        return float(loss), len(valloader.dataset), {"accuracy": float(accuracy), 'loss': float(loss), 'training_time': float(end_time)}
+        return float(loss), len(valloader.dataset), {"accuracy": float(accuracy), 'loss': float(loss)}
 
 
 def main():
