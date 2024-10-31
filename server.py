@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 accuracy_plot = []
 loss_plot = []
+training_time_plot = []
 
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -45,6 +46,7 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     print(metrics)
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     losses = [num_examples * m["loss"] for num_examples, m in metrics]
+    training_times = [m["training_time"] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
     
     # Aggregate and return custom metric (weighted average)

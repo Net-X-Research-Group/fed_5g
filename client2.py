@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 from torchvision.models import mobilenet_v3_small
 from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
+import time
 
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -62,8 +63,10 @@ class Net(nn.Module):
 
 def train(net, trainloader, optimizer, epochs, device):
     """Train the model on the training set."""
-    criterion = torch.nn.CrossEntropyLoss()
-    for _ in range(epochs):
+    criterion = torch.nn.CrossEntropyLoss() # Computes the cross entropy loss between logits and target
+    start_time = time.time()
+    for epoch in range(epochs):
+        logger.info(f"Starting epoch {epoch + 1}/{epochs}")
         for batch in tqdm(trainloader):
             batch = list(batch.values())
             images, labels = batch[0], batch[1]
@@ -71,6 +74,8 @@ def train(net, trainloader, optimizer, epochs, device):
             criterion(net(images.to(device)), labels.to(device)).backward()
             optimizer.step()
         logger.info(f'Finished epoch')
+    end_time = time.time() - start_time
+    return end_time
 
 
 def test(net, testloader, device):
@@ -163,9 +168,14 @@ class FlowerClient(fl.client.NumPyClient):
         # Define optimizer
         optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
         # Train
-        train(self.model, trainloader, optimizer, epochs=epochs, device=self.device)
+        training = train(self.model, trainloader, optimizer, epochs=epochs, device=self.device)
         # Return local model and statistics
-        return self.get_parameters({}), len(trainloader.dataset), {}
+        metrics = {
+            "training_time": training,
+            "device": self.device
+        }
+        return self.get_parameters({}), len(trainloader.dataset), metrics, {}
+
 
     def evaluate(self, parameters, config):
         print("Client sampled for evaluate()")
