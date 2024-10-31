@@ -85,15 +85,15 @@ def main():
 
     print(f"{server.metrics_distributed = }")
 
-    global_accuracy_centralised = server.metrics_distributed["accuracy"]
-    round = [data[0] for data in global_accuracy_centralised]
-    acc = [100.0 * data[1] for data in global_accuracy_centralised]
+    global_accuracy_distributed = server.metrics_distributed["accuracy"]
+    round = [data[0] for data in global_accuracy_distributed]
+    acc = [100.0 * data[1] for data in global_accuracy_distributed]
     plt.plot(round, acc)
     plt.grid()
     plt.ylabel("Accuracy (%)")
     plt.xlabel("Round")
-    plt.title("MNIST - IID - 100 clients with 10 clients per round")
-
+    plt.title("MNIST - IID - 2 clients with 2 clients per round")
+    plt.show()
 
     '''
     x1 = range(len(accuracy_plot))
