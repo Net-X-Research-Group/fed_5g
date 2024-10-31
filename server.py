@@ -6,9 +6,11 @@ from flwr.common import Metrics
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 
+from new_server import train_time_plot
+
 accuracy_plot = []
 loss_plot = []
-training_time_plot = []
+training_time_avg_plot = []
 
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -52,6 +54,7 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Aggregate and return custom metric (weighted average)
     accuracy_plot.append(sum(accuracies) / sum(examples))
     loss_plot.append(sum(losses) / sum(examples))
+    training_time_avg_plot.append(sum(training_times) / len(training_times))
     return {"accuracy": sum(accuracies) / sum(examples)}
 
 
@@ -62,6 +65,45 @@ def fit_config(server_round: int):
         "batch_size": 16,  # Batch size to use by clients during fit()
     }
     return config
+
+def plot_metrics(args):
+    """Plot all tracked metrics."""
+    rounds = range(1, len(accuracy_plot) + 1)
+
+    # Create a figure with 2x2 subplots
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+
+    # Plot accuracy
+    ax1.plot(rounds, accuracy_plot, marker='o')
+    ax1.set_xlabel('Rounds')
+    ax1.set_ylabel('Accuracy')
+    ax1.set_title('Model Accuracy vs. Rounds')
+    ax1.grid(True)
+
+    # Plot loss
+    ax2.plot(rounds, loss_plot, marker='o', color='red')
+    ax2.set_xlabel('Rounds')
+    ax2.set_ylabel('Loss')
+    ax2.set_title('Loss vs. Rounds')
+    ax2.grid(True)
+
+    # Plot computation time
+    ax3.plot(rounds, training_time_avg_plot, marker='o', color='green')
+    ax3.set_xlabel('Rounds')
+    ax3.set_ylabel('Time (seconds)')
+    ax3.set_title('Average Computation Time per Round')
+    ax3.grid(True)
+
+    # Plot communication time
+    ax4.plot(rounds, loss_plot, marker='o', color='purple')
+    ax4.set_xlabel('Rounds')
+    ax4.set_ylabel('Time (seconds)')
+    ax4.set_title('Average Communication Time per Round')
+    ax4.grid(True)
+
+    plt.tight_layout()
+    plt.savefig(f'FedAvg_{args.min_num_clients}C_{args.rounds}R_Metrics.png')
+    plt.show()
 
 
 def main():
@@ -81,12 +123,16 @@ def main():
     # Start Flower server
     server = fl.server.start_server(
         server_address=args.server_address,
-        config=fl.server.ServerConfig(num_rounds=args.rounds),
+        config=fl.server.ServerConfig(num_rounds=5),
         strategy=strategy,
     )
+    loss_plot = [z[1] for z in server.losses_distributed]
+    # Plot all metrics
+    plot_metrics(args)
 
+    '''
     print(f"{server.metrics_distributed = }")
-
+    
     global_accuracy_distributed = server.metrics_distributed["accuracy"]
     round = [data[0] for data in global_accuracy_distributed]
     acc = [100.0 * data[1] for data in global_accuracy_distributed]
@@ -96,7 +142,7 @@ def main():
     plt.xlabel("Round")
     plt.title("MNIST - IID - 2 clients with 2 clients per round")
     plt.show()
-
+    '''
     '''
     x1 = range(len(accuracy_plot))
     plt.figure(1)

@@ -13,6 +13,7 @@ from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
 import time
 
+
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
     "--server_address",
@@ -74,6 +75,7 @@ def train(net, trainloader, optimizer, epochs, device):
             criterion(net(images.to(device)), labels.to(device)).backward()
             optimizer.step()
         logger.info(f'Finished epoch')
+    global end_time
     end_time = time.time() - start_time
     return end_time
 
@@ -171,10 +173,9 @@ class FlowerClient(fl.client.NumPyClient):
         training = train(self.model, trainloader, optimizer, epochs=epochs, device=self.device)
         # Return local model and statistics
         metrics = {
-            "training_time": training,
-            "device": self.device
+            "training_time": training
         }
-        return self.get_parameters({}), len(trainloader.dataset), metrics, {}
+        return self.get_parameters({}), len(trainloader.dataset), metrics
 
 
     def evaluate(self, parameters, config):
@@ -185,7 +186,7 @@ class FlowerClient(fl.client.NumPyClient):
         # Evaluate
         loss, accuracy = test(self.model, valloader, device=self.device)
         # Return statistics
-        return float(loss), len(valloader.dataset), {"accuracy": float(accuracy)}
+        return float(loss), len(valloader.dataset), {"accuracy": float(accuracy), 'loss': float(loss), 'training_time': float(end_time)}
 
 
 def main():
