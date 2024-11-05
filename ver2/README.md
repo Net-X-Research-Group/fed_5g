@@ -6,7 +6,7 @@ A federated learning system using Flower. To be deployed with the SDR controller
 
 1. Launch the superlink:
    ```sh
-   flower-superlink --insecure --port=9092
+   flower-superlink --insecure 
    ```
 
 2. Launch the supernode:

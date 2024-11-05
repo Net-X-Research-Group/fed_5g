@@ -40,7 +40,7 @@ class FlowerClient(NumPyClient):
             self.learning_rate,
             self.device
         )
-        results['elapsed_time'] = time.time() - start_time # Add training time to results
+        results['training_time'] = time.time() - start_time # Add training time to results
         logger.info(f"Training complete. Elapsed time: {results['elapsed_time']}")
         return get_weights(self.net), len(self.trainloader.dataset), results
 
