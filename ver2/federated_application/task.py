@@ -1,5 +1,5 @@
 from collections import OrderedDict
-
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
@@ -8,6 +8,11 @@ from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 class Net(nn.Module):
     def __init__(self) -> None:
@@ -61,6 +66,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9) # SGD with momentum
     net.train() # Inform PyTorch that we are training the model
     for epoch in range(epochs):
+        logger.info(f"Starting epoch {epoch + 1}/{epochs}")
         for batch in trainloader:
             images = batch['img']
             labels = batch['label']
@@ -73,7 +79,6 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
         'val_loss': val_loss,
         'val_acc': val_acc
     }
-
     return results
 
 
