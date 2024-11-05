@@ -1,10 +1,42 @@
 import argparse
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
 
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import IidPartitioner, DirichletPartitioner
 from flwr_datasets.visualization import plot_label_distributions
 
 DATASET_DIRECTORY = "datasets"
+
+# Type definitions using Literals for better type checking
+PartitionStrategy = Literal[
+    "iid",
+    "dirichlet",
+    "label_distribution",
+    "quantity_based",
+    "shard"
+]
+
+Dataset = Literal[
+    'mnist',
+    'cifar10',
+    'cifar100'
+]
+
+
+@dataclass
+class PartitionConfiguration:
+    """Dataclass to store partition configuration parameters"""
+    num_clients: int
+    partitionStrategy: PartitionStrategy
+    dataset: Dataset
+    output_dir: Path = Path("datasets")
+    save_plots: bool = True
+
+    def __post_init__(self):
+        if self.num_clients < 1:
+            raise ValueError("Number of clients must be greater than or equal to 1")
 
 
 def main(arguments):
@@ -20,7 +52,7 @@ def main(arguments):
                 "train": IidPartitioner(num_partitions=num_clients),
             },
         )
-    #Non-IID Partition Types
+    # Non-IID Partition Types
     if partition_type == 'dirichlet':
         fds = FederatedDataset(
             dataset=dataset,
@@ -64,7 +96,8 @@ if __name__ == '__main__':
     parser.add_argument("--num-clients", type=int, default=2,
                         help="Number of client devices to participate in federated learning.")
     parser.add_argument('-p', '--partition', help="Partition as Non-IID dataset. Default is IID.", default='iid')
-    parser.add_argument('-d', '--dataset', required=True, choices={'mnist', 'cifar10', 'cifar100'}, help='Select the dataset.')
+    parser.add_argument('-d', '--dataset', required=True, choices={'mnist', 'cifar10', 'cifar100'},
+                        help='Select the dataset.')
 
     arguments = parser.parse_args()
 
