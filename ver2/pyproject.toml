@@ -18,11 +18,11 @@ dependencies = [
 packages = ["."]
 
 [tool.flwr.app]
-publisher = "Robert Hayek"
+publisher = "Robert Hayek, NU, ANL"
 
 [tool.flwr.app.components]
-serverapp = "NextGfedNU.server_app:app"
-clientapp = "NextGfedNU.client_app:app"
+serverapp = "federated_application.server:app"
+clientapp = "federated_application.client:app"
 
 [tool.flwr.app.config]
 num-server-rounds = 10
@@ -32,8 +32,8 @@ learning-rate = 0.1
 batch-size = 16
 
 [tool.flwr.federations]
-default = "nextg-federation"
+default = "federated_application"
 
-[tool.flwr.federations.embedded-federation]
-address = "localhost:9093"
+[tool.flwr.federations.federated_application]
+address = "0.0.0.0:9092"
 insecure = true
