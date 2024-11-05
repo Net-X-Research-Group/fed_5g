@@ -1,0 +1,93 @@
+from collections import OrderedDict
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as f
+import torch.optim as optim
+from datasets import load_from_disk
+from torch.utils.data import DataLoader
+from torchvision.transforms import Compose, Normalize, ToTensor
+
+
+class Net(nn.Module):
+    def __init__(self) -> None:
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
+
+    def forward(self, x):
+        x = self.pool(f.relu(self.conv1(x)))
+        x = self.pool(f.relu(self.conv2(x)))
+        x = torch.flatten(x, 1) # Flatten all dimensions except batch
+        x = f.relu(self.fc1(x))
+        x = f.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
+def get_weights(net) -> list:
+    return [val.cpu().numpy() for _, val in net.state_dict().items()]
+
+def set_weights(net, params) -> None:
+    params_dict = zip(net.state_dict().keys(), params)
+    state_dict = OrderedDict({k: torch.tensor(v) for k, v in params})
+    net.load_state_dict(state_dict, strict=True)
+
+def load_dataset(dataset_path: str, batch_size: int) -> tuple:
+    """Load the dataset from disk"""
+    dataset = load_from_disk(dataset_path)
+
+    pytorch_transforms_cifar10 = Compose([ToTensor(), Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])
+
+    def apply_transforms(batch):
+        """Apply transforms to the partition from FederatedDataset."""
+        batch["img"] = [pytorch_transforms_cifar10(img) for img in batch["img"]]
+        return batch
+
+    partition_train_test = dataset.with_transform(apply_transforms)
+    trainloader = DataLoader(
+        partition_train_test["train"], batch_size=batch_size, shuffle=True
+    )
+    testloader = DataLoader(partition_train_test["test"], batch_size=batch_size)
+    return trainloader, testloader
+
+def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
+    """Train the model on the training dataset"""
+    net.to(device)
+    criterion = nn.CrossEntropyLoss() # Use classification cross-entropy loss
+    optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9) # SGD with momentum
+    net.train() # Inform PyTorch that we are training the model
+    for epoch in range(epochs):
+        for batch in trainloader:
+            images = batch['img']
+            labels = batch['label']
+            optimizer.zero_grad() # Zero the parameter gradients
+            criterion(net(images.to(device)), labels.to(device)).backward() # Forward, backward, and optimize
+            optimizer.step()
+    val_loss, val_acc = test(net, valloader, device)
+
+    results = {
+        'val_loss': val_loss,
+        'val_acc': val_acc
+    }
+
+    return results
+
+
+def test(net, testloader, device) -> tuple:
+    """Test the model on the test dataset"""
+    criterion = nn.CrossEntropyLoss() # Use classification cross-entropy loss
+    correct, loss = 0.0
+    with torch.no_grad():
+        for batch in testloader:
+            images = batch['img'].to(device)
+            labels = batch['label'].to(device)
+            outputs = net(images)
+            loss += criterion(outputs, labels).item()
+            correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
+    accuracy = correct / len(testloader.dataset)
+    loss = loss / len(testloader)
+    return loss, accuracy
