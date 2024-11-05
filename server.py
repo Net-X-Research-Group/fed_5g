@@ -105,7 +105,7 @@ def plot_metrics(args, loss_plot: list):
 
     # Plot a line for each device
     for device_idx, times in enumerate(device_times):
-        ax3.plot(rounds, times, marker='o', color=colors[device_idx],
+        ax3.plot(rounds, times, marker='o', color=colors[device_idx], linestyle='--',
                  label=f'Device {device_idx + 1}')
     ax3.plot(rounds, training_time_avg_plot, marker='^', color='red', label='Average')
     ax3.set_xlabel('Rounds')
