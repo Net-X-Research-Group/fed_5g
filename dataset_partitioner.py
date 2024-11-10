@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, get_args
@@ -27,6 +28,12 @@ Dataset = Literal[
 VALID_PARTITION_STRATEGIES: tuple[str, ...] = get_args(PartitionStrategy)
 VALID_DATASETS: tuple[str, ...] = get_args(Dataset)
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class PartitionConfiguration:
@@ -36,9 +43,10 @@ class PartitionConfiguration:
     seed: int
     min_partition_size: int
     test_split: float
+
     partition_strategy: PartitionStrategy
     dataset: Dataset
-    output_dir: Path = Path('deprecated/ver2/datasets')
+    output_dir: Path = Path(os.path.expanduser(f'~/{DATASET_DIRECTORY}'))
     save_plots: bool = True
 
     def __post_init__(self):
@@ -57,23 +65,16 @@ class PartitionConfiguration:
 
 class DatasetPartitioner:
     """Class to partition a dataset for federated learning"""
+
     def __init__(self, config: PartitionConfiguration):
         self.config = config
-        self.logger = logging.getLogger(__name__)
-        self._setup_logging()
         self._set_output_directory()
-
-    def _setup_logging(self) -> None:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
 
     def _set_output_directory(self) -> None:
         """Create output directory if it does not exist"""
         self.config.output_dir = self.config.output_dir / self.config.partition_strategy
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
-        self.logger.info(f"Output directory: {self.config.output_dir}")
+        logger.info(f"Output directory: {self.config.output_dir}")
 
     def _get_partition_configuration(self) -> dict:
         """Return partition configuration based on the partition strategy"""
@@ -98,7 +99,7 @@ class DatasetPartitioner:
 
     def partition_dataset(self) -> None:
         """Partition the dataset, save the partitions to disk and save a plot"""
-        self.logger.info(f"Partitioning dataset: {self.config.dataset} with {self.config.num_clients} clients")
+        logger.info(f"Partitioning dataset: {self.config.dataset} with {self.config.num_clients} clients")
         partitioners = self._get_partition_configuration()
         fds = FederatedDataset(
             dataset=self.config.dataset,
@@ -124,7 +125,7 @@ class DatasetPartitioner:
         for partition_id in range(self.config.num_clients):
             partition = fds.load_partition(partition_id)
             partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
-            file_path = f"./{DATASET_DIRECTORY}/{self.config.partition_strategy}/{self.config.dataset}_part_{partition_id + 1}"
+            file_path = f"{self.config.output_dir}/{self.config.dataset}_part_{partition_id + 1}"
             partition_train_test.save_to_disk(file_path)
             print(f"Written: {file_path}")
 
@@ -134,6 +135,7 @@ def main():
     parser = argparse.ArgumentParser(description="Enhanced Federated Learning Dataset Partitioner")
 
     parser.add_argument(
+        '-n',
         "--num-clients",
         type=int,
         default=2,
@@ -180,12 +182,6 @@ def main():
         help="Random seed for reproducibility"
     )
     parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("deprecated/ver2/datasets"),
-        help="Output directory for partitioned datasets"
-    )
-    parser.add_argument(
         "--no-plots",
         action="store_false",
         dest="save_plots",
@@ -202,7 +198,7 @@ def main():
         min_partition_size=args.min_partition_size,
         test_split=args.test_split,
         seed=args.seed,
-        output_dir=args.output_dir,
+        # output_dir=args.output_dir,
         save_plots=args.save_plots
     )
 
