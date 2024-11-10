@@ -1,11 +1,12 @@
 import argparse
 from typing import List, Tuple
 import flwr as fl
-from flwr.common import Metrics
-import matplotlib.ticker as ticker
+from flwr.common import Metrics, ndarrays_to_parameters
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.pyplot import legend
+
+
+from task import Net, get_weights
 
 accuracy_plot = []
 training_time_avg_plot = []
@@ -15,7 +16,7 @@ eval_weighted_delta_plot = []
 eval_losses_plot = []
 fit_losses_plot = []
 
-from datetime import time, timedelta
+from datetime import time
 import time
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -165,14 +166,21 @@ def main():
 
     print(args)
 
+    # Initialize model parameters on the central server
+    ndarrays = get_weights(Net())
+    parameters = ndarrays_to_parameters(ndarrays)
+
     # Define strategy
     strategy = fl.server.strategy.FedAvg(
         fraction_fit=args.sample_fraction,
         fraction_evaluate=args.sample_fraction,
         min_fit_clients=args.min_num_clients,
+        min_available_clients=args.min_num_clients,
         on_fit_config_fn=fit_config,
         evaluate_metrics_aggregation_fn=weighted_average,
-        fit_metrics_aggregation_fn=fit_metrics
+        fit_metrics_aggregation_fn=fit_metrics,
+        initial_parameters=parameters
+
     )
 
     # Start Flower server

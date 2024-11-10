@@ -7,6 +7,7 @@ import torch.optim as optim
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
+from tqdm import tqdm
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,7 +39,12 @@ def get_weights(net) -> list:
 
 def set_weights(net, params) -> None:
     params_dict = zip(net.state_dict().keys(), params)
-    state_dict = OrderedDict({k: torch.tensor(v) for k, v in params})
+    state_dict = OrderedDict(
+        {
+            k: torch.Tensor(v) if v.shape != torch.Size([]) else torch.Tensor([0])
+            for k, v in params_dict
+        }
+    )
     net.load_state_dict(state_dict, strict=True)
 
 def load_dataset(dataset_path: str, batch_size: int) -> tuple:
@@ -67,7 +73,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     net.train() # Inform PyTorch that we are training the model
     for epoch in range(epochs):
         logger.info(f"Starting epoch {epoch + 1}/{epochs}")
-        for batch in trainloader:
+        for batch in tqdm(trainloader):
             images = batch['img']
             labels = batch['label']
             optimizer.zero_grad() # Zero the parameter gradients
@@ -85,7 +91,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
 def test(net, testloader, device) -> tuple:
     """Test the model on the test dataset"""
     criterion = nn.CrossEntropyLoss() # Use classification cross-entropy loss
-    correct, loss = 0.0
+    correct, loss = 0, 0.0
     with torch.no_grad():
         for batch in testloader:
             images = batch['img'].to(device)

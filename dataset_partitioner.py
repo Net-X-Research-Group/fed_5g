@@ -38,7 +38,7 @@ class PartitionConfiguration:
     test_split: float
     partition_strategy: PartitionStrategy
     dataset: Dataset
-    output_dir: Path = Path('datasets')
+    output_dir: Path = Path('deprecated/ver2/datasets')
     save_plots: bool = True
 
     def __post_init__(self):
@@ -182,7 +182,7 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("datasets"),
+        default=Path("deprecated/ver2/datasets"),
         help="Output directory for partitioned datasets"
     )
     parser.add_argument(
