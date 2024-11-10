@@ -1,15 +1,23 @@
 import argparse
 from typing import List, Tuple
-import time
 import flwr as fl
-from flwr.common import Metrics
-import matplotlib.ticker as ticker
+from flwr.common import Metrics, ndarrays_to_parameters
 import matplotlib.pyplot as plt
 import numpy as np
+
+
+from task import Net, get_weights
+
 accuracy_plot = []
 training_time_avg_plot = []
 perdevice_training_time_plot = []
+weighted_time_delta_plot = []
+eval_weighted_delta_plot = []
+eval_losses_plot = []
+fit_losses_plot = []
 
+from datetime import time
+import time
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
     "--server_address",
@@ -45,20 +53,42 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Multiply accuracy and loss of each client by number of examples used
     print(metrics)
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
+    losses = [num_examples * m['loss'] for num_examples, m in metrics]
     #training_times = [m["training_time"] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
     
     # Aggregate and return custom metric (weighted average)
     accuracy_plot.append(sum(accuracies) / sum(examples))
+    eval_losses_plot.append(sum(losses) / len(examples))
     #training_time_avg_plot.append(sum(training_times) / len(training_times))
-    return {"accuracy": sum(accuracies) / sum(examples)}
+
+    received_time = time.time()
+    total_num_examples = 0
+    total_time_delta = 0
+    for num_examples, metrics in metrics:
+        difference = received_time - metrics["eval_time"]
+        total_num_examples += num_examples
+        total_time_delta += difference * num_examples
+    weighted_time_delta = total_time_delta / total_num_examples
+    eval_weighted_delta_plot.append(weighted_time_delta)
+
+    return {"accuracy": sum(accuracies) / sum(examples), 'eval_weighted_time_delta': weighted_time_delta}
 
 def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     print(metrics)
     training_times = [m["training_time"] for _, m in metrics]
     perdevice_training_time_plot.append(training_times)
     training_time_avg_plot.append(sum(training_times) / len(training_times))
-    return {'training_time': sum(training_times) / len(training_times)}
+    received_time = time.time()
+    total_num_examples = 0
+    total_time_delta = 0
+    for num_examples, metrics in metrics:
+        difference = received_time - metrics["fit_time"]
+        total_num_examples += num_examples
+        total_time_delta += difference * num_examples
+    weighted_time_delta = total_time_delta / total_num_examples
+    weighted_time_delta_plot.append(weighted_time_delta)
+    return {'training_time': sum(training_times) / len(training_times), 'weighted_time_delta': weighted_time_delta}
 
 def fit_config(server_round: int):
     """Return a configuration with static batch size and (local) epochs."""
@@ -82,10 +112,12 @@ def plot_metrics(args, loss_plot: list):
     ax1.set_title('Model Accuracy vs. Rounds')
     ax1.grid(True)
     # Plot loss
-    ax2.plot(rounds, loss_plot, marker='o', color='red')
+    ax2.plot(rounds, loss_plot, marker='o', color='red', label='Loss (Dist.)')
+    #ax2.plot(rounds, eval_losses_plot, marker='o', color='blue', label='Loss (Eval)')
     ax2.set_xlabel('Rounds')
     ax2.set_ylabel('Loss')
     ax2.set_title('Loss vs. Rounds')
+    ax2.legend()
     ax2.grid(True)
 
     # Find the maximum length among all rounds
@@ -116,11 +148,13 @@ def plot_metrics(args, loss_plot: list):
 
 
     # Plot communication time
-    ax4.plot(rounds, loss_plot, marker='o', color='purple')
+    ax4.plot(rounds, weighted_time_delta_plot, marker='o', color='purple', label='Fit Time')
+    ax4.plot(rounds, eval_weighted_delta_plot, marker='o', color='blue', label='Evaluation Time')
     ax4.set_xlabel('Rounds')
     ax4.set_ylabel('Time (seconds)')
     #ax4.set_title('Average Communication Time per Round')
-    ax4.set_title('Aint workin yet')
+    ax4.set_title('Communication Cost vs. Rounds')
+    ax4.legend()
     ax4.grid(True)
 
     plt.tight_layout()
@@ -132,20 +166,27 @@ def main():
 
     print(args)
 
+    # Initialize model parameters on the central server
+    ndarrays = get_weights(Net())
+    parameters = ndarrays_to_parameters(ndarrays)
+
     # Define strategy
     strategy = fl.server.strategy.FedAvg(
         fraction_fit=args.sample_fraction,
         fraction_evaluate=args.sample_fraction,
         min_fit_clients=args.min_num_clients,
+        min_available_clients=args.min_num_clients,
         on_fit_config_fn=fit_config,
         evaluate_metrics_aggregation_fn=weighted_average,
-        fit_metrics_aggregation_fn=fit_metrics
+        fit_metrics_aggregation_fn=fit_metrics,
+        initial_parameters=parameters
+
     )
 
     # Start Flower server
     server = fl.server.start_server(
         server_address=args.server_address,
-        config=fl.server.ServerConfig(num_rounds=5),
+        config=fl.server.ServerConfig(num_rounds=args.rounds),
         strategy=strategy,
     )
     loss_plot = [z[1] for z in server.losses_distributed]
