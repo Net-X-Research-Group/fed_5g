@@ -71,16 +71,25 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     criterion = nn.CrossEntropyLoss() # Use classification cross-entropy loss
     optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9) # SGD with momentum
     net.train() # Inform PyTorch that we are training the model
+
+    logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} batches each")
+
     for epoch in range(epochs):
         logger.info(f"Starting epoch {epoch + 1}/{epochs}")
+        running_loss = 0.0
         for batch in tqdm(trainloader):
-            images = batch['img']
-            labels = batch['label']
+            images, labels = batch['img'].to(device), batch['label'].to(device)
             optimizer.zero_grad() # Zero the parameter gradients
-            criterion(net(images.to(device)), labels.to(device)).backward() # Forward, backward, and optimize
+            loss = criterion(net(images), labels)
+            loss.backward() # Forward, backward, and optimize
             optimizer.step()
-    val_loss, val_acc = test(net, valloader, device)
+            #assert loss.dim() == 0
+            # print statistics
+            running_loss += loss.item()
 
+    avg_train_loss = running_loss / len(trainloader)
+    val_loss, val_acc = test(net, valloader, device)
+    logger.info(f"Finished training. Training loss: {avg_train_loss}, Validation loss: {val_loss}, Validation accuracy: {val_acc}")
     results = {
         'val_loss': val_loss,
         'val_acc': val_acc
@@ -88,17 +97,17 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     return results
 
 
-def test(net, testloader, device) -> tuple:
+def test(net, testloader, device) -> tuple[float, float]:
     """Test the model on the test dataset"""
     criterion = nn.CrossEntropyLoss() # Use classification cross-entropy loss
     correct, loss = 0, 0.0
     with torch.no_grad():
         for batch in testloader:
-            images = batch['img'].to(device)
-            labels = batch['label'].to(device)
+            images, labels = batch['img'].to(device), batch['label'].to(device)
             outputs = net(images)
             loss += criterion(outputs, labels).item()
-            correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
+            _, predicted = torch.max(outputs.data, 1)
+            correct += (predicted == labels).sum().item()
     accuracy = correct / len(testloader.dataset)
     loss = loss / len(testloader)
     return loss, accuracy
