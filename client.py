@@ -60,7 +60,7 @@ class FlowerClient(NumPyClient):
             self.trainloader,
             self.valloader,
             epochs,
-            0.01,
+            0.001,
             self.device
         )
         end_time = time.time()
@@ -70,7 +70,7 @@ class FlowerClient(NumPyClient):
         }
 
         logger.info(f"Training complete. Elapsed time: {metrics['training_time']}")
-        logger.info(f'val_loss={results["val_loss"]}, val_acc={results["val_acc"]}')
+        #logger.info(f'val_loss={results["val_loss"]}, val_acc={results["val_acc"]}')
         return get_weights(self.net), len(self.trainloader.dataset), metrics
 
     def evaluate(self, parameters, config):
@@ -82,7 +82,6 @@ class FlowerClient(NumPyClient):
             'loss': loss,
             'eval_time': time.time()
         }
-        logger.info(f"Evaluation loss: {loss}, accuracy: {accuracy}")
         return loss, len(self.valloader.dataset), metrics
 
 def main():
