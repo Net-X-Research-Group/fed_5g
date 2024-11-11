@@ -2,19 +2,20 @@ import argparse
 from typing import List, Tuple
 import flwr as fl
 from flwr.common import Metrics, ndarrays_to_parameters
+from markdown_it.cli.parse import parse_args
 
 from task import Net, get_weights
 
 import pandas as pd
 
-accuracy_plot = []
-training_time_avg_plot = []
-fit_time_avg_plot = []
+#accuracy_plot = []
+#training_time_avg_plot = []
+#fit_time_avg_plot = []
 perdevice_training_time_plot = []
 perdevice_fit_time_plot = []
 
-eval_losses_plot = []
-fit_losses_plot = []
+#eval_losses_plot = []
+#fit_losses_plot = []
 
 from datetime import time, timedelta
 import time
@@ -58,8 +59,8 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     examples = [num_examples for num_examples, _ in metrics]
 
     # Aggregate and return custom metric (weighted average)
-    accuracy_plot.append(sum(accuracies) / sum(examples))
-    eval_losses_plot.append(sum(losses) / sum(examples))
+    #accuracy_plot.append(sum(accuracies) / sum(examples))
+    #eval_losses_plot.append(sum(losses) / sum(examples))
     # training_time_avg_plot.append(sum(training_times) / len(training_times))
 
     return {"accuracy": sum(accuracies) / sum(examples)}
@@ -71,8 +72,8 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     fit_times = [time.time() - m['fit_time'] for _, m in metrics]
     perdevice_training_time_plot.append(training_times)
     perdevice_fit_time_plot.append(fit_times)
-    training_time_avg_plot.append(sum(training_times) / len(training_times))
-    fit_time_avg_plot.append(sum(fit_times) / len(fit_times))
+    #training_time_avg_plot.append(sum(training_times) / len(training_times))
+    #fit_time_avg_plot.append(sum(fit_times) / len(fit_times))
     return {'training_time': sum(training_times) / len(training_times), 'fit_time': sum(fit_times) / len(fit_times)}
 
 
@@ -131,16 +132,31 @@ def main():
         'fit_time': [x[1] for x in server.metrics_distributed_fit['fit_time']],
     }
 
+    per_device_metrics = {
+        'training_time': perdevice_training_time_plot,
+        'fit_time': perdevice_fit_time_plot
+    }
+
+    server_config = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
 
     print('ALL DONE')
-    return metrics
+    return metrics, per_device_metrics, server_config
 
 
 if __name__ == "__main__":
-    output = main()
+    output, per_device_outputs, config = main()
 
-    # Create Dataframe from metrics
-    df = pd.DataFrame(output)
+
+    # Extract metrics from multi-dim list
+    training_times = per_device_outputs['training_time']
+    fit_times = per_device_outputs['fit_time']
+
+    # Gather into dataframes
+    df_distributed = pd.DataFrame(output)
+    df_individual_training = pd.DataFrame(training_times)
+    df_individual_fit = pd.DataFrame(fit_times)
 
     # Save metrics to CSV
-    df.to_csv('metrics.csv', index=False)
+    df_distributed.to_csv(f'{config}.csv', index=False)
+    df_individual_training.to_csv(f'{config}_PERDEVTRAINING.csv', index=False)
+    df_individual_fit.to_csv(f'{config}_PERDEVFIT.csv', index=False)
