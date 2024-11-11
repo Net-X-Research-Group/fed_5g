@@ -3,3 +3,5 @@ flwr-datasets
 matplotlib
 torch
 torchvision
+numpy
+pandas
