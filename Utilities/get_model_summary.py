@@ -1,4 +1,3 @@
-from click.core import batch
 from torchinfo import summary
 
 from task import Net
