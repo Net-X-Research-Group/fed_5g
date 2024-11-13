@@ -7,7 +7,6 @@ import torch.optim as optim
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
-from tqdm import tqdm
 
 logging.basicConfig(
     level=logging.INFO,
@@ -80,7 +79,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     for epoch in range(epochs):
         logger.info(f"Starting epoch {epoch + 1}/{epochs}")
         running_loss = 0.0
-        for batch in tqdm(trainloader):
+        for batch in trainloader:
             images, labels = batch['img'].to(device), batch['label'].to(device)
             optimizer.zero_grad() # Zero the parameter gradients
             loss = criterion(net(images), labels)
