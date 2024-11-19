@@ -80,8 +80,8 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 def fit_config(server_round: int):
     """Return a configuration with static batch size and (local) epochs."""
     config = {
-        "epochs": 1,  # Number of local epochs done by clients
-        "batch_size": 8,  # Batch size to use by clients during fit()
+        "epochs": 2,  # Number of local epochs done by clients
+        "batch_size": 16,  # Batch size to use by clients during fit()
     }
     return config
 

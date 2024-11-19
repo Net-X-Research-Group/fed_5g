@@ -60,7 +60,7 @@ class FlowerClient(NumPyClient):
             self.trainloader,
             self.valloader,
             epochs,
-            0.001,
+            0.01,
             self.device
         )
         end_time = time.time()

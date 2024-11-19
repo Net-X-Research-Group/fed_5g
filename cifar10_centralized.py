@@ -4,7 +4,7 @@ import torchvision.transforms as transforms
 import torch.optim as optim
 from task import Net
 import torch.nn as nn
-
+from models import EmbeddedNet
 
 transform = transforms.Compose(
     [transforms.ToTensor(),
@@ -25,7 +25,7 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
 classes = ('plane', 'car', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
-net = Net()
+net = EmbeddedNet()
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
