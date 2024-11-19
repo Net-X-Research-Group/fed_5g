@@ -63,20 +63,6 @@ class Centralized:
             num_workers=2
         )
 
-        testset = torchvision.datasets.CIFAR10(
-            root='./data',
-            train=False,
-            download=True,
-            transform=transform
-        )
-        self.testloader = torch.utils.data.DataLoader(
-            testset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=2
-        )
-
-
     def setup_model(self):
         self.net = Net().to(self.device)
         self.criterion = nn.CrossEntropyLoss()
@@ -88,7 +74,6 @@ class Centralized:
             running_loss = 0.0
             for i, data in enumerate(self.trainloader, 0):
                 inputs, labels = data
-
                 # zero the parameter gradients
                 self.optimizer.zero_grad()
 
@@ -115,7 +100,7 @@ class Centralized:
         correct = 0
         total = 0
         with torch.no_grad():
-            for data in self.testloader:
+            for data in self.valloader:
                 images, labels = data
                 images, labels = images.to(self.device), labels.to(self.device)
                 outputs = self.net(images)
@@ -137,15 +122,13 @@ def main():
     trainer.setup_model()
 
     # Train and get history
-    history = trainer.train(num_epochs=1)
+    trainer.train(num_epochs=100)
 
     # Save the model and history
     trainer.save_model()
 
     # Evaluate
     trainer.test()
-
-    return history
 
 
 if __name__ == "__main__":
