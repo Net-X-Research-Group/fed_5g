@@ -17,18 +17,18 @@ logger = logging.getLogger(__name__)
 class Net(nn.Module):
     def __init__(self) -> None:
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.conv1 = nn.Conv2d(3, 6, 3, 1, 1)
         self.bn1 = nn.BatchNorm2d(6)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.conv2 = nn.Conv2d(6, 16, 3, 1, 1)
         self.bn2 = nn.BatchNorm2d(16)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc1 = nn.Linear(16 * 8 * 8, 120)
         self.dropout = nn.Dropout(0.5)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, 10)
     def forward(self, x):
-        x = self.pool(f.relu(self.bn1(self.conv1(x))))
-        x = self.pool(f.relu(self.bn2(self.conv2(x))))
+        x = self.pool(self.bn1(f.relu(self.conv1(x))))
+        x = self.pool(self.bn2(f.relu(self.bn2(self.conv2(x)))))
         x = torch.flatten(x, 1) # Flatten all dimensions except batch
         x = f.relu(self.fc1(x))
         x = self.dropout(x)
