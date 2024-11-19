@@ -82,6 +82,7 @@ def fit_config(server_round: int):
     config = {
         "epochs": 1,  # Number of local epochs done by clients
         "batch_size": 16,  # Batch size to use by clients during fit()
+        "learning_rate": 0.001,  # Learning rate used by clients during fit()
     }
     return config
 

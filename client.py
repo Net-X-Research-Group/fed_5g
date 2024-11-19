@@ -49,9 +49,10 @@ class FlowerClient(NumPyClient):
         self.valloader = valloader
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.net.to(self.device)
+
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
-        batch, epochs = config["batch_size"], config["epochs"]
+        batch, epochs, learning_rate = config["batch_size"], config["epochs"], config["learning_rate"]
         get_weights(self.net)
         set_weights(self.net, parameters)
         start_time = time.time()
@@ -60,7 +61,7 @@ class FlowerClient(NumPyClient):
             self.trainloader,
             self.valloader,
             epochs,
-            0.001,
+            learning_rate,
             self.device
         )
         end_time = time.time()
