@@ -137,13 +137,13 @@ def main():
     trainer.setup_model()
 
     # Train and get history
-    history = trainer.train(num_epochs=100)
+    history = trainer.train(num_epochs=1)
 
     # Save the model and history
     trainer.save_model()
 
     # Evaluate
-    trainer.evaluate()
+    trainer.test()
 
     return history
 
