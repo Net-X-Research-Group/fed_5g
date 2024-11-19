@@ -7,6 +7,7 @@ import torch.optim as optim
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,6 +77,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
 
     logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} batches each")
 
+    training_time = time.time()
     for epoch in range(epochs):
         logger.info(f"Starting epoch {epoch + 1}/{epochs}")
         running_loss = 0.0
@@ -85,16 +87,16 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
             loss = criterion(net(images), labels)
             loss.backward() # Forward, backward, and optimize
             optimizer.step()
-            #assert loss.dim() == 0
             # print statistics
             running_loss += loss.item()
-
+    training_time = time.time() - training_time
     avg_train_loss = running_loss / len(trainloader)
     val_loss, val_acc = test(net, valloader, device)
-    logger.info(f"Finished training. Training loss: {avg_train_loss}, Validation loss: {val_loss}, Validation accuracy: {val_acc}")
+    logger.info(f"Finished training in {training_time} sec.. Training loss: {avg_train_loss}, Validation loss: {val_loss}, Validation accuracy: {val_acc}")
     results = {
         'val_loss': val_loss,
-        'val_acc': val_acc
+        'val_acc': val_acc,
+        'training_time': training_time
     }
     return results
 
