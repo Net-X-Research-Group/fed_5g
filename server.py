@@ -4,7 +4,8 @@ import flwr as fl
 from flwr.common import Metrics, ndarrays_to_parameters
 from markdown_it.cli.parse import parse_args
 
-from task import Net, get_weights
+from task import get_weights
+from models import CNN3
 
 import pandas as pd
 
@@ -92,7 +93,7 @@ def main():
     print(args)
 
     # Initialize model parameters on the central server
-    ndarrays = get_weights(Net())
+    ndarrays = get_weights(CNN3())
     parameters = ndarrays_to_parameters(ndarrays)
 
     # Define strategy
