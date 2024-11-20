@@ -1,13 +1,14 @@
-import time
-import logging
-import torch
-from flwr.client import NumPyClient, start_client
 import argparse
+import logging
+import time
 import warnings
 from os import path
 
+import torch
+from flwr.client import NumPyClient, start_client
+
+from models import CNN3
 from task import (
-    Net,
     get_weights,
     set_weights,
     load_dataset,
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 class FlowerClient(NumPyClient):
     def __init__(self, trainloader, valloader) -> None:
-        self.net = Net()
+        self.net = CNN3()
         self.trainloader = trainloader
         self.valloader = valloader
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
