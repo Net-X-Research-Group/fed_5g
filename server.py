@@ -2,7 +2,6 @@ import argparse
 from typing import List, Tuple
 import flwr as fl
 from flwr.common import Metrics, ndarrays_to_parameters
-from markdown_it.cli.parse import parse_args
 
 from task import get_weights
 from models import CNN3
@@ -83,6 +82,7 @@ def fit_config(server_round: int):
     config = {
         "epochs": 2,  # Number of local epochs done by clients
         "batch_size": 16,  # Batch size to use by clients during fit()
+        "learning_rate": 0.01
     }
     return config
 
@@ -138,14 +138,14 @@ def main():
         'fit_time': perdevice_fit_time_plot
     }
 
-    server_config = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
+    server_config_name = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
 
     print('ALL DONE')
-    return metrics, per_device_metrics, server_config
+    return metrics, per_device_metrics, server_config_name
 
 
 if __name__ == "__main__":
-    output, per_device_outputs, config = main()
+    output, per_device_outputs, server_config = main()
 
 
     # Extract metrics from multi-dim list
@@ -158,6 +158,6 @@ if __name__ == "__main__":
     df_individual_fit = pd.DataFrame(fit_times)
 
     # Save metrics to CSV
-    df_distributed.to_csv(f'{config}.csv', index=False)
-    df_individual_training.to_csv(f'{config}_PERDEVTRAINING.csv', index=False)
-    df_individual_fit.to_csv(f'{config}_PERDEVFIT.csv', index=False)
+    df_distributed.to_csv(f'{server_config}.csv', index=False)
+    df_individual_training.to_csv(f'{server_config}_PERDEVTRAINING.csv', index=False)
+    df_individual_fit.to_csv(f'{server_config}_PERDEVFIT.csv', index=False)
