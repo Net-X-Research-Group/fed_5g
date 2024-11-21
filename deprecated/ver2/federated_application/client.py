@@ -4,7 +4,7 @@ import torch
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
 
-from task import (
+from federated_application.task import (
     Net,
     get_weights,
     set_weights,
