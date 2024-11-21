@@ -44,10 +44,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class FlowerClient(NumPyClient):
-    def __init__(self, trainloader, valloader) -> None:
+    def __init__(self, trainloader, valloader, testloader) -> None:
         self.net = CNN3()
         self.trainloader = trainloader
         self.valloader = valloader
+        self.testloader = testloader
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.net.to(self.device)
     def fit(self, parameters, config) -> tuple:
@@ -77,13 +78,13 @@ class FlowerClient(NumPyClient):
     def evaluate(self, parameters, config):
         """Evaluate the client model on the local validation dataset"""
         set_weights(self.net, parameters)
-        loss, accuracy = test(self.net, self.valloader, self.device)
+        loss, accuracy = test(self.net, self.testloader, self.device)
         metrics = {
             'accuracy': accuracy,
             'loss': loss,
             'eval_time': time.time()
         }
-        return loss, len(self.valloader.dataset), metrics
+        return loss, len(self.testloader.dataset), metrics
 
 def main():
     args = parser.parse_args()
@@ -94,13 +95,13 @@ def main():
 
     dataset_path = path.expanduser(f'{args.dataset}_part_{args.cid}')
 
-    trainloader, valloader = load_dataset(dataset_path, 16)
+    trainloader, valloader, testloader = load_dataset(dataset_path, 16)
 
     # Start Flower client setting its associated data partition
     start_client(
         server_address=args.server_address,
         client=FlowerClient(
-            trainloader=trainloader, valloader=valloader).to_client(),
+            trainloader=trainloader, valloader=valloader, testloader=testloader).to_client(),
     )
 
 

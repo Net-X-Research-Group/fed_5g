@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-from task import Net, get_weights
+from federated_application.task import Net, get_weights
 
 accuracy_plot = []
 training_time_avg_plot = []

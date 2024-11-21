@@ -1,7 +1,6 @@
 from torchinfo import summary
 
-from task import Net
-from models import EmbeddedNet
+from federated_application.task import Net
 
 model = Net()
 batch_size = 64
