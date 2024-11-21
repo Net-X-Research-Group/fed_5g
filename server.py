@@ -8,14 +8,8 @@ from models import CNN3
 
 import pandas as pd
 
-#accuracy_plot = []
-#training_time_avg_plot = []
-#fit_time_avg_plot = []
 perdevice_training_time_plot = []
 perdevice_fit_time_plot = []
-
-#eval_losses_plot = []
-#fit_losses_plot = []
 
 from datetime import time, timedelta
 import time
@@ -55,7 +49,6 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Multiply accuracy and loss of each client.py by number of examples used
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     losses = [num_examples * m['loss'] for num_examples, m in metrics]
-    # training_times = [m["training_time"] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
     # Aggregate and return custom metric (weighted average)
@@ -72,8 +65,6 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     fit_times = [time.time() - m['fit_time'] for _, m in metrics]
     perdevice_training_time_plot.append(training_times)
     perdevice_fit_time_plot.append(fit_times)
-    #training_time_avg_plot.append(sum(training_times) / len(training_times))
-    #fit_time_avg_plot.append(sum(fit_times) / len(fit_times))
     return {'training_time': sum(training_times) / len(training_times), 'fit_time': sum(fit_times) / len(fit_times)}
 
 
