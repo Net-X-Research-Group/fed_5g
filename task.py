@@ -44,9 +44,7 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
         partition_train_test["train"], batch_size=batch_size, shuffle=True
     )
     valloader = DataLoader(partition_train_test["test"], batch_size=batch_size)
-    testset = dataset.with_transform(apply_transforms)['test']
-    testloader = DataLoader(testset, batch_size=batch_size)
-    return trainloader, valloader, testloader
+    return trainloader, valloader
 
 def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     """Train the model on the training dataset"""
