@@ -3,8 +3,8 @@ import flwr as fl
 from flwr.common import Context, Metrics, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
 from flwr.server.strategy import FedAvg
-from task import get_weights
-from models import CNN3
+from federated_application.task import get_weights
+from federated_application.models import CNN3
 
 import pandas as pd
 

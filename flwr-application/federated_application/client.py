@@ -8,8 +8,8 @@ import torch
 from flwr.client import NumPyClient, ClientApp
 from flwr.common import Context
 
-from models import CNN3
-from task import (
+from federated_application.models import CNN3
+from federated_application.task import (
     get_weights,
     set_weights,
     load_dataset,
