@@ -46,7 +46,7 @@ def fit_config(server_round: int):
 
 
 def server_fn(context: Context):
-    sample_fraction = context.run_config['fraction-evaluate']
+    sample_fraction = context.run_config['fraction_evaluate']
     min_num_clients = context.run_config['min_num_clients']
     rounds = context.run_config['rounds']
     # Initialize model parameters on the central server

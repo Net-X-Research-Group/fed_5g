@@ -28,7 +28,7 @@ clientapp = "federated_application.client:app"
 rounds = 10
 fraction_evaluate = 1
 local_epochs = 3
-learning-rate = 0.01
+learning_rate = 0.01
 batch_size = 16
 min_num_clients = 3
 
