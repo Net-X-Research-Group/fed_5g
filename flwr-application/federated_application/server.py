@@ -71,33 +71,32 @@ def server_fn(context: Context):
 
     return ServerAppComponents(strategy=strategy, config=config)
 
-if __name__ == "__main__":
-    app = ServerApp(server_fn=server_fn)
+app = ServerApp(server_fn=server_fn)
 
-    metrics = {
-        'accuracy': [x[1] for x in app.metrics_distributed['accuracy']],
-        'loss': [x[1] for x in app.losses_distributed],
-        'training_time': [x[1] for x in app.metrics_distributed_fit['training_time']],
-        'fit_time': [x[1] for x in app.metrics_distributed_fit['fit_time']],
-    }
+'''metrics = {
+    'accuracy': [x[1] for x in app.metrics_distributed['accuracy']],
+    'loss': [x[1] for x in app.losses_distributed],
+    'training_time': [x[1] for x in app.metrics_distributed_fit['training_time']],
+    'fit_time': [x[1] for x in app.metrics_distributed_fit['fit_time']],
+}
 
-    per_device_metrics = {
-        'training_time': perdevice_training_time,
-        'fit_time': perdevice_fit_time
-    }
+per_device_metrics = {
+    'training_time': perdevice_training_time,
+    'fit_time': perdevice_fit_time
+}
 
-    #server_config_name = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
-    '''
-    # Extract metrics from multi-dim list
-    training_times = per_device_outputs['training_time']
-    fit_times = per_device_outputs['fit_time']
+server_config_name = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
 
-    # Gather into dataframes
-    df_distributed = pd.DataFrame(output)
-    df_individual_training = pd.DataFrame(training_times)
-    df_individual_fit = pd.DataFrame(fit_times)
+# Extract metrics from multi-dim list
+training_times = per_device_outputs['training_time']
+fit_times = per_device_outputs['fit_time']
 
-    # Save metrics to CSV
-    df_distributed.to_csv(f'{server_config}.csv', index=False)
-    df_individual_training.to_csv(f'{server_config}_PERDEVTRAINING.csv', index=False)
-    df_individual_fit.to_csv(f'{server_config}_PERDEVFIT.csv', index=False)'''
+# Gather into dataframes
+df_distributed = pd.DataFrame(output)
+df_individual_training = pd.DataFrame(training_times)
+df_individual_fit = pd.DataFrame(fit_times)
+
+# Save metrics to CSV
+df_distributed.to_csv(f'{server_config}.csv', index=False)
+df_individual_training.to_csv(f'{server_config}_PERDEVTRAINING.csv', index=False)
+df_individual_fit.to_csv(f'{server_config}_PERDEVFIT.csv', index=False)'''
