@@ -26,10 +26,10 @@ clientapp = "federated_application.client:app"
 
 [tool.flwr.app.config]
 rounds = 10
-fraction-evaluate = 1
-local-epochs = 3
+fraction_evaluate = 1
+local_epochs = 3
 learning-rate = 0.01
-batch-size = 16
+batch_size = 16
 min_num_clients = 3
 
 [tool.flwr.federations]
