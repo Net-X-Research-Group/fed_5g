@@ -1,5 +1,4 @@
 from typing import List, Tuple
-import flwr as fl
 from flwr.common import Context, Metrics, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
 from flwr.server.strategy import FedAvg
@@ -73,6 +72,27 @@ def server_fn(context: Context):
 
 app = ServerApp(server_fn=server_fn)
 
+print(app)
+
+per_device_metrics = {
+    'training_time': perdevice_training_time,
+    'fit_time': perdevice_fit_time
+}
+server_config_name = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
+
+# Extract metrics from multi-dim list
+training_times = per_device_metrics['training_time']
+fit_times = per_device_metrics['fit_time']
+
+# Gather into dataframes
+df_individual_training = pd.DataFrame(training_times)
+df_individual_fit = pd.DataFrame(fit_times)
+
+# Save metrics to CSV
+df_individual_training.to_csv(f'PERDEVTRAINING.csv', index=False)
+df_individual_fit.to_csv(f'PERDEVFIT.csv', index=False)
+
+
 '''metrics = {
     'accuracy': [x[1] for x in app.metrics_distributed['accuracy']],
     'loss': [x[1] for x in app.losses_distributed],
@@ -80,10 +100,7 @@ app = ServerApp(server_fn=server_fn)
     'fit_time': [x[1] for x in app.metrics_distributed_fit['fit_time']],
 }
 
-per_device_metrics = {
-    'training_time': perdevice_training_time,
-    'fit_time': perdevice_fit_time
-}
+
 
 server_config_name = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
 
