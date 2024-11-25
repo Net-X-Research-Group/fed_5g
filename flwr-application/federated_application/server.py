@@ -46,15 +46,6 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 
     return results
 
-def fit_config(server_round: int):
-    """Return a configuration with static batch size and (local) epochs."""
-    config = {
-        "epochs": 2,  # Number of local epochs done by clients
-        "batch_size": 16,  # Batch size to use by clients during fit()
-        "learning_rate": 0.01
-    }
-    return config
-
 
 def server_fn(context: Context):
     sample_fraction = context.run_config['fraction_evaluate']
@@ -71,7 +62,6 @@ def server_fn(context: Context):
         min_fit_clients=min_num_clients,
         min_available_clients=min_num_clients,
         min_evaluate_clients=min_num_clients,
-        on_fit_config_fn=fit_config,
         fit_metrics_aggregation_fn=fit_metrics,
         initial_parameters=parameters
 
@@ -82,48 +72,3 @@ def server_fn(context: Context):
     return ServerAppComponents(strategy=strategy, config=config)
 
 app = ServerApp(server_fn=server_fn)
-
-print('APP OUTPUT!!!!!!!\n', app)
-
-per_device_metrics = {
-    'training_time': perdevice_training_time,
-    'fit_time': perdevice_fit_time
-}
-
-# Extract metrics from multi-dim list
-training_times = per_device_metrics['training_time']
-fit_times = per_device_metrics['fit_time']
-
-# Gather into dataframes
-df_individual_training = pd.DataFrame(training_times)
-df_individual_fit = pd.DataFrame(fit_times)
-
-# Save metrics to CSV
-df_individual_training.to_csv(f'PERDEVTRAINING.csv', index=False)
-df_individual_fit.to_csv(f'PERDEVFIT.csv', index=False)
-
-
-'''metrics = {
-    'accuracy': [x[1] for x in app.metrics_distributed['accuracy']],
-    'loss': [x[1] for x in app.losses_distributed],
-    'training_time': [x[1] for x in app.metrics_distributed_fit['training_time']],
-    'fit_time': [x[1] for x in app.metrics_distributed_fit['fit_time']],
-}
-
-
-
-server_config_name = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
-
-# Extract metrics from multi-dim list
-training_times = per_device_outputs['training_time']
-fit_times = per_device_outputs['fit_time']
-
-# Gather into dataframes
-df_distributed = pd.DataFrame(output)
-df_individual_training = pd.DataFrame(training_times)
-df_individual_fit = pd.DataFrame(fit_times)
-
-# Save metrics to CSV
-df_distributed.to_csv(f'{server_config}.csv', index=False)
-df_individual_training.to_csv(f'{server_config}_PERDEVTRAINING.csv', index=False)
-df_individual_fit.to_csv(f'{server_config}_PERDEVFIT.csv', index=False)'''
