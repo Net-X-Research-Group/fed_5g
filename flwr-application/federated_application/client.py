@@ -36,7 +36,6 @@ class FlowerClient(NumPyClient):
         """Train the client model on the local training dataset"""
         get_weights(self.net)
         set_weights(self.net, parameters)
-        start_time = time.time()
         results = train(
             self.net,
             self.trainloader,
@@ -45,14 +44,9 @@ class FlowerClient(NumPyClient):
             self.learning_rate,
             self.device
         )
-        end_time = time.time()
-        metrics = {
-            "training_time": end_time - start_time,
-            "fit_time": time.time()
-        }
-
-        logger.info(f"Training complete. Elapsed time: {metrics['training_time']}")
-        return get_weights(self.net), len(self.trainloader.dataset), metrics
+        logger.info(f"Training complete. Elapsed time: {results['training_time']}")
+        results['fit_time'] = time.time()
+        return get_weights(self.net), len(self.trainloader.dataset), results
 
     def evaluate(self, parameters, config):
         """Evaluate the client model on the local validation dataset"""
