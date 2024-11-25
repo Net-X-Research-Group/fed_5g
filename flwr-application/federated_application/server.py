@@ -1,6 +1,6 @@
 from typing import List, Tuple
 from flwr.common import Context, Metrics, ndarrays_to_parameters
-from flwr.server import ServerApp, ServerConfig, ServerAppComponents
+from flwr.server import ServerApp, ServerConfig, ServerAppComponents, History
 from flwr.server.strategy import FedAvg
 from federated_application.task import get_weights
 from federated_application.models import CNN3
@@ -15,24 +15,36 @@ from datetime import time
 import time
 
 # Define metric aggregation function
-def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
+def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     """This function averages the `accuracy` metric sent by the clients in a `evaluate`
     stage (i.e. clients received the global model and evaluate it on their local
     validation sets)."""
-    # Multiply accuracy and loss of each client.py by number of examples used
-    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
-    return {"accuracy": sum(accuracies) / sum(examples)}
 
 
-def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
-    print(metrics)
+    # Multiply accuracy and loss of each client.py by number of examples used
+    train_accuracies = [num_examples * m["train_acc"] for num_examples, m in metrics]
+    val_accuracies = [num_examples * m["val_acc"] for num_examples, m in metrics]
+    train_losses = [num_examples * m["train_loss"] for num_examples, m in metrics]
+    val_losses = [num_examples * m["val_loss"] for num_examples, m in metrics]
+
     training_times = [m["training_time"] for _, m in metrics]
     fit_times = [time.time() - m['fit_time'] for _, m in metrics]
+
     perdevice_training_time.append(training_times)
     perdevice_fit_time.append(fit_times)
-    return {'training_time': sum(training_times) / len(training_times), 'fit_time': sum(fit_times) / len(fit_times)}
 
+    # Calculate the weighted average of the metrics
+    results = {
+        "train_acc": sum(train_accuracies) / sum(examples),
+        "val_acc": sum(val_accuracies) / sum(examples),
+        "train_loss": sum(train_losses) / sum(examples),
+        "val_loss": sum(val_losses) / sum(examples),
+        "training_time": sum(training_times) / len(training_times),
+        "fit_time": sum(fit_times) / len(fit_times)
+    }
+
+    return results
 
 def fit_config(server_round: int):
     """Return a configuration with static batch size and (local) epochs."""
@@ -55,12 +67,11 @@ def server_fn(context: Context):
     # Define strategy
     strategy = FedAvg(
         fraction_fit=sample_fraction,
-        fraction_evaluate=sample_fraction,
+        fraction_evaluate=0, # Disable Final Evaluation
         min_fit_clients=min_num_clients,
         min_available_clients=min_num_clients,
         min_evaluate_clients=min_num_clients,
         on_fit_config_fn=fit_config,
-        evaluate_metrics_aggregation_fn=weighted_average,
         fit_metrics_aggregation_fn=fit_metrics,
         initial_parameters=parameters
 
@@ -78,7 +89,6 @@ per_device_metrics = {
     'training_time': perdevice_training_time,
     'fit_time': perdevice_fit_time
 }
-server_config_name = f'FEDAVG_CIFAR10_{args.rounds}R_{args.min_num_clients}C_3E_16B'
 
 # Extract metrics from multi-dim list
 training_times = per_device_metrics['training_time']
