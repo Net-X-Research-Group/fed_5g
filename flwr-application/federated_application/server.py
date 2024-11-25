@@ -60,7 +60,7 @@ def server_fn(context: Context):
         min_fit_clients=min_num_clients,
         min_available_clients=min_num_clients,
         min_evaluate_clients=min_num_clients,
-        fit_metrics_aggregation_fn=metrics_tracker.fit_metrics,
+        fit_metrics_aggregation_fn=fit_metrics,
         initial_parameters=parameters
 
     )
