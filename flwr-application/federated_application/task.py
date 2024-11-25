@@ -1,12 +1,13 @@
-from collections import OrderedDict
 import logging
+import time
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
-import time
 
 logging.basicConfig(
     level=logging.INFO,

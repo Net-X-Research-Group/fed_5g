@@ -1,13 +1,9 @@
-import argparse
 import logging
 import time
 import warnings
 from os import path
 
 import torch
-from flwr.client import NumPyClient, ClientApp
-from flwr.common import Context
-
 from federated_application.models import CNN3
 from federated_application.task import (
     get_weights,
@@ -16,6 +12,8 @@ from federated_application.task import (
     train,
     test
 )
+from flwr.client import NumPyClient, ClientApp
+from flwr.common import Context
 
 warnings.filterwarnings("ignore", category=UserWarning)
 

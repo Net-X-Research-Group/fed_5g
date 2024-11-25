@@ -1,18 +1,16 @@
+import time
+from datetime import time
 from typing import List, Tuple
-from flwr.common import Context, Metrics, ndarrays_to_parameters
-from flwr.server import ServerApp, ServerConfig, ServerAppComponents, History
-from flwr.server.strategy import FedAvg
-from federated_application.task import get_weights
-from federated_application.models import CNN3
 
-import pandas as pd
+from federated_application.models import CNN3
+from federated_application.task import get_weights
+from flwr.common import Context, Metrics, ndarrays_to_parameters
+from flwr.server import ServerApp, ServerConfig, ServerAppComponents
+from flwr.server.strategy import FedAvg
 
 perdevice_training_time = []
 perdevice_fit_time = []
 
-
-from datetime import time
-import time
 
 # Define metric aggregation function
 def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
@@ -62,7 +60,7 @@ def server_fn(context: Context):
         min_fit_clients=min_num_clients,
         min_available_clients=min_num_clients,
         min_evaluate_clients=min_num_clients,
-        fit_metrics_aggregation_fn=fit_metrics,
+        fit_metrics_aggregation_fn=metrics_tracker.fit_metrics,
         initial_parameters=parameters
 
     )
