@@ -83,7 +83,7 @@ def server_fn(context: Context):
 
 app = ServerApp(server_fn=server_fn)
 
-print(app)
+print('APP OUTPUT!!!!!!!\n', app)
 
 per_device_metrics = {
     'training_time': perdevice_training_time,
