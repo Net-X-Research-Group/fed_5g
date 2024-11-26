@@ -13,9 +13,11 @@ from federated_application.task import (
     test
 )
 from flwr.client import NumPyClient, ClientApp
-from flwr.common import Context
+from flwr.common import Context, logger
 
 warnings.filterwarnings("ignore", category=UserWarning)
+
+logger.logger.setLevel(logging.DEBUG)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
