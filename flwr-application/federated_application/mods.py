@@ -8,9 +8,6 @@ from flwr.common.message import Message
 from datetime import datetime
 import json
 
-message_size_log_global = dict()
-
-
 def save_json_log(data: dict):
     log(INFO, "Saving log to JSON file")
     cid = next(iter(data.values()))['cid']
@@ -27,6 +24,7 @@ def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) 
     server_round = int(msg.metadata.group_id)
     num_rounds = int(ctxt.run_config['rounds'])
     message_size_log = {
+        server_round: {
             "timestamp": datetime.now().isoformat(),
             'cid': ctxt.node_config['cid'],
             "message_type": msg.metadata.message_type,
@@ -38,7 +36,7 @@ def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) 
                 "total": 0
             }
         }
-
+    }
     # Calculate sizes for different message components
     parameters_size = sum(p_record.count_bytes() for p_record in msg.content.parameters_records.values())
     configs_size = sum(c_record.count_bytes() for c_record in msg.content.configs_records.values())
@@ -52,13 +50,7 @@ def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) 
         "metrics": metrics_size,
         "total": total_size
     }
-
-    log(INFO, "Message size: %i bytes", message_size_log["message_sizes"]["total"])
-
-    message_size_log_global[server_round] = message_size_log
-
-    if server_round == int(ctxt.run_config['rounds']):
-        save_json_log(message_size_log_global)
+    save_json_log(message_size_log)
 
     return call_next(msg, ctxt)
 
