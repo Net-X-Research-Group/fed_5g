@@ -18,7 +18,9 @@ from flwr.common import Context
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                    )
 logger = logging.getLogger(__name__)
 
 class FlowerClient(NumPyClient):
@@ -58,7 +60,6 @@ class FlowerClient(NumPyClient):
         return loss, len(self.valloader.dataset), metrics
 
 def client_fn(context: Context):
-
     dataset_path = path.expanduser(f"{context.node_config['dataset']}_part_{context.node_config['cid']}")
     batch_size = context.run_config['batch_size']
     local_epochs = context.run_config['local_epochs']
