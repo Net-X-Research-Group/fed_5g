@@ -13,10 +13,8 @@ from federated_application.task import (
     test
 )
 from flwr.client import NumPyClient, ClientApp
-from flwr.common import Context, logger
+from flwr.common import Context
 from federated_application.mods import message_size_mod
-
-logger.logger.setLevel(logging.DEBUG)
 
 warnings.filterwarnings("ignore", category=UserWarning)
 

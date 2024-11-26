@@ -2,7 +2,7 @@ from logging import INFO
 import os
 
 from flwr.common.logger import log
-from flwr.client.typing import ClientAppCallable, Mod
+from flwr.client.typing import ClientAppCallable
 from flwr.common.context import Context
 from flwr.common.message import Message
 from datetime import datetime
