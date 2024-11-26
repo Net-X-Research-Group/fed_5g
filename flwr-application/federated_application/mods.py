@@ -22,7 +22,7 @@ def save_json_log(data: dict):
         log(INFO, f"Failed to save log: {e}")
 
 
-def mod_metrics(msg: Message, ctxt: Context, call_next: ClientAppCallable) -> Message:
+def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) -> Message:
     server_round = int(msg.metadata.group_id)
     num_rounds = int(ctxt.run_config['rounds'])
     message_size_log = {
