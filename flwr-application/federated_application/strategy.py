@@ -1,14 +1,18 @@
 """pytorch-example: A Flower / PyTorch app."""
 
 import json
-from logging import INFO
+import logging
 import time
 import torch
-from flwr.common import logger, parameters_to_ndarrays
 from flwr.common.typing import UserConfig
 from flwr.server.strategy import FedAvg
+import os
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-PROJECT_NAME = "NU_ANL_FedAvg_5GFL"
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, *args, **kwargs):
@@ -17,7 +21,19 @@ class MetricsFedAvg(FedAvg):
         self.indiv_fit_time = []
         self.results = {}
 
+    def _store_results(self, results_dict):
+        with open(f"{os.path.expanduser('~/results.json')}", "w", encoding="utf-8") as f:
+            json.dump(self.results, f)
+
+
     # Define metric aggregation function
     def fit_metrics(self, server_round, results, failures):
         params, metrics = super().aggregate_fit(self, server_round, results, failures)
+
+        # Store results and log
+        self._store_results(metrics)
+
         return params, metrics
+
+
+
