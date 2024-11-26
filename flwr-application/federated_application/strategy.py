@@ -1,9 +1,5 @@
-"""pytorch-example: A Flower / PyTorch app."""
-
 import json
 import logging
-import time
-import torch
 from flwr.common.typing import UserConfig
 from flwr.server.strategy import FedAvg
 import os
@@ -22,6 +18,7 @@ class MetricsFedAvg(FedAvg):
         self.results = {}
 
     def _store_results(self, results_dict):
+        print('SAVING THE STUFF')
         with open(f"{os.path.expanduser('~/results.json')}", "w", encoding="utf-8") as f:
             json.dump(self.results, f)
 
