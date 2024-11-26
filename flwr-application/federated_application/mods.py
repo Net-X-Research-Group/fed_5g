@@ -8,7 +8,7 @@ from flwr.common.message import Message
 from datetime import datetime
 import json
 
-global_metrics = dict()
+global_metrics = {'message_sizes': []}
 
 
 def save_json_log(data: dict):
