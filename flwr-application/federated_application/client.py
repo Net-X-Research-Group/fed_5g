@@ -73,4 +73,4 @@ def client_fn(context: Context):
     return FlowerClient(trainloader, valloader, local_epochs, learning_rate).to_client()
 
 
-app = ClientApp(client_fn=client_fn, mods=[message_size_mod, parameters_size_mod])
+app = ClientApp(client_fn=client_fn, mods=[message_size_mod])

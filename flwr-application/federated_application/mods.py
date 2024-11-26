@@ -20,7 +20,7 @@ def ensure_log_dir(log_dir: str = f"{os.path.expanduser('~/logs/')}") -> str:
     return log_dir
 
 
-def save_json_log(data: dict, filename: str, log_dir: str = "/logs"):
+def save_json_log(data: dict, filename: str, log_dir: str = f"{os.path.expanduser('~/logs/')}"):
     """
     Save log data to a JSON file
 
@@ -29,6 +29,7 @@ def save_json_log(data: dict, filename: str, log_dir: str = "/logs"):
         filename (str): Name of the log file
         log_dir (str): Directory to save logs
     """
+    log(INFO, "Saving log to JSON file")
     log_dir = ensure_log_dir(log_dir)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     full_filename = f"{timestamp}_{filename}"
