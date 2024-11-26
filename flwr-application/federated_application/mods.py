@@ -8,7 +8,7 @@ from flwr.common.message import Message
 from datetime import datetime
 import json
 
-global_metrics = {'message_sizes': []}
+message_size_log_global = dict()
 
 
 def save_json_log(data: dict):
@@ -27,7 +27,6 @@ def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) 
     server_round = int(msg.metadata.group_id)
     num_rounds = int(ctxt.run_config['rounds'])
     message_size_log = {
-        server_round: {
             "timestamp": datetime.now().isoformat(),
             'cid': ctxt.node_config['cid'],
             "message_type": msg.metadata.message_type,
@@ -39,7 +38,6 @@ def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) 
                 "total": 0
             }
         }
-    }
 
     # Calculate sizes for different message components
     parameters_size = sum(p_record.count_bytes() for p_record in msg.content.parameters_records.values())
@@ -57,10 +55,10 @@ def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) 
 
     log(INFO, "Message size: %i bytes", message_size_log["message_sizes"]["total"])
 
-    global_metrics['message_sizes'].append(message_size_log)
+    message_size_log_global[server_round] = message_size_log
 
     if server_round == int(ctxt.run_config['rounds']):
-        save_json_log(global_metrics['message_sizes'])
+        save_json_log(message_size_log_global)
 
     return call_next(msg, ctxt)
 
