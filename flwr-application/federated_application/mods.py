@@ -8,6 +8,7 @@ from flwr.common.message import Message
 from datetime import datetime
 import json
 
+global_results = {}
 
 def ensure_log_dir(log_dir: str = f"{os.path.expanduser('~/logs/')}") -> str:
     """
@@ -34,7 +35,7 @@ def save_json_log(data: dict, filename: str, log_dir: str = f"{os.path.expanduse
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     full_filename = f"{timestamp}_{filename}"
     filepath = os.path.join(log_dir, full_filename)
-
+    global_results[timestamp] = data
     try:
         with open(filepath, 'a') as f:
             json.dump(data, f, indent=2)
@@ -51,6 +52,7 @@ def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) 
     message_size_log = {
         "timestamp": datetime.now().isoformat(),
         "message_type": msg.metadata.message_type,
+        'cid': ctxt.node_config['cid'],
         "run_id": msg.metadata.run_id,
         "node_id": msg.metadata.dst_node_id,
         "message_sizes": {
