@@ -7,4 +7,4 @@ torchinfo~=1.8.0
 pandas~=2.2.3
 flwr~=1.13.0
 markdown-it-py~=3.0.0
-tqdm~=4.67.0
+tqdm~=4.67.1
