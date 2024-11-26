@@ -25,7 +25,7 @@ class MetricsFedAvg(FedAvg):
 
     # Define metric aggregation function
     def aggregate_fit(self, server_round, results, failures):
-        params, metrics = super().aggregate_fit(self, server_round, results, failures)
+        params, metrics = super().aggregate_fit(server_round, results, failures)
 
         # Store results and log
         if metrics:
