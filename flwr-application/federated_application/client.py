@@ -13,7 +13,9 @@ from federated_application.task import (
     test
 )
 from flwr.client import NumPyClient, ClientApp
-from flwr.common import Context
+from flwr.common import Context, logger
+
+logger.logger.setLevel(logging.ERROR)
 
 warnings.filterwarnings("ignore", category=UserWarning)
 

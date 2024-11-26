@@ -1,15 +1,16 @@
 import time
 from typing import List, Tuple
-
+import logging
 from federated_application.models import CNN3
 from federated_application.task import get_weights
-from flwr.common import Context, Metrics, ndarrays_to_parameters
+from flwr.common import Context, Metrics, ndarrays_to_parameters, logger
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
 from flwr.server.strategy import FedAvg
 from federated_application.strategy import MetricsFedAvg
 perdevice_training_time = []
 perdevice_fit_time = []
 
+logger.logger.setLevel(logging.ERROR)
 
 # Define metric aggregation function
 def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
