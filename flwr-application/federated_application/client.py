@@ -14,7 +14,7 @@ from federated_application.task import (
 )
 from flwr.client import NumPyClient, ClientApp
 from flwr.common import Context, logger
-from flwr.client.mod import message_size_mod, parameters_size_mod
+from federated_application.mods import message_size_mod
 
 logger.logger.setLevel(logging.DEBUG)
 
