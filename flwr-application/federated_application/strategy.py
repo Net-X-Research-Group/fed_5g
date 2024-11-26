@@ -20,15 +20,16 @@ class MetricsFedAvg(FedAvg):
     def _store_results(self, results_dict):
         print('SAVING THE STUFF')
         with open(f"{os.path.expanduser('~/results.json')}", "w", encoding="utf-8") as f:
-            json.dump(self.results, f)
+            json.dump(results_dict, f)
 
 
     # Define metric aggregation function
-    def fit_metrics(self, server_round, results, failures):
+    def aggregate_fit(self, server_round, results, failures):
         params, metrics = super().aggregate_fit(self, server_round, results, failures)
 
         # Store results and log
-        self._store_results(metrics)
+        if metrics:
+            self._store_results(metrics)
 
         return params, metrics
 
