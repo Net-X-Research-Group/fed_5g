@@ -1,5 +1,4 @@
 import time
-from datetime import time
 from typing import List, Tuple
 
 from federated_application.models import CNN3
