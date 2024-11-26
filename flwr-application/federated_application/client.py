@@ -14,6 +14,7 @@ from federated_application.task import (
 )
 from flwr.client import NumPyClient, ClientApp
 from flwr.common import Context, logger
+from flwr.client.mod import message_size_mod, parameters_size_mod
 
 logger.logger.setLevel(logging.DEBUG)
 
@@ -72,4 +73,4 @@ def client_fn(context: Context):
     return FlowerClient(trainloader, valloader, local_epochs, learning_rate).to_client()
 
 
-app = ClientApp(client_fn=client_fn)
+app = ClientApp(client_fn=client_fn, mods=[message_size_mod, parameters_size_mod])
