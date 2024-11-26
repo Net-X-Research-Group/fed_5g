@@ -8,58 +8,35 @@ from flwr.common.message import Message
 from datetime import datetime
 import json
 
-global_results = {}
-
-def ensure_log_dir(log_dir: str = f"{os.path.expanduser('~/logs/')}") -> str:
-    """
-    Ensure log directory exists
-
-    Args:
-        log_dir (str): Directory path for logs
-    """
-    os.makedirs(log_dir, exist_ok=True)
-    return log_dir
+global_metrics = dict()
 
 
-def save_json_log(data: dict, filename: str, log_dir: str = f"{os.path.expanduser('~/logs/')}"):
-    """
-    Save log data to a JSON file
-
-    Args:
-        data (dict): Log data to save
-        filename (str): Name of the log file
-        log_dir (str): Directory to save logs
-    """
+def save_json_log(data: dict):
     log(INFO, "Saving log to JSON file")
-    log_dir = ensure_log_dir(log_dir)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    full_filename = f"{timestamp}_{filename}"
-    filepath = os.path.join(log_dir, full_filename)
-    global_results[timestamp] = data
+    path = os.path.expanduser(f'~/flwr_logs_client{data["cid"]}.json')
     try:
-        with open(filepath, 'a') as f:
-            json.dump(data, f, indent=2)
-        log(INFO, f"Log saved to {filepath}")
+        with open(path, 'a') as f:
+            json.dump(data, f)
+        log(INFO, f"Log saved to {path}")
     except Exception as e:
         log(INFO, f"Failed to save log: {e}")
 
 
-def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) -> Message:
-    """Message size mod.
-
-    This mod logs the size in bytes of the message being transmited.
-    """
+def mod_metrics(msg: Message, ctxt: Context, call_next: ClientAppCallable) -> Message:
+    server_round = int(msg.metadata.group_id)
+    num_rounds = int(ctxt.run_config['rounds'])
     message_size_log = {
-        "timestamp": datetime.now().isoformat(),
-        "message_type": msg.metadata.message_type,
-        'cid': ctxt.node_config['cid'],
-        "run_id": msg.metadata.run_id,
-        "node_id": msg.metadata.dst_node_id,
-        "message_sizes": {
-            "parameters": 0,
-            "configs": 0,
-            "metrics": 0,
-            "total": 0
+        server_round: {
+            "timestamp": datetime.now().isoformat(),
+            'cid': ctxt.node_config['cid'],
+            "message_type": msg.metadata.message_type,
+            'num_rounds': num_rounds,
+            "message_sizes": {
+                "parameters": 0,
+                "configs": 0,
+                "metrics": 0,
+                "total": 0
+            }
         }
     }
 
@@ -77,18 +54,12 @@ def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) 
         "total": total_size
     }
 
-    '''for p_record in msg.content.parameters_records.values():
-        message_size_in_bytes += p_record.count_bytes()
-
-    for c_record in msg.content.configs_records.values():
-        message_size_in_bytes += c_record.count_bytes()
-
-    for m_record in msg.content.metrics_records.values():
-        message_size_in_bytes += m_record.count_bytes()'''
-
     log(INFO, "Message size: %i bytes", message_size_log["message_sizes"]["total"])
 
-    save_json_log(message_size_log, "message_size_log.json")
+    global_metrics['message_sizes'].append(message_size_log)
+
+    if server_round == int(ctxt.run_config['rounds']):
+        save_json_log(global_metrics['message_sizes'])
 
     return call_next(msg, ctxt)
 
