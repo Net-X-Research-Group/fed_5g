@@ -13,7 +13,8 @@ global_metrics = {'message_sizes': []}
 
 def save_json_log(data: dict):
     log(INFO, "Saving log to JSON file")
-    path = os.path.expanduser(f'~/flwr_logs_client{data["cid"]}.json')
+    cid = next(iter(data.values()))['cid']
+    path = os.path.expanduser(f'~/flwr_logs_client{cid}.json')
     try:
         with open(path, 'a') as f:
             json.dump(data, f)
