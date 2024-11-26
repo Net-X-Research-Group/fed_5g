@@ -7,7 +7,7 @@ from federated_application.task import get_weights
 from flwr.common import Context, Metrics, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
 from flwr.server.strategy import FedAvg
-
+from federated_application.strategy import MetricsFedAvg
 perdevice_training_time = []
 perdevice_fit_time = []
 
@@ -54,7 +54,7 @@ def server_fn(context: Context):
     parameters = ndarrays_to_parameters(ndarrays)
 
     # Define strategy
-    strategy = FedAvg(
+    strategy = MetricsFedAvg(
         fraction_fit=sample_fraction,
         fraction_evaluate=0, # Disable Final Evaluation
         min_fit_clients=min_num_clients,
