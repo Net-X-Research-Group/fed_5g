@@ -1,79 +1,98 @@
-from logging import INFO
 import os
+import json
+from logging import INFO
+from datetime import datetime
+from typing import Dict, Any
 
 from flwr.common.logger import log
 from flwr.client.typing import ClientAppCallable
 from flwr.common.context import Context
 from flwr.common.message import Message
-from datetime import datetime
-import json
 
-def save_json_log(data: dict):
-    log(INFO, "Saving log to JSON file")
-    cid = next(iter(data.values()))['cid']
-    path = os.path.expanduser(f'~/flwr_logs_client{cid}.json')
-    try:
-        with open(path, 'a') as f:
-            json.dump(data, f)
-        log(INFO, f"Log saved to {path}")
-    except Exception as e:
-        log(INFO, f"Failed to save log: {e}")
+
+class MessageSizeLogger:
+    def __init__(self, log_dir: str = '~/flwr_logs'):
+        """
+        Initialize the MessageSizeLogger with configurable log directory.
+
+        :param log_dir: Directory to store log files, defaults to ~/flwr_logs
+        """
+        self.log_dir = os.path.expanduser(log_dir)
+        os.makedirs(self.log_dir, exist_ok=True)
+
+    def _calculate_message_sizes(self, msg: Message) -> Dict[str, int]:
+        """
+        Calculate sizes for different message components.
+
+        :param msg: Flower Message object
+        :return: Dictionary with size calculations
+        """
+        try:
+            parameters_size = sum(p_record.count_bytes() for p_record in msg.content.parameters_records.values())
+            configs_size = sum(c_record.count_bytes() for c_record in msg.content.configs_records.values())
+            metrics_size = sum(m_record.count_bytes() for m_record in msg.content.metrics_records.values())
+            total_size = parameters_size + configs_size + metrics_size
+
+            return {
+                "parameters": parameters_size,
+                "configs": configs_size,
+                "metrics": metrics_size,
+                "total": total_size
+            }
+        except Exception as e:
+            log(INFO, f"Error calculating message sizes: {e}")
+            return {"parameters": 0, "configs": 0, "metrics": 0, "total": 0}
+
+    def save_log(self, log_data: Dict[str, Any], cid: str):
+        """
+        Save log data to a JSON file with better file naming and error handling.
+
+        :param log_data: Log data to save
+        :param cid: Client ID
+        """
+        try:
+            # Create a more structured filename
+            filename = f"client_{cid}_message_sizes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            filepath = os.path.join(self.log_dir, filename)
+
+            with open(filepath, 'w') as f:
+                json.dump(log_data, f, indent=2)
+
+            log(INFO, f"Log saved to {filepath}")
+        except Exception as e:
+            log(INFO, f"Failed to save log: {e}")
 
 
 def message_size_mod(msg: Message, ctxt: Context, call_next: ClientAppCallable) -> Message:
-    server_round = int(msg.metadata.group_id)
-    num_rounds = int(ctxt.run_config['rounds'])
-    result = dict()
-    message_size_log = {
-            "timestamp": datetime.now().isoformat(),
-            'cid': ctxt.node_config['cid'],
-            "message_type": msg.metadata.message_type,
-            'num_rounds': num_rounds,
-            "message_sizes": {
-                "parameters": 0,
-                "configs": 0,
-                "metrics": 0,
-                "total": 0
-            }
-        }
-    # Calculate sizes for different message components
-    parameters_size = sum(p_record.count_bytes() for p_record in msg.content.parameters_records.values())
-    configs_size = sum(c_record.count_bytes() for c_record in msg.content.configs_records.values())
-    metrics_size = sum(m_record.count_bytes() for m_record in msg.content.metrics_records.values())
-    total_size = parameters_size + configs_size + metrics_size
+    """
+    Middleware function to log message sizes in Flower FL framework.
 
-    # Update log with size details
-    message_size_log["message_sizes"] = {
-        "parameters": parameters_size,
-        "configs": configs_size,
-        "metrics": metrics_size,
-        "total": total_size
+    :param msg: Incoming message
+    :param ctxt: Flower context
+    :param call_next: Next callable in the middleware chain
+    :return: Processed message
+    """
+    # Create logger instance
+    logger = MessageSizeLogger()
+
+    # Extract context information
+    server_round = int(msg.metadata.group_id)
+    num_rounds = int(ctxt.run_config.get('rounds', 0))
+    cid = str(ctxt.node_config.get('cid', 'unknown'))
+
+    # Create log entry
+    message_size_log = {
+        "timestamp": datetime.now().isoformat(),
+        "cid": cid,
+        "message_type": msg.metadata.message_type,
+        "num_rounds": num_rounds,
+        "message_sizes": logger._calculate_message_sizes(msg)
     }
-    result[server_round] = message_size_log
-    save_json_log(result)
+
+    # Prepare log result
+    result = {server_round: message_size_log}
+
+    # Save log
+    logger.save_log(result, cid)
 
     return call_next(msg, ctxt)
-
-'''def fit_time(msg: Message, context: Context, app: ClientAppCallable) -> Message:
-    """Flower Mod that logs the metrics dictionary returned by the client's fit
-    function to Weights & Biases."""
-    server_round = int(msg.metadata.group_id)
-
-    if server_round == 1 and msg.metadata.message_type == MessageType.TRAIN:
-        run_id = msg.metadata.run_id
-        group_name = f"Run ID: {run_id}"
-        node_id = str(msg.metadata.dst_node_id)
-        run_name = f"Node ID: {node_id}"
-    start_time = time.time()
-
-    reply = app(msg, context)
-
-    time_diff = time.time() - start_time
-
-    # if the `ClientApp` just processed a "fit" message, let's log some metrics to W&B
-    if reply.metadata.message_type == MessageType.TRAIN and reply.has_content():
-        metrics = reply.content.configs_records
-        results_to_log = dict(metrics.get("fitres.metrics", ConfigsRecord()))
-        results_to_log["fit_time"] = time_diff
-
-    return reply'''
