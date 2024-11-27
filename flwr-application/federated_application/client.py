@@ -53,11 +53,10 @@ class FlowerClient(NumPyClient):
     def evaluate(self, parameters, config):
         """Evaluate the client model on the local validation dataset"""
         set_weights(self.net, parameters)
-        loss, accuracy = test(self.net, self.valloader, self.device)
+        loss, accuracy, eval_time = test(self.net, self.valloader, self.device)
         metrics = {
             'accuracy': accuracy,
-            'loss': loss,
-            'eval_time': time.time()
+            'loss': loss
         }
         return loss, len(self.valloader.dataset), metrics
 
