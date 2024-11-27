@@ -96,4 +96,4 @@ def test(net, testloader, device) -> tuple[float, float, float]:
     end = time.time()
     accuracy = correct / len(testloader.dataset)
     loss = loss / len(testloader)
-    return loss, accuracy, start-end
+    return loss, accuracy, end-start
