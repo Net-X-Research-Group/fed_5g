@@ -1,7 +1,7 @@
 from flwr.common import Context, Metrics, ndarrays_to_parameters
-from flwr.server import ServerApp, ServerAppComponents, ServerConfig
+from flwr.server import ServerApp, ServerConfig
 from flwr.server.strategy import FedAvg
-from task import Net, get_weights
+from federated_application.task import Net, get_weights
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt

@@ -2,9 +2,8 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 import torch.optim as optim
-from task import Net
 import torch.nn as nn
-from models import EmbeddedNet
+from federated_application.models import EmbeddedNet
 
 transform = transforms.Compose(
     [transforms.ToTensor(),

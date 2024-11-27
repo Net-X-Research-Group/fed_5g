@@ -25,15 +25,16 @@ serverapp = "federated_application.server:app"
 clientapp = "federated_application.client:app"
 
 [tool.flwr.app.config]
-num-server-rounds = 10
-fraction-evaluate = 1
-local-epochs = 3
-learning-rate = 0.1
-batch-size = 16
+rounds = 10
+fraction_evaluate = 1
+local_epochs = 3
+learning_rate = 0.01
+batch_size = 16
+min_num_clients = 3
 
 [tool.flwr.federations]
 default = "federated_application"
 
 [tool.flwr.federations.federated_application]
-address = "129.105.6.252:9093"
+address = "192.168.70.129:9093"
 insecure = true

@@ -1,5 +1,7 @@
-from collections import OrderedDict
 import logging
+import time
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -54,34 +56,36 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     net.train() # Inform PyTorch that we are training the model
 
     logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} batches each")
-
+    tr_start = time.time()
     for epoch in range(epochs):
         logger.info(f"Starting epoch {epoch + 1}/{epochs}")
-        running_loss = 0.0
         for batch in trainloader:
             images, labels = batch['img'].to(device), batch['label'].to(device)
             optimizer.zero_grad() # Zero the parameter gradients
             loss = criterion(net(images), labels)
             loss.backward() # Forward, backward, and optimize
             optimizer.step()
-            #assert loss.dim() == 0
-            # print statistics
-            running_loss += loss.item()
-
-    avg_train_loss = running_loss / len(trainloader)
-    val_loss, val_acc = test(net, valloader, device)
-    logger.info(f"Finished training. Training loss: {avg_train_loss}, Validation loss: {val_loss}, Validation accuracy: {val_acc}")
+    tr_end = time.time()
+    train_loss, train_acc, train_test_time = test(net, trainloader, device)
+    val_loss, val_acc, val_test_time = test(net, valloader, device)
+    logger.info(f"Finished training. Training loss: {train_loss}, Validation loss: {val_loss}, Validation accuracy: {val_acc}, Training accuracy: {train_acc}")
     results = {
+        'train_test_time': train_test_time,
+        'val_test_time': val_test_time,
+        'training_time': tr_end - tr_start,
+        'train_loss': train_loss,
+        'train_acc': train_acc,
         'val_loss': val_loss,
         'val_acc': val_acc
     }
     return results
 
 
-def test(net, testloader, device) -> tuple[float, float]:
+def test(net, testloader, device) -> tuple[float, float, float]:
     """Test the model on the test dataset"""
     criterion = nn.CrossEntropyLoss() # Use classification cross-entropy loss
     correct, loss = 0, 0.0
+    start = time.time()
     with torch.no_grad():
         for batch in testloader:
             images, labels = batch['img'].to(device), batch['label'].to(device)
@@ -89,6 +93,7 @@ def test(net, testloader, device) -> tuple[float, float]:
             loss += criterion(outputs, labels).item()
             _, predicted = torch.max(outputs.data, 1)
             correct += (predicted == labels).sum().item()
+    end = time.time()
     accuracy = correct / len(testloader.dataset)
     loss = loss / len(testloader)
-    return loss, accuracy
+    return loss, accuracy, start-end
