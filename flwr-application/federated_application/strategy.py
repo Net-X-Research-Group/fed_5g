@@ -1,12 +1,11 @@
 import json
 import logging
 import os
-
-from flwr.common.typing import UserConfig
-from flwr.server.strategy import FedAvg
+from datetime import datetime
 
 import wandb
-from datetime import datetime
+from flwr.common.typing import UserConfig
+from flwr.server.strategy import FedAvg
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,6 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
+
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, *args, **kwargs):
@@ -36,13 +36,16 @@ class MetricsFedAvg(FedAvg):
         self.results = {}
 
     def _init_wandb_project(self):
-        wandb.init(project=PROJECT_NAME, name=f'{self.init_time.strftime("%Y-%m-%d/%H-%M-%S")}-ServerApp', config=self.config)
+        wandb.init(project=PROJECT_NAME, name=f'{self.init_time.strftime("%Y-%m-%d/%H-%M-%S")}-ServerApp',
+                   config=self.config)
 
     def _log_results(self, server_round, results):
         self.results[server_round] = results
         wandb.log(results, step=server_round)
         if server_round == self.num_rounds:
-            with open(f"{os.path.expanduser(f'~/server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}.json')}", "w") as f:
+            with open(
+                    f"{os.path.expanduser(f'~/server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}.json')}",
+                    "w") as f:
                 json.dump(self.results, f)
 
     # Define metric aggregation function
@@ -50,5 +53,3 @@ class MetricsFedAvg(FedAvg):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
         return params, metrics
-
-

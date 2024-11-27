@@ -2,13 +2,15 @@ import logging
 import time
 from typing import List, Tuple
 
-from federated_application.models import CNN3
-from federated_application.strategy import MetricsFedAvg
-from federated_application.task import get_weights
 from flwr.common import Context, Metrics, ndarrays_to_parameters, logger
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
 
+from federated_application.models import CNN3
+from federated_application.strategy import MetricsFedAvg
+from federated_application.task import get_weights
+
 logger.logger.setLevel(logging.DEBUG)
+
 
 # Define metric aggregation function
 def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
@@ -56,7 +58,7 @@ def server_fn(context: Context):
     strategy = MetricsFedAvg(
         run_config=context.run_config,
         fraction_fit=sample_fraction,
-        fraction_evaluate=0, # Disable Final Evaluation
+        fraction_evaluate=0,  # Disable Final Evaluation
         min_fit_clients=min_num_clients,
         min_available_clients=min_num_clients,
         min_evaluate_clients=min_num_clients,
@@ -68,5 +70,6 @@ def server_fn(context: Context):
     config = ServerConfig(num_rounds=rounds)
 
     return ServerAppComponents(strategy=strategy, config=config)
+
 
 app = ServerApp(server_fn=server_fn)
