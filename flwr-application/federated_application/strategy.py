@@ -17,12 +17,16 @@ class MetricsFedAvg(FedAvg):
         super().__init__(*args, **kwargs)
         self.results = dict()
         self.num_rounds = run_config['rounds']
+        self.epochs = run_config['local_epochs']
+        self.clients = run_config['min_num_clients']
+        self.batch_size = run_config['batch_size']
+
 
     def _log_results(self, server_round, results):
         self.results[server_round] = results
 
         if server_round == self.num_rounds:
-            with open(f"{os.path.expanduser('~/results.json')}", "w") as f:
+            with open(f"{os.path.expanduser(f'~/server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R.json')}", "w") as f:
                 json.dump(self.results, f)
 
     # Define metric aggregation function

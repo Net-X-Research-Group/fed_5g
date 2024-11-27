@@ -1,13 +1,12 @@
+import logging
 import time
 from typing import List, Tuple
-import logging
+
 from federated_application.models import CNN3
+from federated_application.strategy import MetricsFedAvg
 from federated_application.task import get_weights
 from flwr.common import Context, Metrics, ndarrays_to_parameters, logger
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
-from federated_application.strategy import MetricsFedAvg
-perdevice_training_time = []
-perdevice_fit_time = []
 
 logger.logger.setLevel(logging.DEBUG)
 
@@ -18,18 +17,16 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     validation sets)."""
     examples = [num_examples for num_examples, _ in metrics]
 
-
     # Multiply accuracy and loss of each client.py by number of examples used
     train_accuracies = [num_examples * m["train_acc"] for num_examples, m in metrics]
     val_accuracies = [num_examples * m["val_acc"] for num_examples, m in metrics]
     train_losses = [num_examples * m["train_loss"] for num_examples, m in metrics]
     val_losses = [num_examples * m["val_loss"] for num_examples, m in metrics]
 
+    train_test_times = [m["train_test_time"] for _, m in metrics]
+    val_test_times = [m["val_test_time"] for _, m in metrics]
     training_times = [m["training_time"] for _, m in metrics]
     fit_times = [time.time() - m['fit_time'] for _, m in metrics]
-
-    perdevice_training_time.append(training_times)
-    perdevice_fit_time.append(fit_times)
 
     # Calculate the weighted average of the metrics
     results = {
@@ -38,9 +35,12 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "train_loss": sum(train_losses) / sum(examples),
         "val_loss": sum(val_losses) / sum(examples),
         "training_time": sum(training_times) / len(training_times),
-        "fit_time": sum(fit_times) / len(fit_times)
+        "fit_time": sum(fit_times) / len(fit_times),
+        'train_test_time': sum(train_test_times) / len(train_test_times),
+        'val_test_time': sum(val_test_times) / len(val_test_times),
+        'individual_fit_time': fit_times,
+        'individual_training_time': training_times
     }
-
     return results
 
 
