@@ -20,7 +20,6 @@ class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.config = run_config
-        self.config.pop('wandb_api_key')
         self.num_rounds = run_config['rounds']
         self.epochs = run_config['local_epochs']
         self.clients = run_config['min_num_clients']
@@ -28,7 +27,7 @@ class MetricsFedAvg(FedAvg):
         self.init_time = datetime.now()
         # Login to wandb using API key.
         wandb.login(key=run_config['wandb_api_key'])
-
+        self.config.pop('wandb_api_key')
         # Initialize W&B project
         self._init_wandb_project()
 
