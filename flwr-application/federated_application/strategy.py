@@ -4,11 +4,9 @@ import os
 
 from flwr.common.typing import UserConfig
 from flwr.server.strategy import FedAvg
-from dotenv import load_dotenv
 
 import wandb
 
-load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,10 +24,8 @@ class MetricsFedAvg(FedAvg):
         self.epochs = run_config['local_epochs']
         self.clients = run_config['min_num_clients']
         self.batch_size = run_config['batch_size']
-
         # Login to wandb using API key.
-        logger.info(f'DEBUG: API KEY: {os.getenv('WANDB_API')}')
-        wandb.login(key=os.getenv('WANDB_API'))
+        wandb.login(key=run_config['wandb_api_key'])
 
         # Initialize W&B project
         self._init_wandb_project()
