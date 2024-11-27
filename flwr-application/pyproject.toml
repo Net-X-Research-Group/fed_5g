@@ -31,7 +31,7 @@ local_epochs = 3
 learning_rate = 0.01
 batch_size = 16
 min_num_clients = 3
-
+wandb_api_key = ''
 [tool.flwr.federations]
 default = "federated_application"
 
