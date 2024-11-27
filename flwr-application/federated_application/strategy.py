@@ -28,6 +28,7 @@ class MetricsFedAvg(FedAvg):
         self.batch_size = run_config['batch_size']
 
         # Login to wandb using API key.
+        logger.info(f'DEBUG: API KEY: {os.getenv('WANDB_API')}')
         wandb.login(key=os.getenv('WANDB_API'))
 
         # Initialize W&B project
