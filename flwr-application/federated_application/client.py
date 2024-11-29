@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 class FlowerClient(NumPyClient):
-    def __init__(self, trainloader, valloader, local_epochs, learning_rate) -> None:
+    def __init__(self, trainloader, valloader, local_epochs, learning_rate, wandb_config) -> None:
         self.net = CNN3()
         self.trainloader = trainloader
         self.valloader = valloader
@@ -38,6 +38,23 @@ class FlowerClient(NumPyClient):
         self.learning_rate = learning_rate
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.net.to(self.device)
+        self.wandb_config = wandb_config
+
+        # Login to wandb
+        wandb.login(key=wandb_config['wandb_api_key'])
+        self.wandb_config.pop('wandb_api_key')
+
+        # Initialize the wandb project
+        self._init_wandb_project()
+
+    def _init_wandb_project(self):
+        wandb.init(project=PROJECT_NAME,
+                   group = self.wandb_config['run_id'],
+                   id = f'{self.wandb_config["run_id"]}-{self.wandb_config["cid"]}',
+                   name=f'{datetime.now().strftime("%Y-%m-%d/%H-%M-%S")}_CID-{self.wandb_config["cid"]}',
+                   resume='allow',
+                   reinit=True,
+                   config=self.wandb_config)
 
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
@@ -52,7 +69,7 @@ class FlowerClient(NumPyClient):
             self.device
         )
         logger.info(f"Training complete. Elapsed time: {results['training_time']}")
-        logger.info(f'Config is: {config}')
+        wandb.log(results)
         results['fit_time'] = time.time()
         return get_weights(self.net), len(self.trainloader.dataset), results
 
@@ -75,7 +92,11 @@ def client_fn(context: Context):
     learning_rate = context.run_config['learning_rate']
     trainloader, valloader = load_dataset(dataset_path, batch_size)
 
-    return FlowerClient(trainloader, valloader, local_epochs, learning_rate).to_client()
+    # Set up the Config for wandb
+    config = context.run_config.copy()
+    config['cid'] = cid
+    config['run_id'] = context.run_id
 
+    return FlowerClient(trainloader, valloader, local_epochs, learning_rate, config).to_client()
 
 app = ClientApp(client_fn=client_fn)
