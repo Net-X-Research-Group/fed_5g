@@ -16,8 +16,7 @@ from federated_application.task import (
     train,
     test
 )
-
-import wandb
+from federated_application.mods import wandb_metrics_mod
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -91,4 +90,4 @@ def client_fn(context: Context):
     return FlowerClient(trainloader, valloader, local_epochs, learning_rate, cid).to_client()
 
 
-app = ClientApp(client_fn=client_fn, mods=[wandb_client_metrics])
+app = ClientApp(client_fn=client_fn, mods=[wandb_metrics_mod])
