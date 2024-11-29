@@ -41,7 +41,6 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
-        print(config)
         get_weights(self.net)
         set_weights(self.net, parameters)
         results = train(
@@ -53,6 +52,7 @@ class FlowerClient(NumPyClient):
             self.device
         )
         logger.info(f"Training complete. Elapsed time: {results['training_time']}")
+        logger.info(f'Config is: {config}')
         results['fit_time'] = time.time()
         return get_weights(self.net), len(self.trainloader.dataset), results
 
