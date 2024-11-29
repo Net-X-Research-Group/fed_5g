@@ -49,12 +49,12 @@ class FlowerClient(NumPyClient):
 
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
-                   group = self.wandb_config['run_id'],
+                   group = str(self.wandb_config['run_id']),
                    id = f'{self.wandb_config["run_id"]}-{self.wandb_config["cid"]}',
                    name=f'{datetime.now().strftime("%Y-%m-%d/%H-%M-%S")}_CID-{self.wandb_config["cid"]}',
                    resume='allow',
                    reinit=True,
-                   config=self.wandb_config)
+                   config=dict(self.wandb_config))
 
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
