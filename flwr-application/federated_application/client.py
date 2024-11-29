@@ -17,7 +17,7 @@ from federated_application.task import (
     test
 )
 from federated_application.mods import wandb_metrics_mod
-
+import wandb
 warnings.filterwarnings("ignore", category=UserWarning)
 
 logger.logger.setLevel(logging.DEBUG)
@@ -42,6 +42,7 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
+        print(config)
         get_weights(self.net)
         set_weights(self.net, parameters)
         results = train(
@@ -78,4 +79,4 @@ def client_fn(context: Context):
     return FlowerClient(trainloader, valloader, local_epochs, learning_rate).to_client()
 
 
-app = ClientApp(client_fn=client_fn, mods=[wandb_metrics_mod])
+app = ClientApp(client_fn=client_fn)
