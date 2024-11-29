@@ -35,7 +35,9 @@ class MetricsFedAvg(FedAvg):
         self.results = {}
 
     def _init_wandb_project(self):
-        wandb.init(project=PROJECT_NAME, name=f'{self.init_time.strftime("%Y-%m-%d/%H-%M-%S")}-ServerApp',
+        wandb.init(project=PROJECT_NAME,
+                   group=str(self.config['run_id']),
+                   name=f'{self.init_time.strftime("%Y-%m-%d/%H-%M-%S")}-ServerApp',
                    config=self.config)
 
     def _log_results(self, server_round, results):
