@@ -16,7 +16,6 @@ from federated_application.task import (
     train,
     test
 )
-from federated_application.mods import wandb_metrics_mod
 import wandb
 warnings.filterwarnings("ignore", category=UserWarning)
 
