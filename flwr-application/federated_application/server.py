@@ -40,8 +40,6 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "fit_time": sum(fit_times) / len(fit_times),
         'train_test_time': sum(train_test_times) / len(train_test_times),
         'val_test_time': sum(val_test_times) / len(val_test_times),
-        'individual_fit_time': fit_times,
-        'individual_training_time': training_times
     }
     return results
 

@@ -86,10 +86,9 @@ def client_fn(context: Context):
     batch_size = context.run_config['batch_size']
     local_epochs = context.run_config['local_epochs']
     learning_rate = context.run_config['learning_rate']
-    wandb_api_key = context.run_config['wandb_api_key']
     trainloader, valloader = load_dataset(dataset_path, batch_size)
 
-    return FlowerClient(trainloader, valloader, local_epochs, learning_rate, cid, wandb_api_key).to_client()
+    return FlowerClient(trainloader, valloader, local_epochs, learning_rate, cid).to_client()
 
 
-app = ClientApp(client_fn=client_fn)
+app = ClientApp(client_fn=client_fn, mods=[wandb_client_metrics])
