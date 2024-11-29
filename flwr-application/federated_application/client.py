@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 class FlowerClient(NumPyClient):
-    def __init__(self, trainloader, valloader, local_epochs, learning_rate, cid, wandb_api_key) -> None:
+    def __init__(self, trainloader, valloader, local_epochs, learning_rate) -> None:
         self.net = CNN3()
         self.trainloader = trainloader
         self.valloader = valloader
@@ -39,18 +39,6 @@ class FlowerClient(NumPyClient):
         self.learning_rate = learning_rate
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.net.to(self.device)
-        self.cid = cid
-        # Authenticate with wandb
-        wandb.login(key=wandb_api_key)
-
-        # Initialize W&B project
-        self.init_time = datetime.now()
-        self._init_wandb_project()
-
-
-    def _init_wandb_project(self):
-        wandb.init(project=PROJECT_NAME, name=f'{self.init_time.strftime("%Y-%m-%d/%H-%M-%S")}-ClientApp{self.cid}',
-                   config={'learning_rate': self.learning_rate, 'local_epochs': self.local_epochs})
 
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
@@ -87,7 +75,7 @@ def client_fn(context: Context):
     learning_rate = context.run_config['learning_rate']
     trainloader, valloader = load_dataset(dataset_path, batch_size)
 
-    return FlowerClient(trainloader, valloader, local_epochs, learning_rate, cid).to_client()
+    return FlowerClient(trainloader, valloader, local_epochs, learning_rate).to_client()
 
 
 app = ClientApp(client_fn=client_fn, mods=[wandb_metrics_mod])
