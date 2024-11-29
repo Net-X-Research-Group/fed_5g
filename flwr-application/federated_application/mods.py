@@ -45,8 +45,7 @@ def wandb_metrics_mod(message: Message, context: Context, app: ClientAppCallable
     if reply.metadata.message_type == MessageType.TRAIN and reply.has_content():
         metrics = reply.content.configs_records
         logged_results = dict(metrics.get('fitres.metrics', ConfigsRecord()))
-        logged_results['client_fit_time'] = end - start
-
+        logged_results['fit_time'] = end - start
         wandb.log(logged_results, step=int(current_round), commit=True)
 
     return reply
