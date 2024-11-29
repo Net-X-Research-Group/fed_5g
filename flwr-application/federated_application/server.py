@@ -61,8 +61,8 @@ def server_fn(context: Context):
         min_available_clients=min_num_clients,
         min_evaluate_clients=min_num_clients,
         fit_metrics_aggregation_fn=fit_metrics,
-        initial_parameters=parameters
-
+        initial_parameters=parameters,
+        run_id=context.run_id,
     )
 
     config = ServerConfig(num_rounds=rounds)

@@ -17,7 +17,7 @@ PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 
 class MetricsFedAvg(FedAvg):
-    def __init__(self, run_config: UserConfig, *args, **kwargs):
+    def __init__(self, run_config: UserConfig, run_id, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.config = run_config
         self.num_rounds = run_config['rounds']
@@ -25,6 +25,7 @@ class MetricsFedAvg(FedAvg):
         self.clients = run_config['min_num_clients']
         self.batch_size = run_config['batch_size']
         self.init_time = datetime.now()
+        self.run_id = run_id
         # Login to wandb using API key.
         wandb.login(key=run_config['wandb_api_key'])
         self.config.pop('wandb_api_key')
@@ -36,7 +37,7 @@ class MetricsFedAvg(FedAvg):
 
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
-                   group=str(self.config['run_id']),
+                   group=str(self.run_id),
                    name=f'{self.init_time.strftime("%Y-%m-%d/%H-%M-%S")}-ServerApp',
                    config=self.config)
 
