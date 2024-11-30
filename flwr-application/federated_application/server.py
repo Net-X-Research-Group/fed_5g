@@ -40,8 +40,6 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "fit_time": sum(fit_times) / len(fit_times),
         'train_test_time': sum(train_test_times) / len(train_test_times),
         'val_test_time': sum(val_test_times) / len(val_test_times),
-        'individual_fit_time': fit_times,
-        'individual_training_time': training_times
     }
     return results
 
@@ -63,8 +61,8 @@ def server_fn(context: Context):
         min_available_clients=min_num_clients,
         min_evaluate_clients=min_num_clients,
         fit_metrics_aggregation_fn=fit_metrics,
-        initial_parameters=parameters
-
+        initial_parameters=parameters,
+        run_id=context.run_id,
     )
 
     config = ServerConfig(num_rounds=rounds)
