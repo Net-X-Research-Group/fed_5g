@@ -17,6 +17,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     """This function averages the `accuracy` metric sent by the clients in a `evaluate`
     stage (i.e. clients received the global model and evaluate it on their local
     validation sets)."""
+    uplink_time = [time.time() - m['uplink_time'] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
     # Multiply accuracy and loss of each client.py by number of examples used
@@ -28,7 +29,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     train_test_times = [m["train_test_time"] for _, m in metrics]
     val_test_times = [m["val_test_time"] for _, m in metrics]
     training_times = [m["training_time"] for _, m in metrics]
-    uplink_time = [time.time() - m['uplink_time'] for _, m in metrics]
+
 
     # Calculate the weighted average of the metrics
     results = {
