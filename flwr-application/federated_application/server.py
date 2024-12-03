@@ -55,6 +55,7 @@ def server_fn(context: Context):
     # Define strategy
     strategy = MetricsFedAvg(
         run_config=context.run_config,
+        enable_wandb=context.run_config['enable_wandb'],
         fraction_fit=sample_fraction,
         fraction_evaluate=0,  # Disable Final Evaluation
         min_fit_clients=min_num_clients,

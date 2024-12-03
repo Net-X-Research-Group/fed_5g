@@ -21,7 +21,7 @@ PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 
 class MetricsFedAvg(FedAvg):
-    def __init__(self, run_config: UserConfig, run_id, *args, **kwargs):
+    def __init__(self, run_config: UserConfig, run_id, enable_wandb: bool, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.config = run_config
         self.num_rounds = run_config['rounds']
@@ -30,11 +30,13 @@ class MetricsFedAvg(FedAvg):
         self.batch_size = run_config['batch_size']
         self.init_time = datetime.now()
         self.run_id = run_id
-        # Login to wandb using API key.
-        wandb.login(key=run_config['wandb_api_key'])
-        self.config.pop('wandb_api_key')
-        # Initialize W&B project
-        self._init_wandb_project()
+        self.enable_wandb = enable_wandb
+        if enable_wandb:
+            # Login to wandb using API key.
+            wandb.login(key=run_config['wandb_api_key'])
+            self.config.pop('wandb_api_key')
+            # Initialize W&B project
+            self._init_wandb_project()
 
         # Initialize dict to store all results
         self.results = {}
@@ -47,7 +49,8 @@ class MetricsFedAvg(FedAvg):
 
     def _log_results(self, server_round, results):
         self.results[server_round] = results
-        wandb.log(results, step=server_round)
+        if self.enable_wandb:
+            wandb.log(results, step=server_round)
         if server_round == self.num_rounds:
             with open(
                     f"{os.path.expanduser(f'~/server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}.json')}",
