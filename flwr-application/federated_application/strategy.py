@@ -41,7 +41,7 @@ class MetricsFedAvg(FedAvg):
 
         # Initialize dict to store all results
         self.results = {}
-
+        self.individual_metrics = {}
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
                    group=str(self.run_id),
@@ -49,14 +49,19 @@ class MetricsFedAvg(FedAvg):
                    config=self.config)
 
     def _log_results(self, server_round, results):
+        self.individual_metrics[server_round] = results.pop('individual_metrics')
         self.results[server_round] = results
         if self.enable_wandb:
             wandb.log(results, step=server_round)
         if server_round == self.num_rounds:
             with open(
                     f"{os.path.expanduser(f'~/server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}.json')}",
-                    "w") as f:
-                json.dump(self.results, f)
+                    "w") as f1:
+                json.dump(self.results, f1)
+            with open(
+                    f"{os.path.expanduser(f'~/individual_metrics.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}.json')}",
+                    "w") as f2:
+                json.dump(self.individual_metrics, f2)
 
     # Define metric aggregation function
     def aggregate_fit(self, server_round, results, failures):
