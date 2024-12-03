@@ -1,10 +1,14 @@
 import json
 import logging
 import os
+import time
 from datetime import datetime
 
 import wandb
+from flwr.common import Parameters, FitIns
 from flwr.common.typing import UserConfig
+from flwr.server import ClientManager
+from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy import FedAvg
 
 logging.basicConfig(
@@ -55,3 +59,13 @@ class MetricsFedAvg(FedAvg):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
         return params, metrics
+
+    def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[tuple[ClientProxy, FitIns]]:
+        client_fitins_list = super().configure_fit(server_round, parameters, client_manager)
+        update_client_fitins = []
+        for client, fit_ins in client_fitins_list:
+            updated_config = fit_ins.config.copy()  # Make a copy of the existing config
+            updated_config["server_timestamp"] = time.time()
+            updated_fit_ins = FitIns(fit_ins.parameters, updated_config)
+            update_client_fitins.append((client, updated_fit_ins))
+        return update_client_fitins
