@@ -58,10 +58,9 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
+        downlink_time = time.time() - config['server_timestamp']
         get_weights(self.net)
         set_weights(self.net, parameters)
-        server_timestamp = config.get('server_timestamp')
-        logger.info(f'Server TX: {server_timestamp}')
         results = train(
             self.net,
             self.trainloader,
@@ -70,6 +69,7 @@ class FlowerClient(NumPyClient):
             self.learning_rate,
             self.device
         )
+        results['downlink_time'] = downlink_time
         logger.info(f"Training complete. Elapsed time: {results['training_time']}")
         wandb.log(results)
         results['uplink_time'] = time.time()
