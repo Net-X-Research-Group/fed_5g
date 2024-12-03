@@ -32,7 +32,8 @@ learning_rate = 0.01
 batch_size = 16
 min_num_clients = 3
 wandb_api_key = ''
-enable_wandb = true
+enable_server_wandb = true
+enable_client_wandb = false
 [tool.flwr.federations]
 default = "federated_application"
 
