@@ -32,6 +32,7 @@ class MetricsFedAvg(FedAvg):
         self.run_id = run_id
         self.enable_wandb = enable_wandb
         if enable_wandb:
+            logger.info('Enabling wandb...')
             # Login to wandb using API key.
             wandb.login(key=run_config['wandb_api_key'])
             self.config.pop('wandb_api_key')

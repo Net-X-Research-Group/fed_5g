@@ -43,6 +43,7 @@ class FlowerClient(NumPyClient):
 
         # Login to wandb
         if enable_wandb:
+            logger.info('Enabling wandb...')
             wandb.login(key=wandb_config['wandb_api_key'])
             self.wandb_config.pop('wandb_api_key')
 
