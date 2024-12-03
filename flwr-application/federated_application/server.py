@@ -18,6 +18,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     stage (i.e. clients received the global model and evaluate it on their local
     validation sets)."""
     uplink_time = [time.time() - m['uplink_time'] for _, m in metrics]
+    downlink_time = [m['downlink_time'] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
     # Multiply accuracy and loss of each client.py by number of examples used
@@ -39,6 +40,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "val_loss": sum(val_losses) / sum(examples),
         "training_time": sum(training_times) / len(training_times),
         "uplink_time": sum(uplink_time) / len(uplink_time),
+        "downlink_time": sum(downlink_time) / len(downlink_time),
         'train_test_time': sum(train_test_times) / len(train_test_times),
         'val_test_time': sum(val_test_times) / len(val_test_times),
     }
