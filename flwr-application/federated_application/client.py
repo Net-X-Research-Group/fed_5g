@@ -102,7 +102,7 @@ def client_fn(context: Context):
     config = context.run_config.copy()
     config['cid'] = cid
     config['run_id'] = context.run_id
-    enable_wandb = context.run_config['enable_client_wandb'],
+    enable_wandb = context.run_config['enable_client_wandb']
     return FlowerClient(trainloader, valloader, local_epochs, learning_rate, enable_wandb, config).to_client()
 
 app = ClientApp(client_fn=client_fn)
