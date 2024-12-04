@@ -28,7 +28,7 @@ class MetricsFedAvg(FedAvg):
         self.epochs = run_config['local_epochs']
         self.clients = run_config['min_num_clients']
         self.batch_size = run_config['batch_size']
-        self.init_time = datetime.now()
+        self.init_time = datetime.now().strftime("%Y-%m-%d/%H-%M-%S")
         self.run_id = run_id
         self.enable_wandb = enable_wandb
         if enable_wandb:
@@ -45,7 +45,7 @@ class MetricsFedAvg(FedAvg):
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
                    group=str(self.run_id),
-                   name=f'{self.init_time.strftime("%Y-%m-%d/%H-%M-%S")}-ServerApp',
+                   name=f'{self.init_time}-ServerApp',
                    config=self.config)
 
     def _log_results(self, server_round, results):
