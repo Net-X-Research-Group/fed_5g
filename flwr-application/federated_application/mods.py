@@ -6,6 +6,15 @@ from flwr.common import ConfigsRecord
 from flwr.common.constant import MessageType
 from flwr.common.context import Context
 from flwr.common.message import Message
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                    )
+logger = logging.getLogger(__name__)
+
+
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
@@ -13,9 +22,10 @@ def uplink_time_mod(message: Message, context: Context, app: ClientAppCallable) 
     reply = app(message, context)
     if reply.metadata.message_type == MessageType.TRAIN and reply.has_content():
         metrics = reply.content.configs_records
-        logged_results = dict(metrics.get('fitres.metrics'))
-        logged_results['uplink_time'] = time.time()
-        reply.content.configs_records['fitres.metrics'] = logged_results
+        logged_results = dict(metrics.get('fitres.metrics', ConfigsRecord()))
+        logger.info('The logged results are: %s', logged_results)
+        #logged_results['uplink_time'] = time.time()
+        #reply.content.configs_records['fitres.metrics'] = logged_results['']
     return reply
 
 def wandb_metrics_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
