@@ -1,14 +1,16 @@
-from datetime import datetime
 import logging
 import time
 import warnings
+from datetime import datetime
 from os import path
 
 import torch
+import wandb
 from flwr.client import NumPyClient, ClientApp
 from flwr.common import Context, logger
 
 from federated_application.models import CNN3
+from federated_application.mods import uplink_time_mod
 from federated_application.task import (
     get_weights,
     set_weights,
@@ -16,7 +18,7 @@ from federated_application.task import (
     train,
     test
 )
-import wandb
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 logger.logger.setLevel(logging.DEBUG)
@@ -76,7 +78,7 @@ class FlowerClient(NumPyClient):
         logger.info(f"Training complete. Elapsed time: {results['training_time']}")
         if self.enable_wandb:
             wandb.log(results)
-        results['uplink_time'] = time.time()
+        #results['uplink_time'] = time.time()
         return get_weights(self.net), len(self.trainloader.dataset), results
 
     def evaluate(self, parameters, config):
@@ -105,4 +107,4 @@ def client_fn(context: Context):
     enable_wandb = context.run_config['enable_client_wandb']
     return FlowerClient(trainloader, valloader, local_epochs, learning_rate, enable_wandb, config).to_client()
 
-app = ClientApp(client_fn=client_fn)
+app = ClientApp(client_fn=client_fn, mods=[uplink_time_mod])

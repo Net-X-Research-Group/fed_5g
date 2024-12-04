@@ -9,6 +9,15 @@ from flwr.common.message import Message
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
+def uplink_time_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
+    reply = app(message, context)
+    if reply.metadata.message_type == MessageType.TRAIN and reply.has_content():
+        metrics = reply.content.configs_records
+        logged_results = dict(metrics.get('fitres.metrics', ConfigsRecord()))
+        logged_results['uplink_time'] = time.time()
+        reply.content.configs_records['fitres.metrics'] = ConfigsRecord(**logged_results)
+    return reply
+
 def wandb_metrics_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
     current_round = int(message.metadata.group_id)
     # Authenticate with wandb
