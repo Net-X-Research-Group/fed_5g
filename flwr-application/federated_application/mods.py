@@ -20,9 +20,10 @@ PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 def uplink_time_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
     downlink_time_server = message.content.configs_records['fitins.config']['server_timestamp']
-    message.content.configs_records['fitins.config']['downlink_time'] = time.time() - downlink_time_server
+    downlink_time = time.time() - downlink_time_server
     reply = app(message, context)
     if reply.metadata.message_type == MessageType.TRAIN:
+        reply.content.configs_records['fitres.metrics']['downlink_time'] = downlink_time
         reply.content.configs_records['fitres.metrics']['uplink_time'] = time.time()
     return reply
 
