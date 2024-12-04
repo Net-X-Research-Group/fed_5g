@@ -1,12 +1,13 @@
+import logging
 import time
 from datetime import datetime
+
 import wandb
 from flwr.client.typing import ClientAppCallable
 from flwr.common import ConfigsRecord
 from flwr.common.constant import MessageType
 from flwr.common.context import Context
 from flwr.common.message import Message
-import logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -18,9 +19,8 @@ logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
-def uplink_time_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
-    downlink_time_server = message.content.configs_records['fitins.config']['server_timestamp']
-    downlink_time = time.time() - downlink_time_server
+def comm_time_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
+    downlink_time = time.time() - message.content.configs_records['fitins.config']['server_timestamp']
     reply = app(message, context)
     if reply.metadata.message_type == MessageType.TRAIN:
         reply.content.configs_records['fitres.metrics']['downlink_time'] = downlink_time
