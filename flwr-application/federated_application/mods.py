@@ -13,9 +13,9 @@ def uplink_time_mod(message: Message, context: Context, app: ClientAppCallable) 
     reply = app(message, context)
     if reply.metadata.message_type == MessageType.TRAIN and reply.has_content():
         metrics = reply.content.configs_records
-        logged_results = dict(metrics.get('fitres.metrics', ConfigsRecord()))
+        logged_results = dict(metrics.get('fitres.metrics'))
         logged_results['uplink_time'] = time.time()
-        reply.content.configs_records['fitres.metrics'] = ConfigsRecord(**logged_results)
+        reply.content.configs_records['fitres.metrics'] = logged_results
     return reply
 
 def wandb_metrics_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
