@@ -42,7 +42,7 @@ trainer:
     model_name: vgg_16
 
     # Number of epoches for local training in each communication round
-    epochs: 5
+    epochs: 3
     batch_size: 128
     optimizer: Adam
 
