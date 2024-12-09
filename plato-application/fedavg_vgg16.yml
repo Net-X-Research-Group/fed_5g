@@ -10,10 +10,11 @@ clients:
 
     # Should the clients compute test accuracy locally?
     do_test: true
-
+    comm_simulation: false
 server:
     address: 129.105.6.252
     port: 8000
+    comm_simulation: false
 
 data:
     # The training and testing dataset
