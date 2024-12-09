@@ -14,12 +14,12 @@ clients:
     comm_simulation: false
 
 server:
-    address: 127.0.0.1
+    address: 129.105.6.252
     port: 8000
 
 data:
     # The training and testing dataset
-    datasource: MNIST
+    datasource: CIFAR10
 
     # Number of samples in each partition
     partition_size: 20000
@@ -28,7 +28,7 @@ data:
     sampler: iid
 
     # The random seed for sampling data
-    random_seed: 1
+    random_seed: 42
 
 trainer:
     # The type of the trainer
@@ -47,8 +47,8 @@ trainer:
     model_name: lenet5
 
     # Number of epoches for local training in each communication round
-    epochs: 5
-    batch_size: 32
+    epochs: 3
+    batch_size: 16
     optimizer: SGD
 
 algorithm:
