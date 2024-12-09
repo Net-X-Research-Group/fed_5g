@@ -31,10 +31,10 @@ trainer:
     type: basic
 
     # The maximum number of training rounds
-    rounds: 10000
+    rounds: 10
 
     # The maximum number of clients running concurrently
-    max_concurrency: 2
+    max_concurrency: 1
 
     # The target accuracy
     target_accuracy: 0.88
