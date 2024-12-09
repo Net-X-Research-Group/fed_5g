@@ -5,7 +5,7 @@ numpy<2.0.0
 matplotlib~=3.9.2
 torchinfo~=1.8.0
 pandas~=2.2.3
-flwr~=1.13.0
+flwr~=1.13.1
 markdown-it-py~=3.0.0
 tqdm~=4.67.1
 wandb
