@@ -50,9 +50,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
                             'downlink_times': downlink_times,
                             'training_times': training_times,
                             'train_test_times': train_test_times,
-                            'val_test_times': val_test_times,
-                            'grpc_created_times': grpc_created_times,
-                            'created_times_dt': created_times_dt,
+                            'val_test_times': val_test_times
                             }
         }
     return results
