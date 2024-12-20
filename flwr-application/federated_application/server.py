@@ -17,10 +17,10 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     """This function averages the `accuracy` metric sent by the clients in a `evaluate`
     stage (i.e. clients received the global model and evaluate it on their local
     validation sets)."""
-    uplink_times = [time.time() - m['uplink_time'] for _, m in metrics]
+    #uplink_times = [time.time() - m['uplink_time'] for _, m in metrics]
     downlink_times = [m['downlink_time'] for _, m in metrics]
-    grpc_created_times = [m['created_time_grpc'] for _, m in metrics]
-    created_times_dt = [m['created_time_dt'] for _, m in metrics]
+    uplink_times = [m['created_time_grpc'] for _, m in metrics]
+    #created_times_dt = [m['created_time_dt'] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
     # Multiply accuracy and loss of each client.py by number of examples used
