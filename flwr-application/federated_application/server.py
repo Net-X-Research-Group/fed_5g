@@ -19,7 +19,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     validation sets)."""
     #uplink_times = [time.time() - m['uplink_time'] for _, m in metrics]
     downlink_times = [m['downlink_time'] for _, m in metrics]
-    uplink_times = [m['created_time_grpc'] for _, m in metrics]
+    uplink_times = [time.time() - m['created_time_grpc'] for _, m in metrics]
     #created_times_dt = [m['created_time_dt'] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
