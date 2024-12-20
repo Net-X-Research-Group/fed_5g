@@ -23,8 +23,6 @@ def comm_time_mod(message: Message, context: Context, app: ClientAppCallable) ->
     downlink_time = time.time() - message.content.configs_records['fitins.config']['server_timestamp']
     reply = app(message, context)
     if reply.metadata.message_type == MessageType.TRAIN:
-        reply.content.configs_records['fitres.metrics']['created_time_grpc'] = message.metadata.created_at
-        reply.content.configs_records['fitres.metrics']['created_time_dt'] = time.time()
         reply.content.configs_records['fitres.metrics']['downlink_time'] = downlink_time
         reply.content.configs_records['fitres.metrics']['uplink_time'] = time.time()
     return reply
