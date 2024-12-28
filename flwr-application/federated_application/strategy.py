@@ -18,7 +18,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
-global tshark_process
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, run_id, enable_wandb: bool, *args, **kwargs):
@@ -31,6 +30,7 @@ class MetricsFedAvg(FedAvg):
         self.init_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         self.run_id = run_id
         self.enable_wandb = enable_wandb
+        self.tshark_process = None
         if enable_wandb:
             logger.info('Enabling wandb...')
             # Login to wandb using API key.
@@ -45,7 +45,8 @@ class MetricsFedAvg(FedAvg):
 
         # Start Tshark
         try:
-            tshark_process = tshark_measurements.start_tshark(f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}')
+            self.tshark_process = tshark_measurements.start_tshark(f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}')
+            logger.info("Tshark started.")
         except Exception as e:
             logger.error(f"Error starting Tshark: {e}")
 
@@ -63,7 +64,8 @@ class MetricsFedAvg(FedAvg):
             wandb.log(results, step=server_round)
         if server_round == self.num_rounds:
             try:
-                tshark_measurements.stop_tshark(tshark_process)
+                tshark_measurements.stop_tshark(self.tshark_process)
+                logger.info("Tshark stopped.")
             except Exception as e:
                 logger.error(f"Error stopping Tshark: {e}")
             with open(
