@@ -10,7 +10,7 @@ from flwr.common.typing import UserConfig
 from flwr.server import ClientManager
 from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy import FedAvg
-import tshark_measurements
+import federated_application.tshark_measurements as tshark_measurements
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
