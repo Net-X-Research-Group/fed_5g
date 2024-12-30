@@ -10,7 +10,7 @@ from flwr.common.typing import UserConfig
 from flwr.server import ClientManager
 from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy import FedAvg
-
+import federated_application.tshark_measurements as tshark_measurements
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -18,7 +18,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
-
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, run_id, enable_wandb: bool, *args, **kwargs):
@@ -31,6 +30,7 @@ class MetricsFedAvg(FedAvg):
         self.init_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         self.run_id = run_id
         self.enable_wandb = enable_wandb
+        self.tshark_process = None
         if enable_wandb:
             logger.info('Enabling wandb...')
             # Login to wandb using API key.
@@ -42,6 +42,15 @@ class MetricsFedAvg(FedAvg):
         # Initialize dict to store all results
         self.results = {}
         self.individual_metrics = {}
+
+        # Start Tshark
+        try:
+            self.tshark_process = tshark_measurements.start_tshark(f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}')
+            logger.info("Tshark started.")
+        except Exception as e:
+            logger.error(f"Error starting Tshark: {e}")
+
+
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
                    group=str(self.run_id),
@@ -54,6 +63,11 @@ class MetricsFedAvg(FedAvg):
         if self.enable_wandb:
             wandb.log(results, step=server_round)
         if server_round == self.num_rounds:
+            try:
+                tshark_measurements.stop_tshark(self.tshark_process)
+                logger.info("Tshark stopped.")
+            except Exception as e:
+                logger.error(f"Error stopping Tshark: {e}")
             with open(
                     f"{os.path.expanduser(f'~/server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}.json')}",
                     "w") as f1:
