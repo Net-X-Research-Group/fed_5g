@@ -8,8 +8,7 @@ def start_tshark(output_file):
         'tshark',
         '-n',
         '-i', 'oai-cn5g',  # Attach to OAI CN interface
-        '-f', 'tcp port 9092',
-        '-w', os.path.expanduser(f'~/{output_file}.pcapng')
+        '-w', os.path.expanduser(f'~/output_file.pcapng')
     ]
     return subprocess.Popen(tshark_cmd)
 
