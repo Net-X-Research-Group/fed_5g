@@ -24,7 +24,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
         pcap_file,
         display_filter=display_filter,
         decode_as={'tcp.port==9092': 'http2'},
-        keep_packets=True,
+        keep_packets=False,
     )
 
     # Lists to store packet data
