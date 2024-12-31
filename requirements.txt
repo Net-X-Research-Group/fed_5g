@@ -8,4 +8,5 @@ pandas~=2.2.3
 flwr~=1.14.0
 markdown-it-py~=3.0.0
 tqdm~=4.67.1
-wandb
+wandb~=0.18.7
+pyshark~=0.6

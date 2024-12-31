@@ -2,6 +2,7 @@ import pyshark
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import time
 
 def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFrame:
     """
@@ -28,6 +29,9 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
 
     # Lists to store packet data
     data = []
+    start = time.time()
+    capture.load_packets()
+    print(f"Loaded {len(capture)} packets in {time.time() - start:.2f} seconds")
     # Process each packet
     for packet in tqdm(capture, desc="Processing packets", unit="packets"):
         try:
@@ -56,7 +60,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
         except AttributeError as e:
             print(f"Error processing packet: {e}")
             continue
-
+    capture.close()
     # Create DataFrame
     df = pd.DataFrame(data)
 
