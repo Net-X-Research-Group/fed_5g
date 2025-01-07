@@ -24,7 +24,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
         pcap_file,
         display_filter=display_filter,
         decode_as={'tcp.port==9092': 'http2'},
-        keep_packets=False,
+        keep_packets=False
     )
 
     # Lists to store packet data
@@ -53,8 +53,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
                         'stream_id': stream_id,
                         'tcp_bytes': http2_length,
                         'source': source,
-                        'destination': destination,
-                        'direction': direction
+                        'destination': destination
                     })
 
         except AttributeError as e:
@@ -80,7 +79,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
     consolidated_df.dropna(inplace=True)
     return consolidated_df
 
-def save_results_to_csv(data, output_csv):
+def save_results_to_csv(data, output_csv, network):
     """
     Save analysis results to a CSV file
 
@@ -88,6 +87,10 @@ def save_results_to_csv(data, output_csv):
         data (pandas.DataFrame): Analysis results
         output_csv (str): Output CSV file path
     """
+    downlink_df = data[data['source'] == network['downlink']]
+    uplink_df = data[data['destination'] == network['downlink']]
+    downlink_df.to_csv(f'{output_csv}_DOWNLINK', index=False)
+    uplink_df.to_csv(f'{output_csv}_UPLINK', index=False)
     data.to_csv(output_csv, index=False)
     print("Results saved to CSV")
 
@@ -107,7 +110,7 @@ def main():
 
     # Save results to CSV
     print(f"Saving results to {output_csv}")
-    save_results_to_csv(data, output_csv)
+    save_results_to_csv(data, output_csv, network)
 
 if __name__ == "__main__":
     main()
