@@ -123,7 +123,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-p", "--pcap_file", help="Path to the pcap file")
-    parser.add_argument("--c", "--config", help="Path to the config file")
+    parser.add_argument("-c", "--config", help="Path to the config file")
 
     args = parser.parse_args()
 
