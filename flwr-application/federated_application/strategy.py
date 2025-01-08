@@ -32,6 +32,7 @@ class MetricsFedAvg(FedAvg):
         self.enable_wandb = enable_wandb
         self.tshark_process = None
         self.dir_name = f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}'
+
         if enable_wandb:
             logger.info('Enabling wandb...')
             # Login to wandb using API key.
@@ -44,15 +45,20 @@ class MetricsFedAvg(FedAvg):
         self.results = {}
         self.individual_metrics = {}
 
+        # Create logging directory
+        try:
+            os.mkdir(os.path.expanduser(f'~/{self.dir_name}'))  # Path should never exist
+            logger.info(f'Directory {os.path.expanduser(self.dir_name)} created.')
+        except FileExistsError:
+            logger.info(f'Directory {os.path.expanduser(self.dir_name)} already exists.')
+
+
         # Start Tshark
         try:
             self.tshark_process = tshark_measurements.start_tshark(self.dir_name)
             logger.info("Tshark started.")
         except Exception as e:
             logger.error(f"Error starting Tshark: {e}")
-
-    def _init_logging(self):
-        os.mkdir(os.path.expanduser(f'~/{self.dir_name}'))
 
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
