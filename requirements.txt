@@ -8,6 +8,6 @@ pandas~=2.2.3
 flwr~=1.14.0
 markdown-it-py~=3.0.0
 tqdm~=4.67.1
-wandb~=0.18.7
+wandb~=0.19.2
 pyshark~=0.6
 PyYAML~=6.0.2
