@@ -1,8 +1,18 @@
-import pyshark
-import pandas as pd
-import numpy as np
-from tqdm import tqdm
+import argparse
 import time
+
+import numpy as np
+import pandas as pd
+import pyshark
+import yaml
+from tqdm import tqdm
+
+
+def _load_config(config_file):
+    with open(config_file, 'r') as stream:
+        config = yaml.safe_load(stream)
+    return config
+
 
 def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFrame:
     """
@@ -37,9 +47,9 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
         try:
             # Extract HTTP2 and TCP information
             timestamp = float(packet.frame_info.time_epoch)
-            stream_id = packet.http2.streamid # Corresponds to the HTTP2 stream ID which is unique to each Tx group
-            packet_number = int(packet.frame_info.number) # Int
-            http2_length = int(packet.http2.length) # Bytes
+            stream_id = packet.http2.streamid  # Corresponds to the HTTP2 stream ID which is unique to each Tx group
+            packet_number = int(packet.frame_info.number)  # Int
+            http2_length = int(packet.http2.length)  # Bytes
             source = packet.get_multiple_layers('ip')[-1].src
             destination = packet.get_multiple_layers('ip')[-1].dst
             route = (source, destination)
@@ -78,6 +88,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
     consolidated_df.dropna(inplace=True)
     return consolidated_df
 
+
 def save_results_to_csv(data, output_csv, network):
     """
     Save analysis results to a CSV file
@@ -85,6 +96,7 @@ def save_results_to_csv(data, output_csv, network):
     Args:
         data (pandas.DataFrame): Analysis results
         output_csv (str): Output CSV file path
+        network (dict): Dictionary containing downlink and uplink IP addresses of the network
     """
     downlink_df = data[data['source'] == network['downlink']]
     uplink_df = data[data['destination'] == network['downlink']]
@@ -93,16 +105,11 @@ def save_results_to_csv(data, output_csv, network):
     data.to_csv(output_csv, index=False)
     print("Results saved to CSV")
 
-def main():
+
+def main(pcap_file, config):
     # File paths
-    pcap_file = "ethernet_1c_2e_cifar10_cnn3_3R_nowandb_5G.pcapng"  # Replace with your pcap file path
     output_csv = "http2_data_analysis.csv"
-
-    downlink_address = '192.168.70.129'
-    uplink_addresses = ['10.0.0.2']
-
-    network = {'downlink': downlink_address, 'uplink': uplink_addresses}
-
+    network = _load_config(config)
 
     print("Analyzing HTTP2 DATA streams...")
     data = analyze_http2_data_streams(pcap_file, network)
@@ -111,5 +118,13 @@ def main():
     print(f"Saving results to {output_csv}")
     save_results_to_csv(data, output_csv, network)
 
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-p", "--pcap_file", help="Path to the pcap file")
+    parser.add_argument("--c", "--config", help="Path to the config file")
+
+    args = parser.parse_args()
+
+    main(args.pcap_file, args.config)
