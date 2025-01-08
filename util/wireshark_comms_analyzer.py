@@ -55,6 +55,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
             route = (source, destination)
             # Filter packets based on size and direction
             if any(ip in route for ip in ip_addresses['uplink']) and ip_addresses['downlink'] in route:
+                direction = 'uplink' if source in ip_addresses['uplink'] else 'downlink'
                 if http2_length >= 100:
                     data.append({
                         'packet_number': packet_number,
@@ -63,6 +64,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
                         'tcp_bytes': http2_length,
                         'source': source,
                         'destination': destination,
+                        'direction': direction
                     })
 
         except AttributeError as e:
@@ -75,13 +77,13 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
     if df.empty:
         raise ValueError("No HTTP2 DATA frames found in capture")
 
-    consolidated_df = df.groupby(['stream_id', 'source', 'destination']).agg(
+    consolidated_df = df.groupby(['stream_id', 'source', 'destination', 'direction']).agg(
         start_time=('timestamp', 'first'),
         end_time=('timestamp', 'last'),
         total_bytes=('tcp_bytes', 'sum'),
         total_packets=('packet_number', 'count')
     ).reset_index()
-    consolidated_df['total_bytes'] = consolidated_df['total_bytes'] / 8e6  # Convert to Mbits from Bytes
+    consolidated_df['total_bytes'] = consolidated_df['total_bytes'] * 8 / 1e6  # Convert to Mbits from Bytes
     consolidated_df['duration'] = consolidated_df['end_time'] - consolidated_df['start_time']
     consolidated_df['throughput'] = (consolidated_df['total_bytes'] / consolidated_df['duration'])  # Mbps
     consolidated_df.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -89,34 +91,37 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
     return consolidated_df
 
 
-def save_results_to_csv(data, output_csv, network):
+def save_results_to_json(data, output_file, config):
     """
     Save analysis results to a CSV file
 
     Args:
         data (pandas.DataFrame): Analysis results
-        output_csv (str): Output CSV file path
-        network (dict): Dictionary containing downlink and uplink IP addresses of the network
+        output_file (str): Output CSV file path
+        config (dict): Dictionary containing downlink and uplink IP addresses of the network
     """
-    downlink_df = data[data['source'] == network['downlink']]
-    uplink_df = data[data['destination'] == network['downlink']]
-    downlink_df.to_csv(f'{output_csv}_DOWNLINK', index=False)
-    uplink_df.to_csv(f'{output_csv}_UPLINK', index=False)
-    data.to_csv(output_csv, index=False)
-    print("Results saved to CSV")
+
+    downlink_df = data[data['source'] == config['network']['downlink']]
+    uplink_df = data[data['destination'] == config['network']['downlink']]
+
+    downlink_df.transpose().to_json(f'{output_file}_DOWNLINK.json', index=False)
+    uplink_df.transpose().to_json(f'{output_file}_UPLINK.json', index=False)
+    data.transpose().to_json(f'{output_file}.json', index=False)
+    print("Results exported to JSON")
 
 
 def main(pcap_file, config):
     # File paths
-    output_csv = "http2_data_analysis.csv"
-    network = _load_config(config)['network']
+    output_file = "http2_data_analysis"
+    config = _load_config(config)
+    network = config['network']
 
     print("Analyzing HTTP2 DATA streams...")
     data = analyze_http2_data_streams(pcap_file, network)
 
     # Save results to CSV
-    print(f"Saving results to {output_csv}")
-    save_results_to_csv(data, output_csv, network)
+    print(f"Saving results to {output_file}")
+    save_results_to_json(data, output_file, config)
 
 
 if __name__ == "__main__":
