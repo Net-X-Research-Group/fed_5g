@@ -46,14 +46,13 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
             # Filter packets based on size and direction
             if any(ip in route for ip in ip_addresses['uplink']) and ip_addresses['downlink'] in route:
                 if http2_length >= 100:
-                    direction = 'uplink' if source in ip_addresses['uplink'] else 'downlink'
                     data.append({
                         'packet_number': packet_number,
                         'timestamp': timestamp,
                         'stream_id': stream_id,
                         'tcp_bytes': http2_length,
                         'source': source,
-                        'destination': destination
+                        'destination': destination,
                     })
 
         except AttributeError as e:
@@ -72,7 +71,7 @@ def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFra
         total_bytes=('tcp_bytes', 'sum'),
         total_packets=('packet_number', 'count')
     ).reset_index()
-    consolidated_df['total_bytes'] = consolidated_df['total_bytes'] / 1e6  # Convert to KB
+    consolidated_df['total_bytes'] = consolidated_df['total_bytes'] / 8e6  # Convert to Mbits from Bytes
     consolidated_df['duration'] = consolidated_df['end_time'] - consolidated_df['start_time']
     consolidated_df['throughput'] = (consolidated_df['total_bytes'] / consolidated_df['duration'])  # Mbps
     consolidated_df.replace([np.inf, -np.inf], np.nan, inplace=True)
