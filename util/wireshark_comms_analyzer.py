@@ -109,7 +109,7 @@ def save_results_to_csv(data, output_csv, network):
 def main(pcap_file, config):
     # File paths
     output_csv = "http2_data_analysis.csv"
-    network = _load_config(config)
+    network = _load_config(config)['network']
 
     print("Analyzing HTTP2 DATA streams...")
     data = analyze_http2_data_streams(pcap_file, network)
