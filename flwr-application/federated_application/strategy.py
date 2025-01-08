@@ -31,6 +31,7 @@ class MetricsFedAvg(FedAvg):
         self.run_id = run_id
         self.enable_wandb = enable_wandb
         self.tshark_process = None
+        self.dir_name = f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}'
         if enable_wandb:
             logger.info('Enabling wandb...')
             # Login to wandb using API key.
@@ -45,11 +46,13 @@ class MetricsFedAvg(FedAvg):
 
         # Start Tshark
         try:
-            self.tshark_process = tshark_measurements.start_tshark(f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}')
+            self.tshark_process = tshark_measurements.start_tshark(self.dir_name)
             logger.info("Tshark started.")
         except Exception as e:
             logger.error(f"Error starting Tshark: {e}")
 
+    def _init_logging(self):
+        os.mkdir(os.path.expanduser(f'~/{self.dir_name}'))
 
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
@@ -69,11 +72,11 @@ class MetricsFedAvg(FedAvg):
             except Exception as e:
                 logger.error(f"Error stopping Tshark: {e}")
             with open(
-                    f"{os.path.expanduser(f'~/server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}.json')}",
+                    f"{os.path.expanduser(f'~/{self.dir_name}/agg_metrics.json')}",
                     "w") as f1:
                 json.dump(self.results, f1)
             with open(
-                    f"{os.path.expanduser(f'~/individual_metrics.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}.json')}",
+                    f"{os.path.expanduser(f'~/{self.dir_name}/individual_metrics.json')}",
                     "w") as f2:
                 json.dump(self.individual_metrics, f2)
 
