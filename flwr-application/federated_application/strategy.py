@@ -18,6 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
+ENABLE_WIRESHARK = False
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, run_id, enable_wandb: bool, *args, **kwargs):
@@ -54,11 +55,12 @@ class MetricsFedAvg(FedAvg):
 
 
         # Start Tshark
-        try:
-            self.tshark_process = tshark_measurements.start_tshark(self.dir_name)
-            logger.info("Tshark started.")
-        except Exception as e:
-            logger.error(f"Error starting Tshark: {e}")
+        if ENABLE_WIRESHARK:
+            try:
+                self.tshark_process = tshark_measurements.start_tshark(self.dir_name)
+                logger.info("Tshark started.")
+            except Exception as e:
+                logger.error(f"Error starting Tshark: {e}")
 
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
@@ -72,11 +74,12 @@ class MetricsFedAvg(FedAvg):
         if self.enable_wandb:
             wandb.log(results, step=server_round)
         if server_round == self.num_rounds:
-            try:
-                tshark_measurements.stop_tshark(self.tshark_process)
-                logger.info("Tshark stopped.")
-            except Exception as e:
-                logger.error(f"Error stopping Tshark: {e}")
+            if ENABLE_WIRESHARK:
+                try:
+                    tshark_measurements.stop_tshark(self.tshark_process)
+                    logger.info("Tshark stopped.")
+                except Exception as e:
+                    logger.error(f"Error stopping Tshark: {e}")
             with open(
                     f"{os.path.expanduser(f'~/{self.dir_name}/agg_metrics.json')}",
                     "w") as f1:
