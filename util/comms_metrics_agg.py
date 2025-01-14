@@ -1,9 +1,6 @@
 import json
-import yaml
 from matplotlib import pyplot as plt
-import pandas as pd
 import numpy as np
-from matplotlib.pyplot import tight_layout
 
 
 def plot_metrics(data: dict, direction: str):
