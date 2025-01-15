@@ -96,7 +96,6 @@ class MetricsFedAvg(FedAvg):
     def aggregate_fit(self, server_round, results, failures):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
-        logger.info(f"Server round {server_round} finished with loss {self.last_loss}")
         if metrics['val_loss'] < self.best_loss:
             self.best_loss = metrics['val_loss']
             self.patience = 10
