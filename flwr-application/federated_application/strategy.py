@@ -33,7 +33,7 @@ class MetricsFedAvg(FedAvg):
         self.enable_wandb = enable_wandb
         self.tshark_process = None
         self.early_stop = False
-        self.last_loss = None
+        self.last_loss = 0.0
         self.dir_name = f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}'
 
         if enable_wandb:
@@ -96,10 +96,10 @@ class MetricsFedAvg(FedAvg):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
         logger.info(f"Server round {server_round} finished with loss {self.last_loss}")
-        self.last_loss = metrics['val_loss']
         if metrics['val_loss'] > self.last_loss:
             logger.info(f"Early stopping at round {server_round} due to loss threshold.")
             self.early_stop = True
+        self.last_loss = metrics['val_loss']
         return params, metrics
 
     def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[tuple[ClientProxy, FitIns]]:
