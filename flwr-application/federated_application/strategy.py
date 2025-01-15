@@ -33,7 +33,7 @@ class MetricsFedAvg(FedAvg):
         self.enable_wandb = enable_wandb
         self.tshark_process = None
         self.early_stop = False
-        self.last_loss = 0.0
+        self.last_loss = 100
         self.dir_name = f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}'
 
         if enable_wandb:
