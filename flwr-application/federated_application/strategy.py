@@ -95,8 +95,8 @@ class MetricsFedAvg(FedAvg):
     def aggregate_fit(self, server_round, results, failures):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
-        self.last_loss = metrics['val_loss']
         logger.info(f"Server round {server_round} finished with loss {self.last_loss}")
+        self.last_loss = metrics['val_loss']
         if metrics['val_loss'] > self.last_loss:
             logger.info(f"Early stopping at round {server_round} due to loss threshold.")
             self.early_stop = True
