@@ -43,7 +43,7 @@ def _transform_pcap(pcap_file: str, display_filter: str) -> str:
     f = open(output_file, 'w')
     call(command, stdout=f)
     f.close()
-
+    print('Sucessfully converted pcapng file.')
     return output_file
 
 def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
