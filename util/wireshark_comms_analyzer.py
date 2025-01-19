@@ -111,7 +111,7 @@ def main(pcap_file, config):
     downlink_filter = f'ip.addr == {network["downlink"]}'
     display_filter = f'http2.type == 0 && ({uplink_filter} || {downlink_filter})'
 
-    raw_data = _load_json(_transform_pcap(pcap_file, display_filter))
+    raw_data = _load_json('output.json')
 
     processed_data = analyze_data_streams(raw_data, network)
     save_results_to_json(processed_data, output_file, config)
