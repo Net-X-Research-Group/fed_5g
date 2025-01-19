@@ -35,7 +35,7 @@ def _transform_pcap(pcap_file: str, display_filter: str) -> str:
     output_file = 'output.json'
     command = ['tshark',
                '-r', pcap_file,
-               '-J', 'tcp ip http2',
+               '-J', 'tcp ip http2 frame',
                '-T', 'json',
                '-Y', display_filter,
                '-d', 'tcp.port==9092,http2']
@@ -47,7 +47,6 @@ def _transform_pcap(pcap_file: str, display_filter: str) -> str:
     return output_file
 
 def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
-    print(data)
     data = [d['_source']['layers'] for d in data]
     parsed = []
     for packet in tqdm(data):
@@ -112,7 +111,7 @@ def main(pcap_file, config):
     downlink_filter = f'ip.addr == {network["downlink"]}'
     display_filter = f'http2.type == 0 && ({uplink_filter} || {downlink_filter})'
 
-    raw_data = _transform_pcap('output.pcapng', display_filter)
+    raw_data = _load_json(_transform_pcap('output.pcapng', display_filter))
 
     processed_data = analyze_data_streams(raw_data, network)
     save_results_to_json(processed_data, output_file, config)
