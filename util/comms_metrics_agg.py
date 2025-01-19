@@ -21,7 +21,7 @@ def plot_metrics(data: dict, direction: str):
 
         for round_id, round_data in address_data.items():
             throughputs.append(round_data['throughput'])
-            durations.append(round_data['duration'])
+            durations.append(round_data['latency'])
 
         ax1.plot(rounds, durations, label=address, color=colors[i])
         ax2.plot(rounds, throughputs, label=address, color=colors[i])
@@ -47,7 +47,7 @@ def group_by_source(data):
     """
     result = {}
     for n, entry in data.items():
-        source = entry['source']
+        source = entry['source_ip']
         if source not in result:
             result[source] = {}
         result[source][n] = entry
@@ -59,7 +59,7 @@ def group_by_destination(data):
     """
     result = {}
     for n, entry in data.items():
-        destination = entry['destination']
+        destination = entry['destination_ip']
         if destination not in result:
             result[destination] = {}
         result[destination][n] = entry
