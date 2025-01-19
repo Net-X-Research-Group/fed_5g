@@ -49,7 +49,7 @@ def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
     print(data)
     data = [d['_source']['layers'] for d in data]
     parsed = []
-    for packet in data:
+    for packet in tqdm(data):
         try:
             timestamp = float(packet['frame']['frame.time_epoch'])
             source_ip = str(packet['ip']['ip.src'])
