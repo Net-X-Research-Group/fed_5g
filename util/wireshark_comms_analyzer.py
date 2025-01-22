@@ -6,90 +6,81 @@ import pandas as pd
 import pyshark
 import yaml
 from tqdm import tqdm
+from subprocess import call
+import json
 
 
-def _load_config(config_file):
+def _load_config(config_file) -> dict:
     with open(config_file, 'r') as stream:
         config = yaml.safe_load(stream)
     return config
 
+def _load_json(file_path) -> dict:
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    return data
 
-def analyze_http2_data_streams(pcap_file: str, ip_addresses: dict) -> pd.DataFrame:
+
+def _transform_pcap(pcap_file: str, display_filter: str) -> str:
     """
-    Analyze HTTP2 DATA stream packets and calculate latency and throughput
+    Transform the pcap file into a pandas DataFrame
 
     Args:
         pcap_file (str): Path to the pcap file
         ip_addresses (dict): Dictionary containing downlink and uplink IP addresses of the network
     Returns:
-        pandas.DataFrame: Pruned trace containing cherry-picked columns
+        pandas.DataFrame: Pruned trace containing
     """
-    # Initialize capture with display filter for HTTP2 DATA frames
-    # Create display filter for both uplink and downlink IP addresses
-    uplink_filter = ' || '.join([f'ip.addr == {ip}' for ip in ip_addresses['uplink']])
-    downlink_filter = f'ip.addr == {ip_addresses["downlink"]}'
-    display_filter = f'http2.type == 0 && ({uplink_filter} || {downlink_filter})'
+    # tshark -r output.pcapng -Y "http2.type == 0 && (ip.addr == 10.0.0.3 || ip.addr == 10.0.0.2 || ip.addr == 192.168.70.129)" -d "tcp.port==9092,http2" -T json > output.json
+    output_file = 'output.json'
+    command = ['tshark',
+               '-r', pcap_file,
+               '-J', 'tcp ip http2 frame',
+               '-T', 'json',
+               '-Y', display_filter,
+               '-d', 'tcp.port==9092,http2']
 
-    capture = pyshark.FileCapture(
-        pcap_file,
-        display_filter=display_filter,
-        decode_as={'tcp.port==9092': 'http2'},
-        keep_packets=False
-    )
+    f = open(output_file, 'w')
+    call(command, stdout=f)
+    f.close()
+    print('Sucessfully converted pcapng file.')
+    return output_file
 
-    # Lists to store packet data
-    data = []
-    start = time.time()
-    capture.load_packets()
-    print(f"Loaded {len(capture)} packets in {time.time() - start:.2f} seconds")
-    # Process each packet
-    for packet in tqdm(capture, desc="Processing packets", unit="packets"):
+def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
+    data = [d['_source']['layers'] for d in data]
+    parsed = []
+    for packet in tqdm(data):
         try:
-            # Extract HTTP2 and TCP information
-            timestamp = float(packet.frame_info.time_epoch)
-            stream_id = packet.http2.streamid  # Corresponds to the HTTP2 stream ID which is unique to each Tx group
-            packet_number = int(packet.frame_info.number)  # Int
-            http2_length = int(packet.http2.length)  # Bytes
-            source = packet.get_multiple_layers('ip')[-1].src
-            destination = packet.get_multiple_layers('ip')[-1].dst
-            route = (source, destination)
-            # Filter packets based on size and direction
+            timestamp = float(packet['frame']['frame.time_epoch'])
+            source_ip = str(packet['ip']['ip.src'])
+            destination_ip = str(packet['ip']['ip.dst'])
+            stream_id = str(packet['http2']['http2.stream']['http2.streamid'])
+            packet_length = float(packet['http2']['http2.stream']['http2.length'])
+            route = (source_ip, destination_ip)
             if any(ip in route for ip in ip_addresses['uplink']) and ip_addresses['downlink'] in route:
-                direction = 'uplink' if source in ip_addresses['uplink'] else 'downlink'
-                if http2_length >= 100:
-                    data.append({
-                        'packet_number': packet_number,
-                        'timestamp': timestamp,
-                        'stream_id': stream_id,
-                        'tcp_bytes': http2_length,
-                        'source': source,
-                        'destination': destination,
-                        'direction': direction
-                    })
+                direction = 'uplink' if source_ip in ip_addresses['uplink'] else 'downlink'
+                if packet_length >= 100:
+                    parsed.append({'timestamp': timestamp,
+                                 'source_ip': source_ip,
+                                 'destination_ip': destination_ip,
+                                 'stream_id': stream_id,
+                                 'packet_length': packet_length,
+                                 'direction': direction})
+        except ValueError as e:
+            raise('Value Error:', e)
 
-        except AttributeError as e:
-            print(f"Error processing packet: {e}")
-            continue
-    capture.close()
-    # Create DataFrame
-    df = pd.DataFrame(data)
-
-    if df.empty:
-        raise ValueError("No HTTP2 DATA frames found in capture")
-
-    consolidated_df = df.groupby(['stream_id', 'source', 'destination', 'direction']).agg(
-        start_time=('timestamp', 'first'),
-        end_time=('timestamp', 'last'),
-        total_bytes=('tcp_bytes', 'sum'),
-        total_packets=('packet_number', 'count')
+    df = pd.DataFrame(parsed).groupby(['stream_id', 'source_ip', 'destination_ip', 'direction']).agg(
+        start_time=('timestamp', 'min'),
+        end_time=('timestamp', 'max'),
+        http_bytes=('packet_length', 'sum'),
+        total_packets=('stream_id', 'count')
     ).reset_index()
-    consolidated_df['total_bytes'] = consolidated_df['total_bytes'] * 8 / 1e6  # Convert to Mbits from Bytes
-    consolidated_df['duration'] = consolidated_df['end_time'] - consolidated_df['start_time']
-    consolidated_df['throughput'] = (consolidated_df['total_bytes'] / consolidated_df['duration'])  # Mbps
-    consolidated_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    consolidated_df.dropna(inplace=True)
-    return consolidated_df
+    df['latency'] = df['end_time'] - df['start_time']
+    df['throughput'] = ((df['http_bytes'] * 8) / df['latency']) / 1e6
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df.dropna(inplace=True)
 
+    return df
 
 def save_results_to_json(data, output_file, config):
     """
@@ -101,8 +92,8 @@ def save_results_to_json(data, output_file, config):
         config (dict): Dictionary containing downlink and uplink IP addresses of the network
     """
 
-    downlink_df = data[data['source'] == config['network']['downlink']]
-    uplink_df = data[data['destination'] == config['network']['downlink']]
+    downlink_df = data[data['source_ip'] == config['network']['downlink']]
+    uplink_df = data[data['destination_ip'] == config['network']['downlink']]
 
     downlink_df.transpose().to_json(f'{output_file}_DOWNLINK.json', index=False)
     uplink_df.transpose().to_json(f'{output_file}_UPLINK.json', index=False)
@@ -116,12 +107,14 @@ def main(pcap_file, config):
     config = _load_config(config)
     network = config['network']
 
-    print("Analyzing HTTP2 DATA streams...")
-    data = analyze_http2_data_streams(pcap_file, network)
+    uplink_filter = ' || '.join([f'ip.addr == {ip}' for ip in network['uplink']])
+    downlink_filter = f'ip.addr == {network["downlink"]}'
+    display_filter = f'http2.type == 0 && ({uplink_filter} || {downlink_filter})'
 
-    # Save results to CSV
-    print(f"Saving results to {output_file}")
-    save_results_to_json(data, output_file, config)
+    raw_data = _load_json(_transform_pcap('output.pcapng', display_filter))
+
+    processed_data = analyze_data_streams(raw_data, network)
+    save_results_to_json(processed_data, output_file, config)
 
 
 if __name__ == "__main__":
