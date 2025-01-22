@@ -34,7 +34,7 @@ class MetricsFedAvg(FedAvg):
         self.tshark_process = None
         self.early_stop = False
         self.best_loss = float('inf')
-        self.patience = 5
+        self.patience = 3
         self.dir_name = f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}'
 
         if enable_wandb:
@@ -98,7 +98,7 @@ class MetricsFedAvg(FedAvg):
         self._log_results(server_round, metrics)
         if metrics['val_loss'] < self.best_loss:
             self.best_loss = metrics['val_loss']
-            self.patience = 10
+            self.patience = 3
         else:
             self.patience -= 1
             if self.patience == 0:
