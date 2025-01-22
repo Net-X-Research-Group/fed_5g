@@ -106,13 +106,13 @@ class MetricsFedAvg(FedAvg):
             self.patience -= 1
             if self.patience == 0:
                 self.early_stop = True
-                logger.info(f"Early stopping at round {server_round} due to loss threshold.")
         return params, metrics
 
     def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[tuple[ClientProxy, FitIns]]:
         if self.early_stop:
             return []
-        if self.early_stop and server_round == self.num_rounds:
+        if server_round == self.num_rounds:
+            logger.info(f"Early stopping at round {server_round} due to loss threshold.")
             self._write_logs()
         client_fitins_list = super().configure_fit(server_round, parameters, client_manager)
         update_client_fitins = []
