@@ -8,7 +8,6 @@ def start_tshark(output_directory):
         'tshark',
         '-n',
         '-i', 'oai-cn5g',  # Attach to OAI CN interface
-        '-f', 'udp port 2152',  # Filter for GTP-U packets
         '-w', os.path.expanduser(f'~/{output_directory}/output.pcapng')
     ]
     return subprocess.Popen(tshark_cmd)

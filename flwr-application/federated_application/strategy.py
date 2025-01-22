@@ -71,6 +71,16 @@ class MetricsFedAvg(FedAvg):
                    name=f'{self.init_time}-ServerApp',
                    config=self.config)
 
+    def _write_logs(self):
+        with open(
+                f"{os.path.expanduser(f'~/{self.dir_name}/agg_metrics.json')}",
+                "w") as f1:
+            json.dump(self.results, f1)
+        with open(
+                f"{os.path.expanduser(f'~/{self.dir_name}/individual_metrics.json')}",
+                "w") as f2:
+            json.dump(self.individual_metrics, f2)
+
     def _log_results(self, server_round, results):
         self.individual_metrics[server_round] = results.pop('individual_metrics')
         self.results[server_round] = results
@@ -83,14 +93,7 @@ class MetricsFedAvg(FedAvg):
                     logger.info("Tshark stopped.")
                 except Exception as e:
                     logger.error(f"Error stopping Tshark: {e}")
-            with open(
-                    f"{os.path.expanduser(f'~/{self.dir_name}/agg_metrics.json')}",
-                    "w") as f1:
-                json.dump(self.results, f1)
-            with open(
-                    f"{os.path.expanduser(f'~/{self.dir_name}/individual_metrics.json')}",
-                    "w") as f2:
-                json.dump(self.individual_metrics, f2)
+
 
     # Define metric aggregation function
     def aggregate_fit(self, server_round, results, failures):
@@ -109,6 +112,8 @@ class MetricsFedAvg(FedAvg):
     def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[tuple[ClientProxy, FitIns]]:
         if self.early_stop:
             return []
+        if self.early_stop and server_round == self.num_rounds:
+            self._write_logs()
         client_fitins_list = super().configure_fit(server_round, parameters, client_manager)
         update_client_fitins = []
         for client, fit_ins in client_fitins_list:
