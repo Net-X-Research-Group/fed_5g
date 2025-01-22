@@ -1,2 +1,3 @@
 venv/
 .idea/
+flwr-application/pyproject.toml
