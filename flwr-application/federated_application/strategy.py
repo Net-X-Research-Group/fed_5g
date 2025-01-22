@@ -76,7 +76,7 @@ class MetricsFedAvg(FedAvg):
         self.results[server_round] = results
         if self.enable_wandb:
             wandb.log(results, step=server_round)
-        if server_round == self.num_rounds:
+        if server_round == self.num_rounds or self.early_stop:
             if ENABLE_WIRESHARK:
                 try:
                     tshark_measurements.stop_tshark(self.tshark_process)
