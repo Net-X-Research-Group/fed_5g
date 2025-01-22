@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
-ENABLE_WIRESHARK = False
+ENABLE_WIRESHARK = True
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, run_id, enable_wandb: bool, *args, **kwargs):
