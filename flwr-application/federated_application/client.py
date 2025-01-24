@@ -73,6 +73,7 @@ class FlowerClient(NumPyClient):
             self.learning_rate,
             self.device
         )
+        results['cid'] = self.wandb_config['cid']
         #results['downlink_time'] = downlink_time
         logger.info(f"Training complete. Elapsed time: {results['training_time']}")
         if self.enable_wandb:
