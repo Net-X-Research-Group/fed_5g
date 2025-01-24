@@ -1,9 +1,6 @@
 import argparse
-import time
-
 import numpy as np
 import pandas as pd
-import pyshark
 import yaml
 from tqdm import tqdm
 from subprocess import call
@@ -68,7 +65,6 @@ def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
                                  'direction': direction})
         except ValueError as e:
             raise('Value Error:', e)
-
     df = pd.DataFrame(parsed).groupby(['stream_id', 'source_ip', 'destination_ip', 'direction']).agg(
         start_time=('timestamp', 'min'),
         end_time=('timestamp', 'max'),
@@ -79,7 +75,7 @@ def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
     df['throughput'] = ((df['http_bytes'] * 8) / df['latency']) / 1e6
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.dropna(inplace=True)
-
+    df = df.sort_values(by='start_time').reset_index()
     return df
 
 def save_results_to_json(data, output_file, config):
