@@ -5,7 +5,7 @@ from datetime import datetime
 
 CELLULAR = False
 
-def start_tshark(output_directory) -> Popen[bytes]:
+def start_tshark(output_directory):
     if CELLULAR:
         tshark_cmd = [
             'tshark',
