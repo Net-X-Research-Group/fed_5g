@@ -31,6 +31,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     val_test_times = [m["val_test_time"] for _, m in metrics]
     training_times = [m["training_time"] for _, m in metrics]
 
+    individual_metrics = {m['cid']: [m['train_acc'], m['val_acc'], m['train_loss'], m['val_loss']] for _, m in metrics}
 
     # Calculate the weighted average of the metrics
     results = {
@@ -43,13 +44,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "downlink_time": sum(downlink_times) / len(downlink_times),
         'train_test_time': sum(train_test_times) / len(train_test_times),
         'val_test_time': sum(val_test_times) / len(val_test_times),
-        'individual_metrics': {
-                            'uplink_times': uplink_times,
-                            'downlink_times': downlink_times,
-                            'training_times': training_times,
-                            'train_test_times': train_test_times,
-                            'val_test_times': val_test_times
-                            }
+        'individual_metrics': individual_metrics
         }
     return results
 
