@@ -115,6 +115,7 @@ class MetricsFedAvg(FedAvg):
         if server_round == self.num_rounds:
             logger.info(f"Early stopping at round {server_round} due to loss threshold.")
             self._write_logs()
+            print(self.individual_metrics)
         client_fitins_list = super().configure_fit(server_round, parameters, client_manager)
         update_client_fitins = []
         for client, fit_ins in client_fitins_list:
