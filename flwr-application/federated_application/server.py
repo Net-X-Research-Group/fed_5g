@@ -17,7 +17,8 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     """This function averages the `accuracy` metric sent by the clients in a `evaluate`
     stage (i.e. clients received the global model and evaluate it on their local
     validation sets)."""
-    uplink_times = [time.time() - m['uplink_time'] for _, m in metrics]
+    recv_time = time.time()
+    uplink_times = [recv_time - m['uplink_time'] for _, m in metrics]
     downlink_times = [m['downlink_time'] for _, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
 
@@ -32,7 +33,7 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     training_times = [m["training_time"] for _, m in metrics]
 
     individual_metrics = {m['cid']: {
-                                    'uplink_time': m['uplink_time'],
+                                    'uplink_time': recv_time - m['uplink_time'],
                                     'downlink_time': m['downlink_time'],
                                     'train_acc': m['train_acc'],
                                     'val_acc': m['val_acc'],
