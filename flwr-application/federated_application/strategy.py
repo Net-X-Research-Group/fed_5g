@@ -57,6 +57,10 @@ class MetricsFedAvg(FedAvg):
             logger.info(f'Directory {os.path.expanduser(self.dir_name)} already exists.')
 
         try:
+            config = self.config.copy()
+            config['run_id'] = self.run_id
+            config['patience'] = self.patience
+            config['init_time'] = self.init_time
             with open(f"{os.path.expanduser(f'~/{self.dir_name}/config.json')}", "w") as f:
                 json.dump(self.config, f)
         except Exception as e:
