@@ -62,7 +62,7 @@ class MetricsFedAvg(FedAvg):
             config['patience'] = self.patience
             config['init_time'] = self.init_time
             with open(f"{os.path.expanduser(f'~/{self.dir_name}/config.json')}", "w") as f:
-                json.dump(self.config, f)
+                json.dump(config, f)
         except Exception as e:
             logger.error(f"Error writing config to file: {e}")
 
