@@ -56,6 +56,11 @@ class MetricsFedAvg(FedAvg):
         except FileExistsError:
             logger.info(f'Directory {os.path.expanduser(self.dir_name)} already exists.')
 
+        try:
+            with open(f"{os.path.expanduser(f'~/{self.dir_name}/config.json')}", "w") as f:
+                json.dump(self.config, f)
+        except Exception as e:
+            logger.error(f"Error writing config to file: {e}")
 
         # Start Tshark
         if ENABLE_WIRESHARK:
