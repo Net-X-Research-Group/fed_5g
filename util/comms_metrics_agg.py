@@ -1,7 +1,7 @@
 import json
+
 from matplotlib import pyplot as plt
-import numpy as np
-from datetime import datetime, timedelta
+
 
 def get_run_time():
     with open('config.json', 'r') as f:
@@ -10,22 +10,26 @@ def get_run_time():
         trials_metadata = json.load(f)
     run_id = str(config_metadata['run_id'])
     time = trials_metadata[run_id]
-    ftr = [3600,60,1]
-    elapsed = sum([a*b for a,b in zip(ftr, map(int,time.split(':')))])
+    ftr = [3600, 60, 1]
+    elapsed = sum([a * b for a, b in zip(ftr, map(int, time.split(':')))])
     return elapsed
-    
+
+
 def plot_metrics(data: dict, direction: str):
     # Get source addresses in the data
     addresses = list(data.keys())
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10), tight_layout=True)
-    fig.suptitle(f'{direction} Communication Metrics', fontsize=16)
+    # Plot latency
+    fig_latency, axs_latency = plt.subplots(len(addresses), 1, figsize=(10, 5 * len(addresses)), tight_layout=True)
+    fig_latency.suptitle(f'{direction} Latency', fontsize=16)
 
-    colors = plt.colormaps.get_cmap('tab10')(np.linspace(0, 1, len(addresses)))
+    # Plot throughput
+    fig_throughput, axs_throughput = plt.subplots(len(addresses), 1, figsize=(10, 5 * len(addresses)),
+                                                  tight_layout=True)
+    fig_throughput.suptitle(f'{direction} Throughput', fontsize=16)
 
     for i, address in enumerate(addresses):
         address_data = data[address]
-
         rounds = list(address_data.keys())
         throughputs = []
         durations = []
@@ -34,23 +38,26 @@ def plot_metrics(data: dict, direction: str):
             throughputs.append(round_data['throughput'])
             durations.append(round_data['latency'])
 
-        ax1.plot(rounds, durations, label=address, color=colors[i])
-        ax2.plot(rounds, throughputs, label=address, color=colors[i])
+        # Plot latency
+        axs_latency[i].plot(rounds, durations, label=address)
+        axs_latency[i].set_title(f'Latency for {address}')
+        axs_latency[i].set_xlabel('Round')
+        axs_latency[i].set_ylabel('Time (s)')
+        axs_latency[i].legend()
 
+        # Plot throughput
+        axs_throughput[i].plot(rounds, throughputs, label=address)
+        axs_throughput[i].set_title(f'Throughput for {address}')
+        axs_throughput[i].set_xlabel('Round')
+        axs_throughput[i].set_ylabel('Throughput (Mbps)')
+        axs_throughput[i].legend()
 
-    ax1.legend()
-    ax1.set_title('Latency per Round')
-    ax1.set_xlabel('Round')
-    ax1.set_ylabel('Time (s)')
+    fig_latency.savefig(f'{direction}_latency.png')
+    fig_throughput.savefig(f'{direction}_throughput.png')
 
-    ax2.set_title('Throughput per Round')
-    ax2.legend()
-    ax2.set_xlabel('Round')
-    ax2.set_ylabel('Throughput (Mbps)')
+    plt.close(fig_latency)
+    plt.close(fig_throughput)
 
-
-    plt.savefig(f'{direction}_communication_metrics.png')
-    #plt.show()
 
 def group_by_source(data):
     """
@@ -64,6 +71,7 @@ def group_by_source(data):
         result[source][n] = entry
     return result
 
+
 def group_by_destination(data):
     """
     Transform data to group elements by their destination IP. To only be used on downlink data.
@@ -75,6 +83,7 @@ def group_by_destination(data):
             result[destination] = {}
         result[destination][n] = entry
     return result
+
 
 def label_round(data):
     """
@@ -90,8 +99,8 @@ def label_round(data):
 
 
 def main():
-    elapsed = get_run_time()
-    print('The trial took:', elapsed, 'seconds')
+    # elapsed = get_run_time()
+    # print('The trial took:', elapsed, 'seconds')
     uplink_file = 'http2_data_analysis_UPLINK.json'
     downlink_file = 'http2_data_analysis_DOWNLINK.json'
     with open(uplink_file, 'r') as f:
@@ -106,7 +115,6 @@ def main():
     downlink_data = label_round(downlink_data)
     plot_metrics(uplink_data, 'Uplink')
     plot_metrics(downlink_data, 'Downlink')
-
 
 
 if __name__ == '__main__':
