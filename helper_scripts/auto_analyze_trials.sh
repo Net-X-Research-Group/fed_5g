@@ -13,7 +13,7 @@ for dir in */; do
         echo "Executing in directory: $dir"
         
         # Change to subdirectory
-        cd "$dir"
+        cd "$dir" || { echo "Failed to change directory to $dir"; exit 1; }
         pwd
         # Run the Python script
         echo "Running wireshark analyzer"
