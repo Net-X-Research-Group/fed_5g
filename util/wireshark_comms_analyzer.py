@@ -126,6 +126,7 @@ def main(pcap_file, config):
     file = tarfile.open(compressed_pcapng, 'w:gz')
     file.add('output.pcapng')
     file.close()
+    os.remove('output.pcapng')
 
 
 if __name__ == "__main__":
