@@ -1,16 +1,20 @@
 import argparse
+import json
+import os
+import tarfile
+from subprocess import call
+
 import numpy as np
 import pandas as pd
 import yaml
 from tqdm import tqdm
-from subprocess import call
-import json
-import os
+
 
 def _load_config(config_file) -> dict:
     with open(config_file, 'r') as stream:
         config = yaml.safe_load(stream)
     return config
+
 
 def _load_json(file_path) -> dict:
     with open(file_path, 'r') as f:
@@ -44,6 +48,7 @@ def _transform_pcap(pcap_file: str, display_filter: str) -> str:
     print('Sucessfully converted pcapng file.')
     return output_file
 
+
 def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
     data = [d['_source']['layers'] for d in data]
     parsed = []
@@ -59,13 +64,13 @@ def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
                 direction = 'uplink' if source_ip in ip_addresses['uplink'] else 'downlink'
                 if packet_length >= 100:
                     parsed.append({'timestamp': timestamp,
-                                 'source_ip': source_ip,
-                                 'destination_ip': destination_ip,
-                                 'stream_id': stream_id,
-                                 'packet_length': packet_length,
-                                 'direction': direction})
+                                   'source_ip': source_ip,
+                                   'destination_ip': destination_ip,
+                                   'stream_id': stream_id,
+                                   'packet_length': packet_length,
+                                   'direction': direction})
         except ValueError as e:
-            raise('Value Error:', e)
+            raise ('Value Error:', e)
     df = pd.DataFrame(parsed).groupby(['stream_id', 'source_ip', 'destination_ip', 'direction']).agg(
         start_time=('timestamp', 'min'),
         end_time=('timestamp', 'max'),
@@ -78,6 +83,7 @@ def analyze_data_streams(data: dict, ip_addresses: dict) -> pd.DataFrame:
     df.dropna(inplace=True)
     df = df.sort_values(by='start_time').reset_index()
     return df
+
 
 def save_results_to_json(data, output_file, config):
     """
@@ -115,6 +121,11 @@ def main(pcap_file, config):
 
     # Remove the created json file to save on space
     os.remove('output.json')
+
+    compressed_pcapng = 'output.pcapng.tar.gz'
+    file = tarfile.open(compressed_pcapng, 'w:gz')
+    file.add('output.pcapng')
+    file.close()
 
 
 if __name__ == "__main__":
