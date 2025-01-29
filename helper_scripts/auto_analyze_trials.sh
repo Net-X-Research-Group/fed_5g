@@ -18,7 +18,8 @@ TIME_EXTRACTOR="/home/rhayek/fed_5g/util/elapsed_extract.py"
 
 # Loop through all subdirectories in the current directory/top level.
 cd "$TOP_LEVEL_DIR" || { echo "Failed to change directory to $dir"; exit 1; }
-
+echo "Extracting elapsed times..."
+python "$TIME_EXTRACTOR"
 for dir in */; do
     if [ -d "$dir" ]; then
         echo "Executing in directory: $dir"
@@ -29,8 +30,7 @@ for dir in */; do
         # Run the Python script
         echo "Running wireshark analyzer..."
         python "$ANALYZER_SCRIPT" -p output.pcapng -c ../config.yml
-        echo "Extracting elapsed times..."
-        python "$TIME_EXTRACTOR"
+
         echo "Running comms metrics plotter..."
         python "$COMMS_PLOTTER_SCRIPT"
         echo "Running ML metrics plotter..."
