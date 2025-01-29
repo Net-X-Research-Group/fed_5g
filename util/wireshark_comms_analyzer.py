@@ -31,6 +31,7 @@ def _transform_pcap(pcap_file: str, display_filter: str) -> str:
     # tshark -r output.pcapng -Y "http2.type == 0 && (ip.addr == 10.0.0.3 || ip.addr == 10.0.0.2 || ip.addr == 192.168.70.129)" -d "tcp.port==9092,http2" -T json > output.json
     output_file = 'output.json'
     command = ['tshark',
+               '-o', 'tcp.desegment_tcp_streams:TRUE',
                '-r', pcap_file,
                '-J', 'tcp ip http2 frame',
                '-T', 'json',

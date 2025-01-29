@@ -39,7 +39,7 @@ def plot_metrics(data: dict, direction: str):
 
 
     plt.savefig(f'{direction}_communication_metrics.png')
-    plt.show()
+    #plt.show()
 
 def group_by_source(data):
     """

@@ -32,7 +32,7 @@ def plot_agg_metrics(file_name):
     axs[1].xaxis.set_major_locator(plt.MaxNLocator(25, integer=True))
 
     plt.savefig('server_agg_metrics.png')
-    plt.show()
+    #plt.show()
 
 def main(file: str):
     plot_agg_metrics(os.path.expanduser(file))
