@@ -15,13 +15,13 @@ def get_run_time():
     return elapsed
 
 
-def plot_metrics(data: dict, direction: str):
+def plot_metrics(data: dict, direction: str, elapsed: int):
     # Get source addresses in the data
     addresses = list(data.keys())
 
     # Plot latency
     fig_latency, axs_latency = plt.subplots(len(addresses), 1, figsize=(10, 5 * len(addresses)), tight_layout=True)
-    fig_latency.suptitle(f'{direction} Latency', fontsize=16)
+    fig_latency.suptitle(f'{direction} Latency, Run Time: {elapsed} seconds', fontsize=16)
 
     # Plot throughput
     fig_throughput, axs_throughput = plt.subplots(len(addresses), 1, figsize=(10, 5 * len(addresses)),
@@ -40,14 +40,14 @@ def plot_metrics(data: dict, direction: str):
 
         # Plot latency
         axs_latency[i].plot(rounds, durations, label=address)
-        axs_latency[i].set_title(f'Latency for {address}')
+        axs_latency[i].set_title(f'{address}')
         axs_latency[i].set_xlabel('Round')
         axs_latency[i].set_ylabel('Time (s)')
         axs_latency[i].legend()
 
         # Plot throughput
         axs_throughput[i].plot(rounds, throughputs, label=address)
-        axs_throughput[i].set_title(f'Throughput for {address}')
+        axs_throughput[i].set_title(f'{address}')
         axs_throughput[i].set_xlabel('Round')
         axs_throughput[i].set_ylabel('Throughput (Mbps)')
         axs_throughput[i].legend()
@@ -99,8 +99,8 @@ def label_round(data):
 
 
 def main():
-    # elapsed = get_run_time()
-    # print('The trial took:', elapsed, 'seconds')
+    elapsed = get_run_time()
+    print('The trial took:', elapsed, 'seconds')
     uplink_file = 'http2_data_analysis_UPLINK.json'
     downlink_file = 'http2_data_analysis_DOWNLINK.json'
     with open(uplink_file, 'r') as f:
@@ -113,8 +113,8 @@ def main():
 
     uplink_data = label_round(uplink_data)
     downlink_data = label_round(downlink_data)
-    plot_metrics(uplink_data, 'Uplink')
-    plot_metrics(downlink_data, 'Downlink')
+    plot_metrics(uplink_data, 'Uplink', 1000)
+    plot_metrics(downlink_data, 'Downlink', 1000)
 
 
 if __name__ == '__main__':
