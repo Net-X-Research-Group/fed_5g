@@ -1,31 +1,40 @@
 import os
 import subprocess
 import logging
+import signal
 from datetime import datetime
 
 CELLULAR = False
 
 def start_tshark(output_directory):
-    if CELLULAR:
-        tshark_cmd = [
-            'tshark',
-            '-n',
-            '-i', 'oai-cn5g',  # Attach to OAI CN interface
-            '-w', os.path.expanduser(f'~/{output_directory}/output.pcapng')
-        ]
-    else:
-        tshark_cmd = [
-            'tshark',
-            'f', 'tcp port 9092',
-            '-n',
-            '-i', 'enp0s31f6',  # Attach to OAI CN interface
-            '-w', os.path.expanduser(f'~/{output_directory}/output.pcapng')
-        ]
-    pid = subprocess.Popen(tshark_cmd)
-    return pid
+    output_dir = os.path.expanduser(f'~/{output_directory}')
+    os.makedirs(output_dir, exist_ok=True)
+    tshark_cmd = [
+        'tshark',
+        '-n',
+        '-i', 'enp0s31f6' if not CELLULAR else 'oai-cn5g',
+        '-f', 'tcp port 9092 or tcp port 9091 or tcp port 9093',
+        '-w', os.path.join(output_dir, 'output.pcapng')
+    ] if not CELLULAR else [
+        'tshark',
+        '-n',
+        '-i', 'oai-cn5g',
+        '-w', os.path.join(output_dir, 'output.pcapng')
+    ]
+    # Capture stderr to detect startup errors
+    log_file = open(os.path.join(output_dir, 'tshark.log'), 'w')
+    process = subprocess.Popen(tshark_cmd, stderr=log_file)
+    return process
 
-# Stop tshark measurement
 def stop_tshark(tshark_process):
-    tshark_process.kill()
-    tshark_process.wait()
+    try:
+        # Send SIGINT (like Ctrl+C) for graceful termination
+        tshark_process.send_signal(signal.SIGINT)
+        tshark_process.wait(timeout=10)  # Wait for process to terminate
+    except subprocess.TimeoutExpired:
+        logging.warning("Tshark did not exit gracefully, forcing termination.")
+        tshark_process.kill()
+        tshark_process.wait()
+    except ProcessLookupError:
+        logging.info("Tshark process already terminated.")
     logging.info("Tshark measurement stopped.")
