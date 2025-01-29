@@ -5,7 +5,7 @@ import yaml
 from tqdm import tqdm
 from subprocess import call
 import json
-
+import os
 
 def _load_config(config_file) -> dict:
     with open(config_file, 'r') as stream:
@@ -112,6 +112,9 @@ def main(pcap_file, config):
 
     processed_data = analyze_data_streams(raw_data, network)
     save_results_to_json(processed_data, output_file, config)
+
+    # Remove the created json file to save on space
+    os.remove('output.json')
 
 
 if __name__ == "__main__":
