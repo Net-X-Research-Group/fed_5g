@@ -2,6 +2,13 @@ import json
 from matplotlib import pyplot as plt
 import numpy as np
 
+def get_run_time():
+    with open('config.json', 'r') as f:
+        config_metadata = json.load(f)
+    with open('../../trials.json') as f:
+        trials_metadata = json.load(f)
+    return trials_metadata[config_metadata['run_id']]
+
 
 def plot_metrics(data: dict, direction: str):
     # Get source addresses in the data
@@ -79,6 +86,8 @@ def label_round(data):
 
 
 def main():
+    elapsed = get_run_time()
+    print('The trial took: ', elapsed, ' seconds')
     uplink_file = 'http2_data_analysis_UPLINK.json'
     downlink_file = 'http2_data_analysis_DOWNLINK.json'
     with open(uplink_file, 'r') as f:
