@@ -113,8 +113,8 @@ def main():
 
     uplink_data = label_round(uplink_data)
     downlink_data = label_round(downlink_data)
-    plot_metrics(uplink_data, 'Uplink', 1000)
-    plot_metrics(downlink_data, 'Downlink', 1000)
+    plot_metrics(uplink_data, 'Uplink', elapsed)
+    plot_metrics(downlink_data, 'Downlink', elapsed)
 
 
 if __name__ == '__main__':
