@@ -39,17 +39,17 @@ def plot_metrics(data: dict, direction: str, elapsed: int):
             durations.append(round_data['latency'])
 
         # Plot latency
-        axs_latency[i].plot(rounds, durations, label=address)
+        axs_latency[i].hist(durations, label=address)
         axs_latency[i].set_title(f'{address}')
-        axs_latency[i].set_xlabel('Round')
-        axs_latency[i].set_ylabel('Time (s)')
+        axs_latency[i].set_xlabel('Time (s)')
+        axs_latency[i].set_ylabel('Frequency')
         axs_latency[i].legend()
 
         # Plot throughput
-        axs_throughput[i].plot(rounds, throughputs, label=address)
+        axs_throughput[i].hist(throughputs, label=address)
         axs_throughput[i].set_title(f'{address}')
-        axs_throughput[i].set_xlabel('Round')
-        axs_throughput[i].set_ylabel('Throughput (Mbps)')
+        axs_throughput[i].set_xlabel('Throughput (Mbps)')
+        axs_throughput[i].set_ylabel('Frequency')
         axs_throughput[i].legend()
 
     fig_latency.savefig(f'{direction}_latency.png')
