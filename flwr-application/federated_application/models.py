@@ -44,6 +44,9 @@ class CNN3(nn.Module):
         return x
 
 class CNN3v2(nn.Module):
+    """
+    Link: https://nvsyashwanth.github.io/machinelearningmaster/cifar-10/
+    """
     def __init__(self):
         super(CNN3v2,self).__init__()
         self.conv1=nn.Conv2d(in_channels=3,out_channels=16,kernel_size=3,stride=1,padding=1)
@@ -69,3 +72,4 @@ class CNN3v2(nn.Module):
         x=self.dropout(f.relu(self.fc2(x)))
         x=self.out(x)   
         return x
+
