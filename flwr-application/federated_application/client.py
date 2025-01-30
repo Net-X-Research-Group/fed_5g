@@ -1,3 +1,4 @@
+import json
 import logging
 import warnings
 from datetime import datetime
@@ -74,7 +75,11 @@ class FlowerClient(NumPyClient):
             self.device
         )
         results['cid'] = self.wandb_config['cid']
-        #results['downlink_time'] = downlink_time
+        
+        with open(path.expanduser('~/latency.json')) as f:
+            latency = json.load(f)
+        results['downlink_latency'] = latency['downlink']
+        results['uplink_latency'] = latency['uplink']
         logger.info(f"Training complete. Elapsed time: {results['training_time']}")
         if self.enable_wandb:
             wandb.log(results)
