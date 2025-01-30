@@ -4,23 +4,26 @@ import logging
 import signal
 from datetime import datetime
 
-CELLULAR = False
+ETHERNET = False
 
 def start_tshark(output_directory):
     output_dir = os.path.expanduser(f'~/{output_directory}')
     os.makedirs(output_dir, exist_ok=True)
-    tshark_cmd = [
-        'tshark',
-        '-n',
-        '-i', 'enp0s31f6' if not CELLULAR else 'oai-cn5g',
-        '-f', 'tcp port 9092 or tcp port 9091 or tcp port 9093',
-        '-w', os.path.join(output_dir, 'output.pcapng')
-    ] if not CELLULAR else [
-        'tshark',
-        '-n',
-        '-i', 'oai-cn5g',
-        '-w', os.path.join(output_dir, 'output.pcapng')
-    ]
+    if ETHERNET:
+        tshark_cmd = [
+            'tshark',
+            '-n',
+            '-i', 'enp0s31f6',
+            '-f', 'tcp port 9092 or tcp port 9091 or tcp port 9093',
+            '-w', os.path.join(output_dir, 'output.pcapng')
+        ]
+    else: 
+        tshark_cmd = [
+            'tshark',
+            '-n',
+            '-i', 'oai-cn5g',
+            '-w', os.path.join(output_dir, 'output.pcapng')
+        ]
     # Capture stderr to detect startup errors
     log_file = open(os.path.join(output_dir, 'tshark.log'), 'w')
     process = subprocess.Popen(tshark_cmd, stderr=log_file)
