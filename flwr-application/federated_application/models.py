@@ -43,9 +43,9 @@ class CNN3(nn.Module):
         x = self.fc2(x)  # 512 -> 10
         return x
 
-class CNNv2(nn.Module):
+class CNN3v2(nn.Module):
     def __init__(self):
-        super(CNNv2,self).__init__()
+        super(CNN3v2,self).__init__()
         self.conv1=nn.Conv2d(in_channels=3,out_channels=16,kernel_size=3,stride=1,padding=1)
         self.conv2=nn.Conv2d(in_channels=16,out_channels=32,kernel_size=3,stride=1,padding=1)
         self.conv3=nn.Conv2d(in_channels=32,out_channels=64,kernel_size=3,stride=1,padding=1)

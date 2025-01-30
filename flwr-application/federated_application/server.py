@@ -5,7 +5,7 @@ from typing import List, Tuple
 from flwr.common import Context, Metrics, ndarrays_to_parameters, logger
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
 
-from federated_application.models import CNN3
+from federated_application.models import CNN3v2
 from federated_application.strategy import MetricsFedAvg
 from federated_application.task import get_weights
 
@@ -64,7 +64,7 @@ def server_fn(context: Context):
     min_num_clients = context.run_config['min_num_clients']
     rounds = context.run_config['rounds']
     # Initialize model parameters on the central server
-    ndarrays = get_weights(CNN3())
+    ndarrays = get_weights(CNN3v2())
     parameters = ndarrays_to_parameters(ndarrays)
 
     # Define strategy
