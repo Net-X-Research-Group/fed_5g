@@ -88,6 +88,7 @@ def test(net, testloader, device) -> tuple[float, float, float]:
     """Test the model on the test dataset"""
     criterion = nn.CrossEntropyLoss()  # Use classification cross-entropy loss
     correct, loss = 0, 0.0
+    net.eval()
     start = time.time()
     with torch.no_grad():
         for batch in testloader:
