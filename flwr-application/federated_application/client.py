@@ -8,7 +8,7 @@ import torch
 import wandb
 from flwr.client import NumPyClient, ClientApp
 from flwr.common import Context, logger
-
+from flwr.client.mod import message_size_mod
 #from federated_application.models import CNN3v2
 from torchvision.models import mobilenet_v3_small as net
 from federated_application.mods import comm_time_mod
@@ -64,7 +64,6 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
-        #downlink_time = time.time() - config['server_timestamp']
         get_weights(self.net)
         set_weights(self.net, parameters)
         results = train(
@@ -84,7 +83,6 @@ class FlowerClient(NumPyClient):
         logger.info(f"Training complete. Elapsed time: {results['training_time']}")
         if self.enable_wandb:
             wandb.log(results)
-        #results['uplink_time'] = time.time()
         return get_weights(self.net), len(self.trainloader.dataset), results
 
     def evaluate(self, parameters, config):
@@ -113,4 +111,4 @@ def client_fn(context: Context):
     enable_wandb = context.run_config['enable_client_wandb']
     return FlowerClient(trainloader, valloader, local_epochs, learning_rate, enable_wandb, config).to_client()
 
-app = ClientApp(client_fn=client_fn, mods=[comm_time_mod])
+app = ClientApp(client_fn=client_fn, mods=[message_size_mod])

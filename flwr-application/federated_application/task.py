@@ -79,7 +79,9 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
         'train_loss': train_loss,
         'train_acc': train_acc,
         'val_loss': val_loss,
-        'val_acc': val_acc
+        'val_acc': val_acc,
+        'train_start': tr_start,
+        'train_end': tr_end
     }
     return results
 
