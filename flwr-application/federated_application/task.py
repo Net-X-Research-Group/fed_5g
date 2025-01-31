@@ -35,11 +35,13 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
     """Load the dataset from disk"""
     dataset = load_from_disk(dataset_path)
 
-    pytorch_transforms_cifar10 = Compose([ToTensor(), Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])
+    #cnn3_transform = Compose([ToTensor(), Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])#
+    mobilenet_v2_3_transform = Compose([ToTensor(),
+                                        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
     def apply_transforms(batch):
         """Apply transforms to the partition from FederatedDataset."""
-        batch["img"] = [pytorch_transforms_cifar10(img) for img in batch["img"]]
+        batch["img"] = [mobilenet_v2_3_transform(img).unsqueeze(0) for img in batch["img"]]
         return batch
 
     partition_train_test = dataset.with_transform(apply_transforms)
