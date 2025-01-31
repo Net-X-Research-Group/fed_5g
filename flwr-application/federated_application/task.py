@@ -60,7 +60,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     optimizer = optim.Adam(net.parameters(), lr=learning_rate, weight_decay=1e-4)
     net.train()  # Inform PyTorch that we are training the model
 
-    logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} batches each")
+    logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} examples each")
     tr_start = time.time()
     for epoch in range(epochs):
         logger.info(f"Starting epoch {epoch + 1}/{epochs}")
