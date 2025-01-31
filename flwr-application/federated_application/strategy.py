@@ -118,6 +118,8 @@ class MetricsFedAvg(FedAvg):
             self.patience -= 1
             if self.patience == 0:
                 self.early_stop = True
+                with open('config.json', 'a') as f:
+                    json.dumps({'early_stop_round': server_round}, f)
         return params, metrics
 
     def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[tuple[ClientProxy, FitIns]]:
