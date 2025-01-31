@@ -6,7 +6,8 @@ from flwr.common import Context, Metrics, ndarrays_to_parameters, logger
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
 
 #from federated_application.models import CNN3v2
-from torchvision.models import mobilenet_v3_small as net
+#from torchvision.models import mobilenet_v3_small as net
+from torchvision.models import squeezenet1_1 as net
 from federated_application.strategy import MetricsFedAvg
 from federated_application.task import get_weights
 

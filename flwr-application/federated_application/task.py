@@ -38,7 +38,6 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
     #cnn3_transform = Compose([ToTensor(), Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])#
     mobilenet_v2_3_transform = Compose([ToTensor(),
                                         Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-
     def apply_transforms(batch):
         """Apply transforms to the partition from FederatedDataset."""
         batch["img"] = [mobilenet_v2_3_transform(img) for img in batch["img"]]
@@ -56,8 +55,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     """Train the model on the training dataset"""
     net.to(device)
     criterion = nn.CrossEntropyLoss()  # Use classification cross-entropy loss
-    optimizer = optim.SGD(net.parameters(), lr=learning_rate, weight_decay=1e-5, momentum=0.9)
-    scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.1, steps_per_epoch=10, epochs=10)
+    optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9, weight_decay=0.0002)
     net.train()  # Inform PyTorch that we are training the model
 
     logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} examples each")
@@ -70,7 +68,6 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
             loss = criterion(net(images), labels)
             loss.backward()  # Forward, backward, and optimize
             optimizer.step()
-        scheduler.step()
     tr_end = time.time()
     train_loss, train_acc, train_test_time = test(net, trainloader, device)
     val_loss, val_acc, val_test_time = test(net, valloader, device)

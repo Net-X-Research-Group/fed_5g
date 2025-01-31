@@ -10,7 +10,8 @@ from flwr.client import NumPyClient, ClientApp
 from flwr.common import Context, logger
 from flwr.client.mod import message_size_mod
 #from federated_application.models import CNN3v2
-from torchvision.models import mobilenet_v3_small as net
+#from torchvision.models import mobilenet_v3_small as net
+from torchvision.models import squeezenet1_1 as net
 from federated_application.mods import comm_time_mod
 from federated_application.task import (
     get_weights,
@@ -34,7 +35,7 @@ PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 class FlowerClient(NumPyClient):
     def __init__(self, trainloader, valloader, local_epochs, learning_rate, enable_wandb, wandb_config) -> None:
-        self.net = net(num_classes=10)
+        self.net = net(progress= True, num_classes=10)
         self.net = torch.jit.script(self.net) # Enable JIT to reduce python overhead
         self.trainloader = trainloader
         self.valloader = valloader
