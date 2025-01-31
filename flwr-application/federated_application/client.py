@@ -34,7 +34,7 @@ PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 class FlowerClient(NumPyClient):
     def __init__(self, trainloader, valloader, local_epochs, learning_rate, enable_wandb, wandb_config) -> None:
-        self.net = net()
+        self.net = net(num_classes=10)
         self.net = torch.jit.script(self.net) # Enable JIT to reduce python overhead
         self.trainloader = trainloader
         self.valloader = valloader

@@ -57,7 +57,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
     net.to(device)
     criterion = nn.CrossEntropyLoss()  # Use classification cross-entropy loss
     optimizer = optim.SGD(net.parameters(), lr=learning_rate, weight_decay=1e-5, momentum=0.9)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer, T_max=10, eta_min=0)
+    scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.1, steps_per_epoch=10, epochs=10)
     net.train()  # Inform PyTorch that we are training the model
 
     logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} examples each")

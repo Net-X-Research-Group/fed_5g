@@ -69,7 +69,7 @@ def server_fn(context: Context):
     min_num_clients = context.run_config['min_num_clients']
     rounds = context.run_config['rounds']
     # Initialize model parameters on the central server
-    ndarrays = get_weights(net())
+    ndarrays = get_weights(net(num_classes=10))
     parameters = ndarrays_to_parameters(ndarrays)
 
     # Define strategy
