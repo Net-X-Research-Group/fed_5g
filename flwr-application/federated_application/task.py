@@ -41,7 +41,7 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
 
     def apply_transforms(batch):
         """Apply transforms to the partition from FederatedDataset."""
-        batch["img"] = [mobilenet_v2_3_transform(img).unsqueeze(0) for img in batch["img"]]
+        batch["img"] = [mobilenet_v2_3_transform(img) for img in batch["img"]]
         return batch
 
     partition_train_test = dataset.with_transform(apply_transforms)
