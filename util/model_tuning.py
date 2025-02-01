@@ -26,10 +26,10 @@ sweep_configuration = {
     },
     'parameters': {
         'fed_rounds': {
-            'values': [10, 20]
+            'values': [25, 50, 100, 150]
         },
         'local_epochs': {
-            'values': [2, 5]
+            'values': [1,2,3,4,5]
         },
         'learning_rate': {
             'distribution': 'uniform',
@@ -45,7 +45,7 @@ sweep_configuration = {
             'values': [1e-4, 5e-4, 1e-3]
         },
         'batch_size': {
-            'values': [64, 128, 256]
+            'values': [8, 16, 32, 64, 128]
         }
     }
 }
