@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 ENABLE_WIRESHARK = True
+ENABLE_EARLY_STOPPING = False
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, run_id, enable_wandb: bool, *args, **kwargs):
@@ -111,22 +112,21 @@ class MetricsFedAvg(FedAvg):
     def aggregate_fit(self, server_round, results, failures):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
-        if metrics['val_loss'] < self.best_loss:
-            self.best_loss = metrics['val_loss']
-            self.patience = 5
-        else:
-            self.patience -= 1
-            if self.patience == 0:
-                self.early_stop = True
+        if ENABLE_EARLY_STOPPING:
+            if metrics['val_loss'] < self.best_loss:
+                self.best_loss = metrics['val_loss']
+                self.patience = 5
+            else:
+                self.patience -= 1
+                if self.patience == 0:
+                    self.early_stop = True
         return params, metrics
 
     def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[tuple[ClientProxy, FitIns]]:
         if self.early_stop:
             return []
         if server_round == self.num_rounds:
-            logger.info(f"Early stopping at round {server_round} due to loss threshold.")
             self._write_logs()
-            print(self.individual_metrics)
         client_fitins_list = super().configure_fit(server_round, parameters, client_manager)
         update_client_fitins = []
         for client, fit_ins in client_fitins_list:
