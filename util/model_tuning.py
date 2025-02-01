@@ -14,7 +14,7 @@ import os
 import wandb
 
 # Load WandB API key from environment variables
-WANDB_PROJECT = "squeezenet_hyperparam_tuning"  # Replace with your project name
+WANDB_PROJECT = "squeezenet_hyperparam_tuning_server"
 WANDB_API_KEY = ''
 
 sweep_configuration = {
