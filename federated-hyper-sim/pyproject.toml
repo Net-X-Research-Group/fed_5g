@@ -7,7 +7,7 @@ name = "federated-hyper-sim"
 version = "1.0.0"
 description = ""
 license = "Apache-2.0"
-dependencies = [ "flwr[simulation]>=1.13.1", "flwr-datasets[vision]>=0.3.0", "torch==2.2.1", "torchvision==0.17.1", "wandb","toml",]
+dependencies = [ "flwr[simulation]>=1.13.1", "flwr-datasets[vision]>=0.3.0", "torch==2.2.1", "torchvision==0.17.1", "wandb","toml","ray",]
 
 [tool.flwr.app]
 publisher = "Robert Hayek"
