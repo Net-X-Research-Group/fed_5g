@@ -1,12 +1,11 @@
 import logging
 import os
-import warnings
 from datetime import datetime
 
 import torch
 import wandb
 from flwr.client import NumPyClient, ClientApp
-from flwr.common import Context, logger
+from flwr.common import Context
 from torchvision.models import squeezenet1_1 as net
 
 from federated_hyper_sim.task import (
@@ -17,9 +16,6 @@ from federated_hyper_sim.task import (
     test
 )
 
-warnings.filterwarnings("ignore", category=UserWarning)
-
-logger.logger.setLevel(logging.DEBUG)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,

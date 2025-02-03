@@ -5,8 +5,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from datasets import load_from_disk
-from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import IidPartitioner
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
 
