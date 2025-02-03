@@ -14,7 +14,7 @@ parameters:
     values: [0.9]
   weight_decay:
     distribution: log_uniform_values
-    min: 0
+    min: 1e-6
     max: 0.1
   epochs:
     values: [1, 2, 3, 4, 5]
