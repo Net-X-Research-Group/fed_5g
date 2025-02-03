@@ -7,15 +7,14 @@ parameters:
   rounds:
     values: [200]
   learning_rate:
-    distribution: uniform
-    min: 0
-    max: 0.1
+    values: [0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001]
   momentum:
     values: [0.9]
   weight_decay:
-    distribution: log_uniform_values
+    distribution: q_log_uniform_values
     min: 1e-6
     max: 0.1
+    q: 10
   epochs:
     values: [1, 2, 3, 4, 5]
   batch_size:
