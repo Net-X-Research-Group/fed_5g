@@ -14,6 +14,8 @@ def update_pyproject_toml(config):
     pyproject["tool"]["flwr"]["app"]["config"]["local_epochs"] = config.epochs
     pyproject["tool"]["flwr"]["app"]["config"]["learning_rate"] = config.learning_rate
     pyproject["tool"]["flwr"]["app"]["config"]["batch_size"] = config.batch_size
+    pyproject["tool"]["flwr"]["app"]["config"]["momentum"] = config.momentum
+    pyproject["tool"]["flwr"]["app"]["config"]["weight_decay"] = config.weight_decay
 
     # Save the updated pyproject.toml file
     with open("pyproject.toml", "w") as f:

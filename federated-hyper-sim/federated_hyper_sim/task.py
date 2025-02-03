@@ -50,11 +50,11 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
     return trainloader, valloader
 
 
-def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
+def train(net, trainloader, valloader, epochs, learning_rate, momentum, weight_decay, device) -> dict:
     """Train the model on the training dataset"""
     net.to(device)
     criterion = nn.CrossEntropyLoss()  # Use classification cross-entropy loss
-    optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9, weight_decay=0.0002)
+    optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
     net.train()  # Inform PyTorch that we are training the model
 
     logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} examples each")
