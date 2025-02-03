@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "federated-hyper-sim"
+version = "1.0.0"
+description = ""
+license = "Apache-2.0"
+dependencies = [
+    "flwr[simulation]>=1.13.1",
+    "flwr-datasets[vision]>=0.3.0",
+    "torch==2.2.1",
+    "torchvision==0.17.1",
+    "wandb",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "Robert Hayek"
+
+[tool.flwr.app.components]
+serverapp = "federated_hyper_sim.server_app:app"
+clientapp = "federated_hyper_sim.client_app:app"
+
+[tool.flwr.app.config]
+rounds = 5
+local_epochs = 1
+learning_rate = 0.001
+batch_size = 64
+
+fraction_evaluate = 0
+min_num_clients = 3
+wandb_api_key = ''
+enable_server_wandb = true
+enable_client_wandb = false
+
+[tool.flwr.federations]
+default = "local-simulation"
+
+[tool.flwr.federations.local-simulation]
+options.num-supernodes = 3

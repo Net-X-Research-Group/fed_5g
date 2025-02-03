@@ -1,0 +1,14 @@
+program: sweep.py
+method: bayes
+metric:
+  goal: minimize
+  name: val_acc
+parameters:
+  rounds:
+    values: [200]
+  learning_rate:
+    values: [0.1, 0.01, 0.001]
+  epochs:
+    values: [1,2,3,4]
+  batch_size:
+    values: [8, 16, 32, 64, 128]
