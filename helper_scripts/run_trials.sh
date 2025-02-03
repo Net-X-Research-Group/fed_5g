@@ -1,5 +1,6 @@
 for i in $(seq 1 10);
 do
+	./dataset_distributor.sh 3  # N - number of clients
 	flwr run . --stream
 	sleep 2
 	kill -9 $(pgrep tshark)
