@@ -3,7 +3,7 @@
 PYTHON=python3
 FED_5G_DIRECTORY="/Users/kmcomer"
 
-DATASET_PARTITIONER="$FED_5G_DIRECTORY/fed_5g/util/dataset_partitioner.py"
+PARTITIONER_SCRIPT="$FED_5G_DIRECTORY/fed_5g/util/dataset_partitioner.py"
 
 DEVICE_NAME_PREFIX="commnetpi0"
 IP_PREFIX="129.105.6."
@@ -18,9 +18,9 @@ NUM_CLIENTS=3
 source $FED_5G_DIRECTORY/fed_5g/venv/bin/activate
 
 # Generate datasets
-$PYTHON $DATASET_PARTITIONER -d $DATASET -n $NUM_CLIENTS -p $STRATEGY
+$PYTHON $PARTITIONER_SCRIPT -d $DATASET -n $NUM_CLIENTS -p $STRATEGY
 
 # Distribute
-for ((i=1;i<=NUM_CLIENTS;i++)); do
-    echo $i
+for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
+    rsync -rP ~/datasets/$STRATEGY/{$DATASET}_{$STRATEGY}_part_{$CID}_test/ {$DEVICE_NAME_PREFIX}{$CID}@{$IP_PREFIX}{${IP_SUFFIXES[$CID-1]}}:~/{$NUM_CLIENTS}node_datasets/
 done
