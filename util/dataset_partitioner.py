@@ -125,7 +125,7 @@ class DatasetPartitioner:
         for partition_id in range(self.config.num_clients):
             partition = fds.load_partition(partition_id)
             partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
-            file_path = f"{self.config.output_dir}/{self.config.dataset}_part_{partition_id + 1}"
+            file_path = f"{self.config.output_dir}/{self.config.dataset}_{self.config.partition_strategy}_part_{partition_id + 1}"
             partition_train_test.save_to_disk(file_path)
             print(f"Written: {file_path}")
 
