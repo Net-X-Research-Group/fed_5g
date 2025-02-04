@@ -1,7 +1,7 @@
 #!/bin/bash
 
 PYTHON=python3                                                      # TODO update for specific machine
-FED_5G_DIRECTORY="/home/kcomer"
+FED_5G_DIRECTORY="~/"
 
 NUM_CLIENTS=$1 # command line argument
 
