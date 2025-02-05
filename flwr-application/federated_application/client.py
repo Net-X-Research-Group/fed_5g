@@ -104,6 +104,8 @@ def client_fn(context: Context):
     batch_size = context.run_config['batch_size']
     local_epochs = context.run_config['local_epochs']
     learning_rate = context.run_config['learning_rate']
+    momentum = context.run_config['momentum']
+    weight_decay = context.run_config['weight_decay']
     trainloader, valloader = load_dataset(dataset_path=dataset_path, batch_size=batch_size)
 
     # Set up the Config for wandb
@@ -115,6 +117,8 @@ def client_fn(context: Context):
                         valloader=valloader,
                         local_epochs=local_epochs,
                         learning_rate=learning_rate,
+                        momentum=momentum,
+                        weight_decay=weight_decay,
                         enable_wandb=enable_wandb,
                         wandb_config=config).to_client()
 
