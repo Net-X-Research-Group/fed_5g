@@ -9,8 +9,6 @@ import wandb
 from flwr.client import NumPyClient, ClientApp
 from flwr.common import Context, logger
 from flwr.client.mod import message_size_mod
-#from federated_application.models import CNN3v2
-#from torchvision.models import mobilenet_v3_small as net
 from torchvision.models import squeezenet1_1 as net
 from federated_application.mods import comm_time_mod
 from federated_application.task import (
