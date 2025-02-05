@@ -6,6 +6,7 @@ matplotlib
 torchinfo
 pandas
 flwr==1.15.0
+flwr-datasets
 markdown-it-py
 tqdm
 wandb
