@@ -7,7 +7,7 @@ from os import path
 import torch
 import wandb
 from flwr.client import NumPyClient, ClientApp
-from flwr.common import Context, logger
+from flwr.common import Context
 from flwr.client.mod import message_size_mod
 from torchvision.models import squeezenet1_1 as net
 from federated_application.mods import comm_time_mod
@@ -20,8 +20,6 @@ from federated_application.task import (
 )
 
 warnings.filterwarnings("ignore", category=UserWarning)
-
-logger.logger.setLevel(logging.DEBUG)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
