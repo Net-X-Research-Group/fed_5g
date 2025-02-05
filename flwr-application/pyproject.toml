@@ -26,11 +26,13 @@ serverapp = "federated_application.server:app"
 clientapp = "federated_application.client:app"
 
 [tool.flwr.app.config]
-rounds = 5
+rounds = 100
 fraction_evaluate = 0
 local_epochs = 1
 learning_rate = 0.001
-batch_size = 64
+batch_size = 128
+momentum = 0.9
+weight_decay = 0.000001
 min_num_clients = 3
 wandb_api_key = ''
 enable_server_wandb = true
