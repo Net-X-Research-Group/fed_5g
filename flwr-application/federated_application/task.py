@@ -35,12 +35,10 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
     """Load the dataset from disk"""
     dataset = load_from_disk(dataset_path)
 
-    #cnn3_transform = Compose([ToTensor(), Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])#
-    mobilenet_v2_3_transform = Compose([ToTensor(),
-                                        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    transform = Compose([ToTensor(), Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
     def apply_transforms(batch):
         """Apply transforms to the partition from FederatedDataset."""
-        batch["img"] = [mobilenet_v2_3_transform(img) for img in batch["img"]]
+        batch["img"] = [transform(img) for img in batch["img"]]
         return batch
 
     partition_train_test = dataset.with_transform(apply_transforms)
@@ -51,11 +49,11 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
     return trainloader, valloader
 
 
-def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
+def train(net, trainloader, valloader, epochs, learning_rate, momentum, weight_decay, device) -> dict:
     """Train the model on the training dataset"""
     net.to(device)
     criterion = nn.CrossEntropyLoss()  # Use classification cross-entropy loss
-    optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9, weight_decay=0.0002)
+    optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
     net.train()  # Inform PyTorch that we are training the model
 
     logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} examples each")
@@ -69,8 +67,8 @@ def train(net, trainloader, valloader, epochs, learning_rate, device) -> dict:
             loss.backward()  # Forward, backward, and optimize
             optimizer.step()
     tr_end = time.time()
-    train_loss, train_acc, train_test_time = test(net, trainloader, device)
-    val_loss, val_acc, val_test_time = test(net, valloader, device)
+    train_loss, train_acc, train_test_time = test(net=net, testloader=trainloader, device=device)
+    val_loss, val_acc, val_test_time = test(net=net, testloader=valloader, device=device)
     logger.info(
         f"Finished training. Training loss: {train_loss}, Validation loss: {val_loss}, Validation accuracy: {val_acc}, Training accuracy: {train_acc}")
     results = {

@@ -31,6 +31,8 @@ class MetricsFedAvg(FedAvg):
         self.epochs = run_config['local_epochs']
         self.clients = run_config['min_num_clients']
         self.batch_size = run_config['batch_size']
+        self.weight_decay = run_config['weight_decay']
+        self.momentum = run_config['momentum']
         self.init_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         self.run_id = run_id
         self.enable_wandb = enable_wandb
