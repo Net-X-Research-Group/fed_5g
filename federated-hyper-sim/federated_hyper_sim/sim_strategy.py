@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ENABLE_EARLY_STOPPING = False
+ENABLE_EARLY_STOPPING = True
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, run_id, enable_wandb: bool, *args, **kwargs):
