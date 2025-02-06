@@ -1,20 +1,17 @@
 program: sweep.py
 method: bayes
 metric:
-  goal: minimize
+  goal: maximize
   name: val_acc
 parameters:
   rounds:
-    values: [200]
+    values: [300]
   learning_rate:
-    values: [0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001]
+    values: [0.001, 0.0001]
   momentum:
     values: [0.9]
   weight_decay:
-    distribution: q_log_uniform_values
-    min: 1e-6
-    max: 0.1
-    q: 10
+    values: [0, 1e-4, 1e-5]
   epochs:
     values: [1, 2, 3, 4, 5]
   batch_size:

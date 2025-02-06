@@ -29,8 +29,8 @@ class MetricsFedAvg(FedAvg):
         self.enable_wandb = enable_wandb
         self.tshark_process = None # REMOVE
         self.early_stop = False # REMOVE
-        self.best_loss = float('inf') # REMOVE
-        self.patience = 3 # REMOVE
+        self.best_acc = 0.0
+        self.patience = 10
 
         if enable_wandb:
             logger.info('Enabling wandb...')
@@ -58,9 +58,9 @@ class MetricsFedAvg(FedAvg):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
         if ENABLE_EARLY_STOPPING:
-            if metrics['val_loss'] < self.best_loss:
-                self.best_loss = metrics['val_loss']
-                self.patience = 5
+            if metrics['val_acc'] >= self.best_acc:
+                self.best_loss = metrics['val_acc']
+                self.patience = 12
             else:
                 self.patience -= 1
                 if self.patience == 0:
