@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ENABLE_EARLY_STOPPING = True
+ENABLE_EARLY_STOPPING = False
 
 class MetricsFedAvg(FedAvg):
     def __init__(self, run_config: UserConfig, run_id, enable_wandb: bool, *args, **kwargs):
@@ -57,19 +57,19 @@ class MetricsFedAvg(FedAvg):
     def aggregate_fit(self, server_round, results, failures):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
-        if ENABLE_EARLY_STOPPING:
-            min_delta = 0.001
-            if metrics['val_loss'] < self.best_loss - min_delta:
-                self.best_loss = metrics['val_loss']
-                self.patience = 0
-            else:
-                self.patience += 1
-            max_patience = 25
-            min_patience = 8
-            current_patience = max(min_patience, max_patience - server_round // 50)
 
-            if self.patience >= current_patience:
-                self.early_stop = True
+        def aggregate_fit(self, server_round, results, failures):
+            params, metrics = super().aggregate_fit(server_round, results, failures)
+            self._log_results(server_round, metrics)
+            if ENABLE_EARLY_STOPPING:
+                if metrics['val_loss'] < self.best_loss:
+                    self.best_loss = metrics['val_loss']
+                    self.patience = 20
+                else:
+                    self.patience -= 1
+                    if self.patience == 0:
+                        self.early_stop = True
+            return params, metrics
         return params, metrics
 
     # REMOVE METHOD
