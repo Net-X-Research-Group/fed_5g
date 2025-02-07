@@ -58,13 +58,18 @@ class MetricsFedAvg(FedAvg):
         params, metrics = super().aggregate_fit(server_round, results, failures)
         self._log_results(server_round, metrics)
         if ENABLE_EARLY_STOPPING:
-            if metrics['val_loss'] <= self.best_loss:
+            min_delta = 0.001
+            if metrics['val_loss'] < self.best_loss - min_delta:
                 self.best_loss = metrics['val_loss']
-                self.patience = 12
+                self.patience = 0
             else:
-                self.patience -= 1
-                if self.patience == 0:
-                    self.early_stop = True
+                self.patience += 1
+            max_patience = 25
+            min_patience = 8
+            current_patience = max(min_patience, max_patience - server_round // 50)
+
+            if self.patience >= current_patience:
+                self.early_stop = True
         return params, metrics
 
     # REMOVE METHOD
