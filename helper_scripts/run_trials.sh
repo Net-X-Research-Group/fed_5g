@@ -1,7 +1,11 @@
-for i in $(seq 1 10);
+for i in $(seq 1 20);
 do
-	./dataset_distributor.sh 5  # N - number of clients
-	#flwr run . --stream
+	pushd $HOME/fed_5g/helper_scripts
+	./dataset_distributor.sh 3  # N - number of clients
+	cp cifar10_3_partitions_iid.png cifar10_3_partitions_iid_trial_$i.png
+	popd
+	sleep 2
+	flwr run . --stream
 	sleep 2
 	kill -9 $(pgrep tshark)
 done
