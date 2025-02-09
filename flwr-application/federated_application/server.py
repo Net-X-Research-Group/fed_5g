@@ -62,7 +62,8 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> dict:
         'val_test_time': m['val_test_time'],
         'training_time': m['training_time'],
         'train_start_time': m['train_start'],
-        'train_end_time': m['train_start']} for _, m in metrics}
+        'train_end_time': m['train_start'],
+        'avg_trainloss': m['avg_train_loss']} for _, m in metrics}
 
     results = {
         "train_acc": sum(train_accuracies) / sum(examples),

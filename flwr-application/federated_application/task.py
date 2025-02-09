@@ -22,12 +22,7 @@ def get_weights(net) -> list:
 
 def set_weights(net, params) -> None:
     params_dict = zip(net.state_dict().keys(), params)
-    state_dict = OrderedDict(
-        {
-            k: torch.Tensor(v) if v.shape != torch.Size([]) else torch.Tensor([0])
-            for k, v in params_dict
-        }
-    )
+    state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
     net.load_state_dict(state_dict, strict=True)
 
 
@@ -42,9 +37,7 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
         return batch
 
     partition_train_test = dataset.with_transform(apply_transforms)
-    trainloader = DataLoader(
-        partition_train_test["train"], batch_size=batch_size, shuffle=True
-    )
+    trainloader = DataLoader(partition_train_test["train"], batch_size=batch_size, shuffle=True)
     valloader = DataLoader(partition_train_test["test"], batch_size=batch_size)
     return trainloader, valloader
 
@@ -57,6 +50,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, momentum, weight_d
     net.train()  # Inform PyTorch that we are training the model
 
     logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} examples each")
+    running_loss = 0.0
     tr_start = time.time()
     for epoch in range(epochs):
         logger.info(f"Starting epoch {epoch + 1}/{epochs}")
@@ -66,12 +60,15 @@ def train(net, trainloader, valloader, epochs, learning_rate, momentum, weight_d
             loss = criterion(net(images), labels)
             loss.backward()  # Forward, backward, and optimize
             optimizer.step()
+            running_loss += loss.item()
     tr_end = time.time()
+    avg_trainloss = running_loss / len(trainloader)
     train_loss, train_acc, train_test_time = test(net=net, testloader=trainloader, device=device)
     val_loss, val_acc, val_test_time = test(net=net, testloader=valloader, device=device)
     logger.info(
         f"Finished training. Training loss: {train_loss}, Validation loss: {val_loss}, Validation accuracy: {val_acc}, Training accuracy: {train_acc}")
     results = {
+        'avg_train_loss': avg_trainloss,
         'train_test_time': train_test_time,
         'val_test_time': val_test_time,
         'training_time': tr_end - tr_start,
