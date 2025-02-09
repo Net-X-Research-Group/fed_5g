@@ -8,6 +8,7 @@ import torch.optim as optim
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
+from flwr.common.typing import NDArrays, Scalar
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,7 +21,7 @@ def get_weights(net) -> list:
     return [val.cpu().numpy() for _, val in net.state_dict().items()]
 
 
-def set_weights(net, params) -> None:
+def set_weights(net, params: NDArrays) -> None:
     params_dict = zip(net.state_dict().keys(), params)
     state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
     net.load_state_dict(state_dict, strict=True)
