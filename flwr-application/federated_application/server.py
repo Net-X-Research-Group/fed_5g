@@ -1,7 +1,6 @@
 import time
 from typing import List, Tuple
 
-import numpy as np
 import torch
 from flwr.common import Context, Metrics, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
@@ -12,7 +11,6 @@ from federated_application.task import get_weights
 import logging
 
 torch.manual_seed(42)
-np.random.seed(42)
 
 logging.basicConfig(
     level=logging.INFO,

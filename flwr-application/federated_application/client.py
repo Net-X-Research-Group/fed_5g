@@ -64,7 +64,6 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config) -> tuple:
         """Train the client model on the local training dataset"""
-        get_weights(self.net)
         set_weights(self.net, parameters)
         results = train(
             net=self.net,
