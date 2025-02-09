@@ -1,51 +1,69 @@
-import logging
 import time
 from typing import List, Tuple
 
+import numpy as np
+import torch
 from flwr.common import Context, Metrics, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
-
 from torchvision.models import squeezenet1_1 as net
+
 from federated_application.strategy import MetricsFedAvg
 from federated_application.task import get_weights
+import logging
 
+torch.manual_seed(42)
+np.random.seed(42)
 
-# Define metric aggregation function
-def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
-    """This function averages the `accuracy` metric sent by the clients in a `evaluate`
-    stage (i.e. clients received the global model and evaluate it on their local
-    validation sets)."""
-    recv_time = time.time()
-    uplink_times = [recv_time - m['uplink_time'] for _, m in metrics]
-    downlink_times = [m['downlink_time'] for _, m in metrics]
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> dict:
+    """
+    Combine all metrics from clients into a single object. Contains both aggregated metrics and individual metrics.
+
+    Aggregated metrics: train_acc, val_acc, train_loss, val_loss, training_time, uplink_time, downlink_time, train_test_time, val_test_time
+    Individual metrics: uplink_time, downlink_time, uplink_latency, downlink_latency, train_acc, val_acc, train_loss, val_loss, train_test_time, val_test_time, training_time, train_start_time, train_end_time
+
+    Parameters:
+        metrics (List[Tuple[int, Metrics]]): A list of tuples containing the number of examples and the metrics of each client
+
+    Returns:
+        results (dict): A dictionary containing the aggregated metrics and individual metrics of each client
+    """
+    recv_time = time.time()  # Time when the server receives the metrics (Rough)
+
+    # Weighted average by number of examples per client
     examples = [num_examples for num_examples, _ in metrics]
 
-    # Multiply accuracy and loss of each client.py by number of examples used
     train_accuracies = [num_examples * m["train_acc"] for num_examples, m in metrics]
     val_accuracies = [num_examples * m["val_acc"] for num_examples, m in metrics]
     train_losses = [num_examples * m["train_loss"] for num_examples, m in metrics]
     val_losses = [num_examples * m["val_loss"] for num_examples, m in metrics]
 
+    uplink_times = [recv_time - m['uplink_time'] for _, m in metrics]
+    downlink_times = [m['downlink_time'] for _, m in metrics]
     train_test_times = [m["train_test_time"] for _, m in metrics]
     val_test_times = [m["val_test_time"] for _, m in metrics]
     training_times = [m["training_time"] for _, m in metrics]
 
     individual_metrics = {m['cid']: {
-                                    'uplink_time': recv_time - m['uplink_time'],
-                                    'downlink_time': m['downlink_time'],
-                                    'uplink_latency': m['uplink_latency'],
-                                    'downlink_latency': m['downlink_latency'],
-                                    'train_acc': m['train_acc'],
-                                    'val_acc': m['val_acc'],
-                                    'train_loss': m['train_loss'],
-                                    'val_loss': m['val_loss'],
-                                    'train_test_time': m['train_test_time'],
-                                    'val_test_time': m['val_test_time'],
-                                    'training_time': m['training_time'],
-                                    'train_start_time': m['train_start'],
-                                    'train_end_time': m['train_start']} for _, m in metrics}
+        'uplink_time': recv_time - m['uplink_time'],
+        'downlink_time': m['downlink_time'],
+        'uplink_latency': m['uplink_latency'],
+        'downlink_latency': m['downlink_latency'],
+        'train_acc': m['train_acc'],
+        'val_acc': m['val_acc'],
+        'train_loss': m['train_loss'],
+        'val_loss': m['val_loss'],
+        'train_test_time': m['train_test_time'],
+        'val_test_time': m['val_test_time'],
+        'training_time': m['training_time'],
+        'train_start_time': m['train_start'],
+        'train_end_time': m['train_start']} for _, m in metrics}
 
-    # Calculate the weighted average of the metrics
     results = {
         "train_acc": sum(train_accuracies) / sum(examples),
         "val_acc": sum(val_accuracies) / sum(examples),
@@ -57,19 +75,31 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         'train_test_time': sum(train_test_times) / len(train_test_times),
         'val_test_time': sum(val_test_times) / len(val_test_times),
         'individual_metrics': individual_metrics
-        }
+    }
     return results
 
 
 def server_fn(context: Context):
+    """
+    Define the server-side logic for the federated learning process.
+
+    Parameters:
+        context (Context): The context object contains the configuration and the run_id of the server
+
+    Returns:
+        ServerAppComponents: A class that contains the strategy and configuration for the server run
+    """
     sample_fraction = context.run_config['fraction_evaluate']
     min_num_clients = context.run_config['min_num_clients']
     rounds = context.run_config['rounds']
-    # Initialize model parameters on the central server
+
     ndarrays = get_weights(net(num_classes=10))
+    logger.info(f'Initial Model Parameters - Mean: {np.mean(ndarrays)}')
+    logger.info(f'Initial Model Parameters - Min: {np.min(ndarrays)}')
+    logger.info(f'Initial Model Parameters - Max: {np.max(ndarrays)}')
     parameters = ndarrays_to_parameters(ndarrays)
 
-    # Define strategy
+    # Call instance of the metrics strategy
     strategy = MetricsFedAvg(
         run_config=context.run_config,
         enable_wandb=context.run_config['enable_server_wandb'],
@@ -88,4 +118,4 @@ def server_fn(context: Context):
     return ServerAppComponents(strategy=strategy, config=config)
 
 
-app = ServerApp(server_fn=server_fn)
+app = ServerApp(server_fn=server_fn)  # Create an instance of the server application
