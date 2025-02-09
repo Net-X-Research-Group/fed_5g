@@ -95,9 +95,6 @@ def server_fn(context: Context):
     rounds = context.run_config['rounds']
 
     ndarrays = get_weights(net(num_classes=10))
-    logger.info(f'Initial Model Parameters - Mean: {np.mean(ndarrays)}')
-    logger.info(f'Initial Model Parameters - Min: {np.min(ndarrays)}')
-    logger.info(f'Initial Model Parameters - Max: {np.max(ndarrays)}')
     parameters = ndarrays_to_parameters(ndarrays)
 
     # Call instance of the metrics strategy
