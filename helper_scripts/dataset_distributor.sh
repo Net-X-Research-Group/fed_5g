@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PYTHON=python                                                      # TODO update for specific machine
+PYTHON=python
 FED_5G_DIRECTORY="$HOME"
 
 NUM_CLIENTS=$1 # command line argument
@@ -26,5 +26,5 @@ for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     FOLDER="~/${NUM_CLIENTS}node_datasets/"
     ssh "$LOGIN" mkdir -p "$FOLDER"
     echo "Copying part ${CID} to $DEVICE_NAME_PREFIX${CID}"
-    scp -r ~/datasets/$STRATEGY/${DATASET}_${STRATEGY}_part_${CID}_test/ "$LOGIN":"$FOLDER"
+    scp -r ~/datasets/$STRATEGY/${DATASET}_${STRATEGY}_part_${CID}/ "$LOGIN":"$FOLDER"
 done
