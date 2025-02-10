@@ -10,11 +10,10 @@ fi
 
 TOP_LEVEL_DIR="$1"
 
-# Path to your Python script
 ANALYZER_SCRIPT="/home/rhayek/fed_5g/util/wireshark_comms_analyzer.py"
 COMMS_PLOTTER_SCRIPT="/home/rhayek/fed_5g/util/comms_metrics_agg.py"
-ML_PLOTTER_SCRIPT="/home/rhayek/fed_5g/util/plotter.py"
 TIME_EXTRACTOR="/home/rhayek/fed_5g/util/elapsed_extract.py"
+METRICS_ANALYZER="$HOME/fed_5g/util/metrics_analyzer.py"
 
 # Loop through all subdirectories in the current directory/top level.
 cd "$TOP_LEVEL_DIR" || { echo "Failed to change directory to $dir"; exit 1; }
@@ -33,9 +32,10 @@ for dir in */; do
 
         echo "Running comms metrics plotter..."
         python "$COMMS_PLOTTER_SCRIPT"
-        echo "Running ML metrics plotter..."
-        python "$ML_PLOTTER_SCRIPT" -f agg_metrics.json
-        
+
+        echo "Running metrics_analyzer..."
+        python "$METRICS_ANALYZER"
+
         # Change back to parent directory
         cd ..
     fi

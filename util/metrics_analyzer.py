@@ -1,22 +1,13 @@
 import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
 import json
 import os
-
-from matplotlib.pyplot import figure
-
+from pathlib import Path
 
 def _read_json(file):
     with open(file, 'r') as f:
         raw = json.load(f)
     return raw
-
-
-import pandas as pd
-from pathlib import Path
-import os
-
 
 def export_metrics_to_csv(data, output_dir="individual_metrics_parsed"):
     """
@@ -90,7 +81,6 @@ def plot_agg_metrics(file_name):
 
     plt.savefig('metrics_plots/server_agg_metrics.png')
 
-
 def plot_individual_metrics(metrics_path):
     try:
         os.mkdir('metrics_plots')
@@ -141,6 +131,7 @@ def plot_individual_metrics(metrics_path):
         plt.tight_layout()
         plt.savefig(f"metrics_plots/indiv_{csv_file.replace('.csv', '')}.png")
         plt.close(fig)
+
 
 
 def main():
