@@ -1,6 +1,3 @@
-
-Here is the documentation for your project in the `README.md` file:
-
 # Federated Learning Dataset Partitioner
 
 This project provides tools for partitioning datasets for federated learning experiments. It supports various partitioning strategies and datasets.
