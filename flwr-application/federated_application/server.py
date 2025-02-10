@@ -88,7 +88,6 @@ def server_fn(context: Context):
     Returns:
         ServerAppComponents: A class that contains the strategy and configuration for the server run
     """
-    sample_fraction = context.run_config['fraction_evaluate']
     min_num_clients = context.run_config['min_num_clients']
     rounds = context.run_config['rounds']
 
@@ -99,7 +98,7 @@ def server_fn(context: Context):
     strategy = MetricsFedAvg(
         run_config=context.run_config,
         enable_wandb=context.run_config['enable_server_wandb'],
-        fraction_fit=sample_fraction,
+        fraction_fit=1, # Use all nodes
         fraction_evaluate=0,  # Disable Final Evaluation
         min_fit_clients=min_num_clients,
         min_available_clients=min_num_clients,

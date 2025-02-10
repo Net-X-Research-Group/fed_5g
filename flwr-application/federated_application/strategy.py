@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 ENABLE_WIRESHARK = True
-ENABLE_EARLY_STOPPING = False
+ENABLE_EARLY_STOPPING = True
 
 EARLY_STOPPING_PATIENCE = 20
 EARLY_STOPPING_TOLERANCE = 0.01
@@ -155,6 +155,7 @@ class MetricsFedAvg(FedAvg):
                 self.patience -= 1
                 if self.patience == 0:
                     self.early_stop = True
+            wandb.log({"patience": self.patience}, step=server_round)
         return params, metrics
 
     def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[
