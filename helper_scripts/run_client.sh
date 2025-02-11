@@ -10,4 +10,4 @@ NUM_NODES=$3
 SERVER_IP=$4
 
 source ${HOME}/fl_venv/bin/activate
-flower-supernode --insecure --superlink="${SERVER_IP}:9092" --node-config="dataset='~/${NUM_NODES}node_datasets/${DISTRIBUTION}' cid=${CID}"
+flower-supernode --insecure --superlink="${SERVER_IP}:9092" --node-config="dataset='~/${NUM_NODES}node_datasets/cifar10_${DISTRIBUTION}' cid=${CID}"
