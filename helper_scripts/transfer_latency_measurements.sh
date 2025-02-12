@@ -13,6 +13,8 @@ IP_SUFFIXES=(17 18 19 20 21 22)
 
 for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     LOGIN=$DEVICE_NAME_PREFIX$CID@$IP_PREFIX${IP_SUFFIXES[$CID-1]}
-    scp "${LOGIN}":latency.csv latency_cid_${CID}.csv
-    ssh "${LOGIN}" rm latency.csv
-done
+    FILE_NAME=$(ssh "${LOGIN}" 'ls latency_*.csv')
+    NEW_FILE_NAME="${FILE_NAME%.csv}_CID${CID}.csv"
+    scp "${LOGIN}:${FILE_NAME}" "./${NEW_FILE_NAME}"
+    ssh "${LOGIN}" rm '${FILE_NAME}'
+  done

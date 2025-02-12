@@ -50,8 +50,6 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> dict:
     individual_metrics = {m['cid']: {
         'uplink_time': recv_time - m['uplink_time'],
         'downlink_time': m['downlink_time'],
-        'uplink_latency': m['uplink_latency'],
-        'downlink_latency': m['downlink_latency'],
         'train_acc': m['train_acc'],
         'val_acc': m['val_acc'],
         'train_loss': m['train_loss'],

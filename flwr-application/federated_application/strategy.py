@@ -45,7 +45,7 @@ class MetricsFedAvg(FedAvg):
         self.run_id = run_id
         self.enable_wandb = enable_wandb
         self.tshark_process = None
-        self.dir_name = f'server.{self.clients}C.{self.epochs}E.{self.batch_size}B.{self.num_rounds}R-{self.init_time}'
+        self.dir_name = f'{self.run_id}-{self.init_time}'
 
         # Early Stopping Config
         self.early_stop = False
@@ -91,8 +91,7 @@ class MetricsFedAvg(FedAvg):
 
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
-                   group=str(self.run_id),
-                   name=f'{self.init_time}-ServerApp',
+                   name=f'{self.run_id}-{self.init_time}-ServerApp',
                    config=self.config)
 
     def _write_logs(self):
