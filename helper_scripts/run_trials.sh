@@ -10,7 +10,7 @@ DIST=$2
 
 for i in $(seq 1 20);
 do
-	./dataset_distributor.sh "${N}"
+	./dataset_distributor.sh "${N}" "${DIST}"
 	mv cifar10_"${N}"_partitions_"${DIST}".png cifar10_"${N}"_partitions_"${DIST}"_trial_"${i}".png
 	sleep 2
 	flwr run "$HOME"/fed_5g/flwr-application --stream
