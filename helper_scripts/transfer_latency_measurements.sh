@@ -18,5 +18,5 @@ for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     DIR_PATH="${HOME}"/"${RUN_ID}"
     NEW_FILE_NAME="${FILE_NAME%.csv}_CID${CID}.csv"
     scp "${LOGIN}:${FILE_NAME}" "${DIR_PATH}"/"${NEW_FILE_NAME}"
-    ssh "${LOGIN}" rm '${FILE_NAME}'
+    ssh "${LOGIN}" rm latency_*
   done
