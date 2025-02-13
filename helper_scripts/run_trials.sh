@@ -19,3 +19,5 @@ do
 	sleep 2
   ./transfer_latency_measurements.sh "${N}"
 done
+
+flwr ls "$HOME"/fed_5g/flwr-application --format json > "${HOME}"/trials.json
