@@ -11,3 +11,4 @@ markdown-it-py
 tqdm
 wandb
 PyYAML
+seaborn
