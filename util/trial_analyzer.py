@@ -288,8 +288,8 @@ def main(input_path: str) -> None:
         trial_path = join(input_path, trial_dir)
 
         # Convert individual metrics to csv
-        #individual_metrics = _read_json(join(trial_path, 'individual_metrics.json'))
-        #export_metrics_to_csv(individual_metrics, trial_path)
+        individual_metrics = _read_json(join(trial_path, 'individual_metrics.json'))
+        export_metrics_to_csv(individual_metrics, trial_path)
 
         # Process latency data captured by Flower
         try:
