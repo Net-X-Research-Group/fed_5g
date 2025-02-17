@@ -1,22 +1,27 @@
+import json
+import re
 from os import listdir
 from os.path import join, isdir
-import re
-import pandas as pd
+
 import matplotlib.pyplot as plt
-import json
+import pandas as pd
 import seaborn as sns
-import numpy as np
+
 
 def _read_json(file):
     with open(file, 'r') as f:
         raw = json.load(f)
     return raw
 
-def _aggregate_metrics(metrics_dict: dict) -> pd.DataFrame:
-    """Aggregate metrics across trials by computing the mean for each round."""
-    return pd.concat(metrics_dict.values(), axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
 
-def _aggregate_ml_metrics(metrics_dict: dict) -> list:
+def _aggregate_metrics(metrics_dict: dict, output_path: str, name: str) -> pd.DataFrame:
+    """Aggregate metrics across trials by computing the mean for each round."""
+    df = pd.concat(metrics_dict.values(), axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
+    df.to_csv(join(output_path, f'{name}_aggregated.csv'))
+    return df
+
+
+def _aggregate_ml_metrics(metrics_dict: dict, output_path: str, name: str) -> list:
     """Aggregate metrics across trials by computing the mean for each round."""
     dfs = list(metrics_dict.values())
     agg_dfs = []
@@ -28,10 +33,14 @@ def _aggregate_ml_metrics(metrics_dict: dict) -> list:
         df['avg'] = df.mean(axis=1)
         # Drop all but 'avg'
         agg_dfs.append(df[['avg']])
+    pd.concat(agg_dfs, axis=1).to_csv(join(output_path, f'avg_{name}.csv'))  # Concat and save as csv
     return agg_dfs
 
 
 def process_trial_latency(path: str) -> dict:
+    """
+    Process latency data captured by patched flower version.
+    """
     files = [f for f in listdir(path) if f.startswith('latency')]
     results = {}
     for file in files:
@@ -115,7 +124,7 @@ def plot_latency_statistics(agg_latencies, output_dir):
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(join(output_dir, 'latency_distribution.png'))
-    #plt.show()
+    # plt.show()
     plt.close()
 
     # Split
@@ -133,7 +142,7 @@ def plot_latency_statistics(agg_latencies, output_dir):
     plt.suptitle('Latency Distribution by Client')
     plt.tight_layout()
     plt.savefig(join(output_dir, 'latency_distribution_split.png'))
-    #plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -159,7 +168,7 @@ def plot_latency_histograms(agg_latencies, output_dir):
 
     plt.tight_layout()
     plt.savefig(join(output_dir, 'latency_histograms.png'))
-    #plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -182,7 +191,7 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     plt.suptitle(f'{name} Distribution by Client')
     plt.tight_layout()
     plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_histograms.png'))
-    #plt.show()
+    # plt.show()
     plt.close()
 
     # Violin plots
@@ -194,10 +203,10 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_violin.png'))
-    #plt.show()
+    # plt.show()
     plt.close()
 
-    #Overlay Histograms
+    # Overlay Histograms
     fig, ax = plt.subplots(figsize=(10, 6))
     for col in data.columns:
         ax.hist(data[col], alpha=0.75, label=col.replace("_", " "))
@@ -208,7 +217,7 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_overlay_histogram.png'))
-    #plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -220,12 +229,12 @@ def plot_ml_metric(data: pd.DataFrame, output_dir: str, name: str) -> None:
         ax.plot(data[col], alpha=0.75, label=col.replace("_", " "))
     ax.set_title(f'{name}')
     ax.set_xlabel('Round')
-    #ax.set_ylabel('Accuracy')
+    # ax.set_ylabel('Accuracy')
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_plot.png'))
-    #plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -262,7 +271,7 @@ def plot_ml_metrics(train_data: list, validation_data: list, output_dir: str, na
     plt.tight_layout()
 
     plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}.png'))
-    #plt.show()
+    # plt.show()
     plt.close()
 
 
@@ -318,7 +327,6 @@ def main(input_path: str) -> None:
         except Exception as e:
             print(f"Error processing {trial_dir}: {e}")
 
-
     for cid, dfs in latencies.items():
         agg_df = pd.concat(dfs, axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
         agg_latencies[cid] = agg_df
@@ -326,19 +334,19 @@ def main(input_path: str) -> None:
     plot_latency_statistics(agg_latencies, input_path)
 
     # Training Time Metrics
-    agg_training_times = _aggregate_metrics(training_times)
-    agg_train_test_times = _aggregate_metrics(train_test_times)
-    agg_val_test_times = _aggregate_metrics(val_test_times)
+    agg_training_times = _aggregate_metrics(training_times, input_path, name='training_time')
+    agg_train_test_times = _aggregate_metrics(train_test_times, input_path, name='train_test_time')
+    agg_val_test_times = _aggregate_metrics(val_test_times, input_path, name='val_test_time')
 
     plot_time_histograms(agg_training_times, input_path, name='Training Time')
     plot_time_histograms(agg_train_test_times, input_path, name='Train Test Time')
     plot_time_histograms(agg_val_test_times, input_path, name='Validation Test Time')
 
     # ML Metrics
-    avg_val_accuracies = _aggregate_ml_metrics(val_accuracies)
-    avg_train_accuracies = _aggregate_ml_metrics(train_accuracies)
-    avg_val_losses = _aggregate_ml_metrics(val_losses)
-    avg_train_losses = _aggregate_ml_metrics(train_losses)
+    avg_val_accuracies = _aggregate_ml_metrics(val_accuracies, input_path, name='val_acc')
+    avg_train_accuracies = _aggregate_ml_metrics(train_accuracies, input_path, name='train_acc')
+    avg_val_losses = _aggregate_ml_metrics(val_losses, input_path, name='val_loss')
+    avg_train_losses = _aggregate_ml_metrics(train_losses, input_path, name='train_loss')
     plot_ml_metrics(avg_train_accuracies, avg_val_accuracies, input_path, 'Accuracy')
     plot_ml_metrics(avg_train_losses, avg_val_losses, input_path, 'Loss')
 
