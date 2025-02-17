@@ -3,25 +3,13 @@ import json
 from matplotlib import pyplot as plt
 
 
-def get_run_time():
-    with open('config.json', 'r') as f:
-        config_metadata = json.load(f)
-    with open('../elapsed.json') as f:
-        trials_metadata = json.load(f)
-    run_id = str(config_metadata['run_id'])
-    time = trials_metadata[run_id]
-    ftr = [3600, 60, 1]
-    elapsed = sum([a * b for a, b in zip(ftr, map(int, time.split(':')))])
-    return elapsed
-
-
-def plot_metrics(data: dict, direction: str, elapsed: int):
+def plot_metrics(data: dict, direction: str):
     # Get source addresses in the data
     addresses = list(data.keys())
 
     # Plot latency
     fig_latency, axs_latency = plt.subplots(len(addresses), 1, figsize=(10, 5 * len(addresses)), tight_layout=True)
-    fig_latency.suptitle(f'{direction} Latency, Run Time: {elapsed} seconds', fontsize=16)
+    fig_latency.suptitle(f'{direction} Latency', fontsize=16)
 
     # Plot throughput
     fig_throughput, axs_throughput = plt.subplots(len(addresses), 1, figsize=(10, 5 * len(addresses)),
@@ -99,8 +87,6 @@ def label_round(data):
 
 
 def main():
-    elapsed = get_run_time()
-    print('The trial took:', elapsed, 'seconds')
     uplink_file = 'http2_data_analysis_UPLINK.json'
     downlink_file = 'http2_data_analysis_DOWNLINK.json'
     with open(uplink_file, 'r') as f:
@@ -113,8 +99,8 @@ def main():
 
     uplink_data = label_round(uplink_data)
     downlink_data = label_round(downlink_data)
-    plot_metrics(uplink_data, 'Uplink', elapsed)
-    plot_metrics(downlink_data, 'Downlink', elapsed)
+    plot_metrics(uplink_data, 'Uplink')
+    plot_metrics(downlink_data, 'Downlink')
 
 
 if __name__ == '__main__':
