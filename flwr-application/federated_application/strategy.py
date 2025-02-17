@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
-ENABLE_WIRESHARK = True
+ENABLE_WIRESHARK = False
 ENABLE_EARLY_STOPPING = True
 
 EARLY_STOPPING_PATIENCE = 20

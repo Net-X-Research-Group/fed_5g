@@ -15,8 +15,7 @@ do
 	sleep 2
 	flwr run "$HOME"/fed_5g/flwr-application --stream
 	sleep 2
-	kill -9 $(pgrep tshark)
-	sleep 2
+	#kill -9 $(pgrep tshark)
   ./transfer_latency_measurements.sh "${N}"
 done
 
