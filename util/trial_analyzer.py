@@ -7,6 +7,20 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+plt.rcParams.update({
+        'text.usetex': True,
+        'font.family': 'serif',
+        'font.size': 10,
+        'axes.labelsize': 10,
+        'legend.fontsize': 8,
+        'xtick.labelsize': 8,
+        'ytick.labelsize': 8,
+        'figure.dpi': 600,
+        'savefig.dpi': 600,
+        'savefig.format': 'png',
+        'savefig.bbox': 'tight'
+    })
+
 
 def _read_json(file):
     with open(file, 'r') as f:
@@ -123,7 +137,7 @@ def plot_latency_statistics(agg_latencies, output_dir):
     plt.xticks(rotation=45)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(join(output_dir, 'latency_distribution.png'))
+    plt.savefig(join(output_dir, 'latency_distribution'))
     # plt.show()
     plt.close()
 
@@ -141,7 +155,7 @@ def plot_latency_statistics(agg_latencies, output_dir):
     plt.xticks(rotation=45)
     plt.suptitle('Latency Distribution by Client')
     plt.tight_layout()
-    plt.savefig(join(output_dir, 'latency_distribution_split.png'))
+    plt.savefig(join(output_dir, 'latency_distribution_split'))
     # plt.show()
     plt.close()
 
@@ -167,7 +181,7 @@ def plot_latency_histograms(agg_latencies, output_dir):
         axs[idx, 1].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig(join(output_dir, 'latency_histograms.png'))
+    plt.savefig(join(output_dir, 'latency_histograms'))
     # plt.show()
     plt.close()
 
@@ -190,7 +204,7 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
         axs[idx].grid(True, alpha=0.3)
     plt.suptitle(f'{name} Distribution by Client')
     plt.tight_layout()
-    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_histograms.png'))
+    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_histograms'))
     # plt.show()
     plt.close()
 
@@ -202,7 +216,7 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     plt.xticks(rotation=45)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_violin.png'))
+    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_violin'))
     # plt.show()
     plt.close()
 
@@ -216,7 +230,7 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_overlay_histogram.png'))
+    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_overlay_histogram'))
     # plt.show()
     plt.close()
 
@@ -233,7 +247,7 @@ def plot_ml_metric(data: pd.DataFrame, output_dir: str, name: str) -> None:
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_plot.png'))
+    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_plot'))
     # plt.show()
     plt.close()
 
@@ -270,7 +284,7 @@ def plot_ml_metrics(train_data: list, validation_data: list, output_dir: str, na
     plt.legend()
     plt.tight_layout()
 
-    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}.png'))
+    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}'))
     # plt.show()
     plt.close()
 
