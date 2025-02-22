@@ -65,23 +65,62 @@ def save_latency_histograms(output_dir, fig):
     plt.close()
 
 
+# def plot_latency_statistics(agg_latencies, fig, num_rows, row_idx, num_nodes):
+#     """
+#     Create violin plots for the latencies captured by flower.
+#     """
+#     plot_data = []
+#     for cid, df in agg_latencies.items():
+#         plot_data.extend([{
+#             'Client': cid,
+#             'Direction': 'Downlink',
+#             'Latency (ms)': value
+#         } for value in df['Downlink']])
+#         plot_data.extend([{
+#             'Client': cid,
+#             'Direction': 'Uplink',
+#             'Latency (ms)': value
+#         } for value in df['Uplink']])
+
+#     plot_df = pd.DataFrame(plot_data)
+
+#     plt.figure(figsize=(12, 6))
+#     sns.violinplot(data=plot_df, x='Client', y='Latency (ms)',
+#                    hue='Direction', split=True, inner='quartile')
+
+#     plt.title('Latency Distribution by Client')
+#     plt.xticks(rotation=45)
+#     plt.grid(True, alpha=0.3)
+#     plt.tight_layout()
+#     plt.savefig(join(output_dir, 'latency_distribution'))
+#     # plt.show()
+#     plt.close()
+
+#     # Split
+#     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+#     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
+#                    x='Client', y='Latency (ms)', inner='quartile', ax=ax1)
+#     ax1.set_title('Downlink Latency Distribution')
+#     ax1.grid(True, alpha=0.3)
+
+#     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
+#                    x='Client', y='Latency (ms)', inner='quartile', ax=ax2)
+#     ax2.set_title('Uplink Latency Distribution')
+#     ax2.grid(True, alpha=0.3)
+#     plt.xticks(rotation=45)
+#     plt.suptitle('Latency Distribution by Client')
+#     plt.tight_layout()
+#     plt.savefig(join(output_dir, 'latency_distribution_split'))
+#     # plt.show()
+#     plt.close()
+
+
 def plot_latency_histograms(agg_latencies, fig, num_rows, row_idx, num_nodes):
     plt.figure(fig)
 
-    uplink = [agg_latencies[df] for df in agg_latencies if 'Uplink' in df]
     uplink = pd.concat([agg_latencies[df] for df in agg_latencies if 'Uplink' in df], axis=1).mean(axis=1)
-    
-    # downlink = agg_latencies['Downlink'].mean(axis=1)
     downlink = pd.concat([agg_latencies[df] for df in agg_latencies if 'Downlink' in df], axis=1).mean(axis=1)
-    # uplink = agg_latencies['Uplink'].mean(axis=1)
 
-    # print(downlink)
-
-    """Create histogram subplots for each CID's latencies"""
-    # num_cids = len(agg_latencies)
-    # fig, axs = plt.subplots(num_cids, 2, figsize=(12, 4 * num_cids))
-
-    # for idx, (cid, df) in enumerate(agg_latencies.items()):
     # Downlink histogram
     ax = fig.add_subplot(num_rows, 2, 2*row_idx+1)
     ax.hist(downlink, alpha=0.75, color='blue')
@@ -99,6 +138,80 @@ def plot_latency_histograms(agg_latencies, fig, num_rows, row_idx, num_nodes):
     ax.grid(True, alpha=0.3)
 
 
+def plot_time_histograms(data: pd.DataFrame, figs, num_rows, row_idx, num_nodes):
+    plt.figure(figs[0])
+    ax = plt.gca()
+
+    """Create histogram subplots for each CID's various time measurements"""
+    # num_cids = len(data.columns)
+    # fig, axs = plt.subplots(num_cids, 1, figsize=(10, 4 * num_cids))
+
+    # Handle single column case
+    # if num_cids == 1:
+    #     axs = [axs]
+
+    # Main Histogram
+    ax.hist(data, alpha=0.75, color='blue')
+    # ax.set_title(f'{col.replace("_", " ")} Distribution')
+    
+    
+
+    # Violin plots
+    plt.figure(figs[1])
+    ax = plt.gca()
+    
+    # plot_data = pd.melt(data, var_name='Client', value_name='Time (s)')
+    # sns.violinplot(data=data, x='Client', y='Time (s)', inner='quartile')
+
+    # # Overlay Histograms
+    # plt.figure(figs[2])
+    # ax = plt.gca()
+    # # fig, ax = plt.subplots(figsize=(10, 6))
+    # for col in data.columns:
+    #     ax.hist(data[col], alpha=0.75, label=col.replace("_", " "))
+
+
+def format_save_time_figs(name, output_dir, figs):
+    # normal hist
+    plt.figure(figs[0])
+    ax = plt.gca()
+
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Frequency')
+    ax.grid(True, alpha=0.3)
+    plt.suptitle(f'{name} Distribution by Client')
+    plt.tight_layout()
+    plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_histograms'))
+    # plt.show()
+    plt.close()
+
+    # # violin plots
+    # plt.figure(figs[1])
+    # ax = plt.gca()
+
+    # plt.title(f'{name} Distribution by Client')
+    # plt.xticks(rotation=45)
+    # plt.grid(True, alpha=0.3)
+    # plt.tight_layout()
+    # plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_violin'))
+    # # plt.show()
+    # plt.close()
+
+    # # overlay hist
+    # plt.figure(figs[2])
+    # ax = plt.gca()
+
+    # ax.set_title(f'{name} Distribution')
+    # ax.set_xlabel('Time (s)')
+    # ax.set_ylabel('Frequency')
+    # ax.legend()
+    # ax.grid(True, alpha=0.3)
+    # plt.tight_layout()
+    # plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_overlay_histogram'))
+    # # plt.show()
+    # plt.close()
+
+
 def main(input_path: str) -> None:
     experiment_dir = [d for d in listdir(input_path) if isdir(join(input_path, d))]
 
@@ -106,9 +219,10 @@ def main(input_path: str) -> None:
     latencies = {}
 
     # Times
-    # training_times = {}
-    # train_test_times = {}
-    # val_test_times = {}
+    training_times = {}
+    train_test_times = {}
+    val_test_times = {}
+    time_metrics = ['training_times', 'train_test_times', 'val_test_times']
 
     # # ML Metrics
     # val_accuracies = {}
@@ -121,7 +235,7 @@ def main(input_path: str) -> None:
     # ml_metrics = ['avg_val_acc', 'avg_val_loss', 'avg_train_loss', 'avg_train_acc']
     # metrics = latency + time_metrics + ml_metrics
 
-    time_metrics = ['Training Time', 'Train Test Time', 'Validation Test Time']
+    # time_metrics = ['Training Time', 'Train Test Time', 'Validation Test Time']
     ml_metrics = ['Accuracy', 'Loss']
     plots = {}
     data = {}
@@ -158,10 +272,9 @@ def main(input_path: str) -> None:
         # Load aggregated training time and averaged ML metrics
         latencies[num_nodes] = pd.read_csv(join(result_path, 'latencies_aggregated.csv'), skiprows=1)
 
-
-        training_times = pd.read_csv(join(result_path, 'training_time_aggregated.csv'))
-        train_test_times = pd.read_csv(join(result_path, 'train_test_time_aggregated.csv'))
-        val_test_times = pd.read_csv(join(result_path, 'val_test_time_aggregated.csv'))
+        training_times[num_nodes] = pd.read_csv(join(result_path, 'training_time_aggregated.csv')).mean(axis=1)
+        train_test_times[num_nodes] = pd.read_csv(join(result_path, 'train_test_time_aggregated.csv')).mean(axis=1)
+        val_test_times[num_nodes] = pd.read_csv(join(result_path, 'val_test_time_aggregated.csv')).mean(axis=1)
 
         # for metric in time_metrics:
         #     filename = f'{metric.lower().replace(" ", "_")}'
@@ -184,13 +297,29 @@ def main(input_path: str) -> None:
         format_save_ml_plots(input_path, metric, plots[metric])
     
     num_subplots = len(latencies)
-    latency_fig, axs = plt.subplots(num_subplots, 2, figsize=(12, 4 * num_subplots))
+    latency_hist, axs = plt.subplots(num_subplots, 2, figsize=(12, 4 * num_subplots))
+    latency_violin, axs = plt.subplots(num_subplots, 2, figsize=(12, 4 * num_subplots))
+
+    for metric in time_metrics:
+        hist, axs = plt.subplots(num_subplots, 1, figsize=(10, 4 * num_subplots))
+        violin, ax = plt.subplots(figsize=(10, 6))
+        overlay_hist, ax = plt.subplots(figsize=(10, 6))
+        
+        plots[metric] = [hist, violin, overlay_hist]
     i = 0
     for num_nodes in latencies:
-        plot_latency_histograms(latencies[num_nodes], latency_fig, num_subplots, i, num_nodes)
+        plot_latency_histograms(latencies[num_nodes], latency_hist, num_subplots, i, num_nodes)
+        
+        # for metric in time_metrics:
+        plot_time_histograms(training_times[num_nodes], plots['training_times'], num_subplots, i, num_nodes)
+        plot_time_histograms(train_test_times[num_nodes], plots['train_test_times'], num_subplots, i, num_nodes)
+        plot_time_histograms(val_test_times[num_nodes], plots['val_test_times'], num_subplots, i, num_nodes)
+        # plot_latency_statistics(latencies[num_nodes], latency_violin, num_subplots, i, num_nodes)
         i += 1
     
-    save_latency_histograms(input_path, latency_fig)
+    save_latency_histograms(input_path, latency_hist)
+    for metric in time_metrics:
+        format_save_time_figs(metric, input_path, plots[metric])
 
 
 if __name__ == '__main__':
