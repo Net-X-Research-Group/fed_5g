@@ -30,8 +30,8 @@ def _read_json(file):
 
 def _aggregate_metrics(metrics_dict: dict, output_path: str, name: str) -> pd.DataFrame:
     """Aggregate metrics across trials by computing the mean for each round."""
-    df = pd.concat(metrics_dict.values(), axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
-    df.to_csv(join(output_path, f'{name}_aggregated.csv'))
+    df = pd.concat(metrics_dict.values(), axis=1).T.groupby(level=0).mean().T
+    df.to_csv(join(output_path, f'{name}_aggregated.csv'), index=False)
     return df
 
 
@@ -47,7 +47,7 @@ def _aggregate_ml_metrics(metrics_dict: dict, output_path: str, name: str) -> li
         df['avg'] = df.mean(axis=1)
         # Drop all but 'avg'
         agg_dfs.append(df[['avg']])
-    pd.concat(agg_dfs, axis=1).to_csv(join(output_path, f'avg_{name}.csv'))  # Concat and save as csv
+    pd.concat(agg_dfs, axis=1).to_csv(join(output_path, f'avg_{name}.csv'), index=False)  # Concat and save as csv
     return agg_dfs
 
 
@@ -106,7 +106,7 @@ def export_metrics_to_csv(data, output_dir):
         # Save to CSV
         filename = f"{metric}.csv"
         filepath = join(output_dir, filename)
-        df.to_csv(filepath)
+        df.to_csv(filepath, index=False)
         print(f"Saved {filename}")
 
 
@@ -344,6 +344,8 @@ def main(input_path: str) -> None:
     for cid, dfs in latencies.items():
         agg_df = pd.concat(dfs, axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
         agg_latencies[cid] = agg_df
+    
+    pd.concat(agg_latencies, axis=1).to_csv(join(input_path, f'latencies_aggregated.csv'), index=False)  # Concat and save as csv
     plot_latency_histograms(agg_latencies, input_path)
     plot_latency_statistics(agg_latencies, input_path)
 
