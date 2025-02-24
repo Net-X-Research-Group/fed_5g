@@ -1,8 +1,9 @@
 from torchinfo import summary
 
-from federated_application.task import Net
+from federated_application.models import ModelWrapper
 
-model = Net()
+model = ModelWrapper.create_model('mobilenet_v3_small')
+
 batch_size = 64
 depth = 3
 height, width = 32, 32
