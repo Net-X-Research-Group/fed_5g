@@ -37,6 +37,7 @@ min_num_clients = 3
 interface = 'Ethernet'
 model = 'squeezenet1_1'
 dataset = 'cifar10'
+distribution = 'iid'
 wandb_api_key = ''
 enable_server_wandb = true
 enable_client_wandb = false
