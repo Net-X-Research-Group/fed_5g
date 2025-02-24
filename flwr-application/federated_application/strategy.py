@@ -76,6 +76,9 @@ class MetricsFedAvg(FedAvg):
             config['run_id'] = self.run_id
             config['patience'] = self.patience
             config['init_time'] = self.init_time
+            config['model'] = self.model
+            config['dataset'] = self.dataset
+            config['interface'] = self.interface
             with open(f"{os.path.expanduser(f'~/{self.dir_name}/config.json')}", "w") as f:
                 json.dump(config, f)
         except Exception as e:
