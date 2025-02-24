@@ -8,7 +8,7 @@ import torch.optim as optim
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
-from flwr.common.typing import NDArrays, Scalar
+from flwr.common.typing import NDArrays
 
 logging.basicConfig(
     level=logging.INFO,

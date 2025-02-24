@@ -2,7 +2,6 @@ import os
 import subprocess
 import logging
 import signal
-from datetime import datetime
 
 ETHERNET = False
 
