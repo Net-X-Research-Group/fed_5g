@@ -6,9 +6,10 @@ from os import path
 import torch
 import wandb
 from flwr.client import NumPyClient, ClientApp
-from flwr.common import Context
 from flwr.client.mod import message_size_mod
-from torchvision.models import squeezenet1_1 as net
+from flwr.common import Context
+
+from federated_application.models import ModelWrapper
 from federated_application.mods import comm_time_mod
 from federated_application.task import (
     get_weights,
@@ -28,10 +29,12 @@ logger = logging.getLogger(__name__)
 
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
+
 class FlowerClient(NumPyClient):
-    def __init__(self, trainloader, valloader, local_epochs, learning_rate, momentum, weight_decay, enable_wandb, wandb_config) -> None:
-        self.net = net(progress= True, num_classes=10)
-        self.net = torch.jit.script(self.net) # Enable JIT to reduce python overhead
+    def __init__(self, trainloader, valloader, local_epochs, learning_rate, momentum, weight_decay, enable_wandb,
+                 run_config) -> None:
+        self.net = ModelWrapper.create_model(model=run_config['model'], num_classes=10)
+        self.net = torch.jit.script(self.net)  # Enable JIT to reduce python overhead
         self.trainloader = trainloader
         self.valloader = valloader
         self.local_epochs = local_epochs
@@ -41,12 +44,12 @@ class FlowerClient(NumPyClient):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.net.to(self.device)
         self.enable_wandb = enable_wandb
-        self.wandb_config = wandb_config
+        self.wandb_config = run_config
 
         # Login to wandb
         if enable_wandb:
             logger.info('Enabling wandb...')
-            wandb.login(key=wandb_config['wandb_api_key'])
+            wandb.login(key=run_config['wandb_api_key'])
             self.wandb_config.pop('wandb_api_key')
 
             # Initialize the wandb project
@@ -54,8 +57,8 @@ class FlowerClient(NumPyClient):
 
     def _init_wandb_project(self):
         wandb.init(project=PROJECT_NAME,
-                   group = str(self.wandb_config['run_id']),
-                   id = f'{self.wandb_config["run_id"]}-{self.wandb_config["cid"]}',
+                   group=str(self.wandb_config['run_id']),
+                   id=f'{self.wandb_config["run_id"]}-{self.wandb_config["cid"]}',
                    name=f'{datetime.now().strftime("%Y-%m-%d/%H-%M-%S")}_CID-{self.wandb_config["cid"]}',
                    resume='allow',
                    reinit=True,
@@ -113,6 +116,7 @@ def client_fn(context: Context):
                         momentum=momentum,
                         weight_decay=weight_decay,
                         enable_wandb=enable_wandb,
-                        wandb_config=config).to_client()
+                        run_config=config).to_client()
+
 
 app = ClientApp(client_fn=client_fn, mods=[comm_time_mod, message_size_mod])

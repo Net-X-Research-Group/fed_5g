@@ -1,14 +1,14 @@
+import logging
 import time
 from typing import List, Tuple
 
 import torch
 from flwr.common import Context, Metrics, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerConfig, ServerAppComponents
-from torchvision.models import squeezenet1_1 as net
 
+from federated_application.models import ModelWrapper
 from federated_application.strategy import MetricsFedAvg
 from federated_application.task import get_weights
-import logging
 
 torch.manual_seed(42)
 
@@ -17,6 +17,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> dict:
     """
@@ -88,15 +89,18 @@ def server_fn(context: Context):
     """
     min_num_clients = context.run_config['min_num_clients']
     rounds = context.run_config['rounds']
+    model_name = context.run_config['model']
 
-    ndarrays = get_weights(net(num_classes=10))
+    net = ModelWrapper.create_model(model_name, num_classes=10)
+
+    ndarrays = get_weights(net())
     parameters = ndarrays_to_parameters(ndarrays)
 
     # Call instance of the metrics strategy
     strategy = MetricsFedAvg(
         run_config=context.run_config,
         enable_wandb=context.run_config['enable_server_wandb'],
-        fraction_fit=1, # Use all nodes
+        fraction_fit=1,  # Use all nodes
         fraction_evaluate=0,  # Disable Final Evaluation
         min_fit_clients=min_num_clients,
         min_available_clients=min_num_clients,
