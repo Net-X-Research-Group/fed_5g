@@ -25,7 +25,7 @@ def plot_ml_metric(data: pd.DataFrame, fig, label: str, color: str) -> None:
     plt.figure(fig)
     ax = plt.gca()
 
-    """Plot training and validation metrics with confidence bands."""
+    """Plot metrics with confidence bands."""
     # Calculate statistics
     mean = data.mean(axis=1)
     std = data.std(axis=1)
@@ -36,7 +36,8 @@ def plot_ml_metric(data: pd.DataFrame, fig, label: str, color: str) -> None:
 
     # Create the plot
     sns.lineplot(data=mean, label=label, color=color, ax=ax)
-    plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color)
+    if ML_CONFIDENCE_BANDS:
+        plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color)
 
     plt.legend()
 
@@ -244,7 +245,7 @@ def main(input_path: str) -> None:
         plots[metric] = plt.figure(figsize=(10, 6))
 
     # assume only have Ethernet, IID for now
-    colors = [sns.color_palette(), sns.color_palette("pastel")]
+    colors = sns.color_palette()
     # networks = {}
     nodes = {}
     # distributions = {}
@@ -263,7 +264,7 @@ def main(input_path: str) -> None:
         # if network not in networks:
         #     networks[network] = 'blue'
         if num_nodes not in nodes:
-            nodes[num_nodes] = [colors[0].pop(0), colors[1].pop(0)]
+            nodes[num_nodes] = colors.pop(0)
         # if distribution not in distributions:
         #     distributions[distribution] = 'blue'
         # for metric in metrics:
@@ -285,16 +286,13 @@ def main(input_path: str) -> None:
         train_losses = pd.read_csv(join(result_path, 'avg_train_loss.csv'))
         train_accuracies = pd.read_csv(join(result_path, 'avg_train_acc.csv'))
 
-        plot_ml_metric(val_accuracies, plots['Accuracy'], num_nodes + ' nodes - validation', nodes[num_nodes][0])
-        plot_ml_metric(train_accuracies, plots['Accuracy'], num_nodes + ' nodes - train', nodes[num_nodes][1])
-        
-        plot_ml_metric(val_losses, plots['Loss'], num_nodes + ' nodes - validation', nodes[num_nodes][0])
-        plot_ml_metric(train_losses, plots['Loss'], num_nodes + ' nodes - train', nodes[num_nodes][1])
+        plot_ml_metric(val_accuracies, plots['Accuracy'], num_nodes + ' nodes', nodes[num_nodes])
+        plot_ml_metric(val_losses, plots['Loss'], num_nodes + ' nodes', nodes[num_nodes])
         
         # except Exception as e:
         #     print(f"Error processing {result}: {e}")
     for metric in ml_metrics:
-        format_save_ml_plots(input_path, metric, plots[metric])
+        format_save_ml_plots(input_path, 'Validation ' + metric, plots[metric])
     
     num_subplots = len(latencies)
     latency_hist, axs = plt.subplots(num_subplots, 2, figsize=(12, 4 * num_subplots))
@@ -323,6 +321,7 @@ def main(input_path: str) -> None:
 
 
 if __name__ == '__main__':
+    ML_CONFIDENCE_BANDS = False
     input_dir = input("Enter the path to the directory containing the trials: ")
     # ../Library/CloudStorage/GoogleDrive-kaylacomer2029@u.northwestern.edu/My Drive/FL_5G_Experiments/
     main(input_dir)
