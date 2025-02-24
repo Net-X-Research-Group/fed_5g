@@ -344,7 +344,8 @@ def main(input_path: str) -> None:
     for cid, dfs in latencies.items():
         agg_df = pd.concat(dfs, axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
         agg_latencies[cid] = agg_df
-    
+
+    agg_latencies = dict(sorted(agg_latencies.items(), key=lambda x: int(x[0].split('_')[1]))) # Sort the dict by CID
     pd.concat(agg_latencies, axis=1).to_csv(join(input_path, f'latencies_aggregated.csv'), index=False)  # Concat and save as csv
     plot_latency_histograms(agg_latencies, input_path)
     plot_latency_statistics(agg_latencies, input_path)
