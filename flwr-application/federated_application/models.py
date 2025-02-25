@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as f
 
-from torchvision.models import squeezenet1_1, mobilenet_v3_small, resnet18, efficientnet_b0, shufflenet_v2_x1_0
+from torchvision.models import squeezenet1_1, mobilenet_v3_small, efficientnet_b0, shufflenet_v2_x1_0
 
 from torchvision.models.quantization import mobilenet_v3_large as mobilenet_v3_large_quant
 
@@ -96,8 +96,6 @@ class ModelWrapper:
                 return mobilenet_v3_small(num_classes=num_classes)
             case 'mobilenet_v3_large_quantized':
                 return mobilenet_v3_large_quant(quantize=True, num_classes=num_classes)
-            case 'resnet_18':
-                return resnet18(num_classes=num_classes)
             case 'efficientnet_b0':
                 return efficientnet_b0(num_classes=num_classes)
             case 'shufflenet_v2_x1_0':
