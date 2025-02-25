@@ -66,7 +66,7 @@ class MetricsFedAvg(FedAvg):
 
         # Create logging directory
         try:
-            os.mkdir(os.path.expanduser(f'~/{self.dir_name}'))  # Path should never exist
+            os.mkdirs(os.path.expanduser(f'~/{self.dir_name}'), exist_ok=True)  # Path should never exist
             logger.info(f'Directory {os.path.expanduser(self.dir_name)} created.')
         except FileExistsError:
             logger.info(f'Directory {os.path.expanduser(self.dir_name)} already exists.')
@@ -100,6 +100,7 @@ class MetricsFedAvg(FedAvg):
         -----------------
         Writes aggregated and individual metrics to a JSON file.
         """
+        os.makedirs(os.path.expanduser(f'~/{self.dir_name}'), exist_ok=True)
         with open(f"{os.path.expanduser(f'~/{self.dir_name}/agg_metrics.json')}", 'w') as f:
             json.dump(self.results, f)
         with open(f"{os.path.expanduser(f'~/{self.dir_name}/individual_metrics.json')}", 'w') as f:
