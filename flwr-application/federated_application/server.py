@@ -93,7 +93,7 @@ def server_fn(context: Context):
 
     net = ModelWrapper.create_model(model_name, num_classes=10)
 
-    ndarrays = get_weights(net())
+    ndarrays = get_weights(net)
     parameters = ndarrays_to_parameters(ndarrays)
 
     # Call instance of the metrics strategy
