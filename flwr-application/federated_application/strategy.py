@@ -56,7 +56,7 @@ class MetricsFedAvg(FedAvg):
             logger.info('Enabling wandb...')
             # Login to wandb using API key.
             wandb.login(key=run_config['wandb_api_key'])
-            self.config.pop('wandb_api_key') # Do not push API key to W&B
+            self.config.pop('wandb_api_key')  # Do not push API key to W&B
             # Initialize W&B project
             self._init_wandb_project()
 

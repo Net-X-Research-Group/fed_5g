@@ -6,9 +6,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from datasets import load_from_disk
+from flwr.common.typing import NDArrays
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
-from flwr.common.typing import NDArrays
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +32,7 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
     dataset = load_from_disk(dataset_path)
 
     transform = Compose([ToTensor(), Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+
     def apply_transforms(batch):
         """Apply transforms to the partition from FederatedDataset."""
         batch["img"] = [transform(img) for img in batch["img"]]
