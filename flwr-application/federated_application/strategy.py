@@ -66,7 +66,7 @@ class MetricsFedAvg(FedAvg):
 
         # Create logging directory
         try:
-            os.mkdirs(os.path.expanduser(f'~/{self.dir_name}'), exist_ok=True)  # Path should never exist
+            os.makedirs(os.path.expanduser(f'~/{self.dir_name}'), exist_ok=True)  # Path should never exist
             logger.info(f'Directory {os.path.expanduser(self.dir_name)} created.')
         except FileExistsError:
             logger.info(f'Directory {os.path.expanduser(self.dir_name)} already exists.')
