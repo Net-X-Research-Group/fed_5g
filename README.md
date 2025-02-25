@@ -57,13 +57,13 @@ python client.py --server_address 127.0.0.1:8080 --dataset ~/dataset_name --cid 
 
 ### Model Recipes
 
-| Model                                                                                                                                                                                                        | Learning Rate | Batch Size | Momentum | Weight Decay | Epochs |
-|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|------------|----------|--------------|--------|
-| [squeezenet1_1](https://pytorch.org/vision/0.20/models/generated/torchvision.models.squeezenet1_1.html#torchvision.models.squeezenet1_1)                                                                     | 0.01          | 128        | 0.9      | 0.0002       | 1      |
-| [mobilenet_v3_small](https://pytorch.org/vision/main/models/generated/torchvision.models.mobilenet_v3_small.html#torchvision.models.mobilenet_v3_small)                                                      |               |            |          |              |        |
-| [mobilenet_v3_large_quantized](https://pytorch.org/vision/main/models/generated/torchvision.models.quantization.mobilenet_v3_large.html#torchvision.models.quantization.MobileNet_V3_Large_QuantizedWeights) |               |            |          |              |        |
-| efficientnet_b0                                                                                                                                                                                              |               |            |          |              |        |
-| shufflenet_v2_x1_0                                                                                                                                                                                           |               |            |          |              |        |
+| Model                                                                                                                                                                            | Learning Rate | Batch Size | Momentum | Weight Decay | Epochs |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|------------|----------|--------------|--------|
+| [squeezenet1_1](https://pytorch.org/vision/0.20/models/generated/torchvision.models.squeezenet1_1.html#torchvision.models.squeezenet1_1)                                         | 0.01          | 128        | 0.9      | 0.0002       | 1      |
+| [mobilenet_v3_small](https://pytorch.org/vision/main/models/generated/torchvision.models.mobilenet_v3_small.html#torchvision.models.mobilenet_v3_small)                          | 0.005         | 128        | 0.9      | 0.0001       | 1      |
+| [mobilenet_v3_large_quantized](https://pytorch.org/vision/main/models/generated/torchvision.models.quantization.mobilenet_v3_large.html#torchvision.models.quantization.MobileNet_V3_Large_QuantizedWeights) | 0.005 | 128        | 0.9      | 0.0001       | 1      |
+| [efficientnet_b0](https://pytorch.org/vision/main/models/generated/torchvision.models.efficientnet_b0.html#torchvision.models.efficientnet_b0)                                  | 0.001         | 128        | 0.9      | 0.0001       | 1      |
+| [shufflenet_v2_x1_0](https://github.com/pytorch/vision/tree/main/references/classification#shufflenet-v2)                                                                        | 0.005         | 128        | 0.9      | 0.00002      | 1      |
 
 > Note: These parameters are selected based of the recommended TorchVision recipes.
 
