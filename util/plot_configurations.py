@@ -1,10 +1,11 @@
+import json
+import re
 from os import listdir
 from os.path import join, isdir
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-
 
 plt.rcParams.update({
         'text.usetex': True,
@@ -19,6 +20,94 @@ plt.rcParams.update({
         'savefig.format': 'png',
         'savefig.bbox': 'tight'
     })
+
+
+def _read_json(file):
+    with open(file, 'r') as f:
+        raw = json.load(f)
+    return raw
+
+
+def export_metrics_to_csv(data, output_dir):
+    """
+    Export each metric to a separate CSV file where columns are CIDs and rows are rounds.
+
+    Args:
+        data (dict): Nested dictionary with structure {Round#: {CID: {metrics}}}
+        output_dir (str): Directory to save the CSV files
+    """
+    # Get all metrics from the first round and first CID
+    first_round = list(data.keys())[0]
+    first_cid = list(data[first_round].keys())[0]
+    metrics = list(data[first_round][first_cid].keys())
+
+    # Get all unique CIDs
+    cids = set()
+    for round_data in data.values():
+        cids.update(round_data.keys())
+    cids = sorted(list(cids))
+
+    # Get all rounds
+    rounds = sorted(list(data.keys()), key=int)
+
+    # For each metric, create a DataFrame and save to CSV
+    for metric in metrics:
+        # Create empty DataFrame with rounds as index
+        df = pd.DataFrame(index=rounds)
+
+        # Fill in data for each CID
+        for cid in cids:
+            cid_values = []
+            for round_num in rounds:
+                if cid in data[round_num]:
+                    cid_values.append(data[round_num][cid][metric])
+                else:
+                    cid_values.append(None)  # Handle missing data
+            df[f'CID_{cid}'] = cid_values
+        df.index.name = 'Round'
+        # Save to CSV
+        filename = f"{metric}.csv"
+        filepath = join(output_dir, filename)
+        df.to_csv(filepath, index=False)
+        print(f"Saved {filename}")
+
+
+def process_trial_latency(path: str) -> dict:
+    """
+    Process latency data captured by patched flower version.
+    """
+    files = [f for f in listdir(path) if f.startswith('latency')]
+    results = {}
+    for file in files:
+        cid = re.search(r'latency_\d+_CID(\d+)', file)
+        if not cid:
+            continue
+        cid = cid.group(1)
+        results[f'CID_{cid}'] = pd.read_csv(join(path, file), names=['Round', 'Downlink', 'Uplink'])
+    return results
+
+
+def _aggregate_metrics(metrics_dict: dict, output_path: str, name: str) -> pd.DataFrame:
+    """Aggregate metrics across trials by computing the mean for each round."""
+    df = pd.concat(metrics_dict.values(), axis=1).T.groupby(level=0).mean().T
+    df.to_csv(join(output_path, f'{name}_aggregated.csv'), index=False)
+    return df
+
+
+def _aggregate_ml_metrics(metrics_dict: dict, output_path: str, name: str) -> list:
+    """Aggregate metrics across trials by computing the mean for each round."""
+    dfs = list(metrics_dict.values())
+    agg_dfs = []
+    for df in dfs:
+        try:
+            df = df.drop('Round', axis=1)
+        except KeyError:
+            pass
+        df['avg'] = df.mean(axis=1)
+        # Drop all but 'avg'
+        agg_dfs.append(df[['avg']])
+    pd.concat(agg_dfs, axis=1).to_csv(join(output_path, f'avg_{name}.csv'), index=False)  # Concat and save as csv
+    return agg_dfs
 
 
 def plot_ml_metric(data: pd.DataFrame, fig, label: str, color) -> None:
@@ -188,8 +277,88 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     plt.close()
 
 
+def retrieveTrialMetrics(trial_path, trial_dir, configuration_path):
+    # Convert individual metrics to csv
+    individual_metrics = _read_json(join(trial_path, 'individual_metrics.json'))
+    export_metrics_to_csv(individual_metrics, trial_path)
+
+    # Latency
+    latencies = {}
+    agg_latencies = {}
+
+    # Times
+    training_times = {}
+    train_test_times = {}
+    val_test_times = {}
+
+    # ML Metrics
+    val_accuracies = {}
+    val_losses = {}
+    train_accuracies = {}
+    train_losses = {}
+
+    # Process latency data captured by Flower
+    try:
+        trial_results = process_trial_latency(trial_path)
+        for cid, df in trial_results.items():
+            if cid not in latencies:
+                latencies[cid] = []
+            latencies[cid].append(df)
+    except Exception as e:
+        print(f"Error processing {trial_dir}: {e}")
+
+    # Process training time metrics, measured by flower
+    try:
+        training_times[trial_dir] = pd.read_csv(join(trial_path, 'training_time.csv'))
+        train_test_times[trial_dir] = pd.read_csv(join(trial_path, 'train_test_time.csv'))
+        val_test_times[trial_dir] = pd.read_csv(join(trial_path, 'val_test_time.csv'))
+    except Exception as e:
+        print(f"Error processing {trial_dir}: {e}")
+
+    # Process ML Metrics
+    try:
+        val_accuracies[trial_dir] = pd.read_csv(join(trial_path, 'val_acc.csv'))
+        val_losses[trial_dir] = pd.read_csv(join(trial_path, 'val_loss.csv'))
+        train_losses[trial_dir] = pd.read_csv(join(trial_path, 'train_loss.csv'))
+        train_accuracies[trial_dir] = pd.read_csv(join(trial_path, 'train_acc.csv'))
+    except Exception as e:
+        print(f"Error processing {trial_dir}: {e}")
+    
+    for cid, dfs in latencies.items():
+        agg_df = pd.concat(dfs, axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
+        agg_latencies[cid] = agg_df
+
+    agg_latencies = dict(sorted(agg_latencies.items(), key=lambda x: int(x[0].split('_')[1]))) # Sort the dict by CID
+    pd.concat(agg_latencies, axis=1).to_csv(join(configuration_path, f'latencies_aggregated.csv'), index=False)  # Concat and save as csv
+
+    # Training Time Metrics
+    agg_training_times = _aggregate_metrics(training_times, configuration_path, name='training_time')
+    agg_train_test_times = _aggregate_metrics(train_test_times, configuration_path, name='train_test_time')
+    agg_val_test_times = _aggregate_metrics(val_test_times, configuration_path, name='val_test_time')
+
+    # ML Metrics
+    avg_val_accuracies = _aggregate_ml_metrics(val_accuracies, configuration_path, name='val_acc')
+    avg_train_accuracies = _aggregate_ml_metrics(train_accuracies, configuration_path, name='train_acc')
+    avg_val_losses = _aggregate_ml_metrics(val_losses, configuration_path, name='val_loss')
+    avg_train_losses = _aggregate_ml_metrics(train_losses, configuration_path, name='train_loss')
+
+
+def retrieveConfigurationMetrics(input_path, experiment_dir):
+    for configuration_dir in experiment_dir:
+        configuration_path = join(input_path, configuration_dir)
+        trial_dirs = [d for d in listdir(configuration_path) if isdir(join(configuration_path, d))]
+        for trial_dir in trial_dirs:
+            trial_path = join(configuration_path, trial_dir)
+            try:
+                retrieveTrialMetrics(trial_path, trial_dir, configuration_path)
+            except Exception as e:
+                print(f"Error processing {trial_dir}: {e}")
+
+
 def main(input_path: str) -> None:
     experiment_dir = [d for d in listdir(input_path) if isdir(join(input_path, d))]
+
+    retrieveConfigurationMetrics(input_path, experiment_dir)
     
     time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time']
     data = {}
