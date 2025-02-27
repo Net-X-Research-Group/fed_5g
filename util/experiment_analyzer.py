@@ -176,7 +176,7 @@ def plot_latency_statistics(uplink, downlink, output_dir):
 
     plt.figure(figsize=(12, 6))
     sns.violinplot(data=plot_df, x='Configuration', y='Latency (ms)',
-                   hue='Direction', split=True, inner='quartile', density_norm="area")
+                   hue='Direction', split=True, inner='quartile', density_norm="area", common_norm=True)
 
     plt.title('Latency Distribution by Configuration')
     plt.xticks(rotation=45)
@@ -189,12 +189,12 @@ def plot_latency_statistics(uplink, downlink, output_dir):
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
-                   x='Configuration', y='Latency (ms)', inner='quartile', ax=ax1, density_norm="area")
+                   x='Configuration', y='Latency (ms)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
 
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
-                   x='Configuration', y='Latency (ms)', inner='quartile', ax=ax2, density_norm="area")
+                   x='Configuration', y='Latency (ms)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
     plt.xticks(rotation=45)
@@ -253,7 +253,7 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     # Violin plots
     plt.figure(figsize=(10, 6))
     plot_data = pd.melt(data, var_name='Configuration', value_name='Time (s)')
-    sns.violinplot(data=plot_data, x='Configuration', y='Time (s)', inner='quartile', density_norm="area")
+    sns.violinplot(data=plot_data, x='Configuration', y='Time (s)', inner='quartile', density_norm="area", common_norm=True)
     plt.title(f'{name} Distribution by Configuration')
     plt.xticks(rotation=45)
     plt.grid(True, alpha=0.3)
@@ -298,7 +298,7 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
 
     plt.figure(figsize=(12, 6))
     sns.violinplot(data=plot_df, x='Client', y='Latency (ms)',
-                   hue='Direction', split=True, inner='quartile', density_norm="area")
+                   hue='Direction', split=True, inner='quartile', density_norm="area", common_norm=True)
 
     plt.title('Latency Distribution by Client')
     plt.xticks(rotation=45)
@@ -311,12 +311,12 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
-                   x='Client', y='Latency (ms)', inner='quartile', ax=ax1, density_norm="area")
+                   x='Client', y='Latency (ms)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
 
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
-                   x='Client', y='Latency (ms)', inner='quartile', ax=ax2, density_norm="area")
+                   x='Client', y='Latency (ms)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
     plt.xticks(rotation=45)
