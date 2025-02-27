@@ -58,9 +58,8 @@ def format_save_ml_plots(output_dir: str, name: str, fig) -> None:
 
 def save_latency_histograms(output_dir, fig):
     plt.figure(fig)
-    ax = plt.gca()
+    # ax = plt.gca()
 
-    plt.tight_layout()
     plt.savefig(join(output_dir, 'latency_histograms'))
     # plt.show()
     plt.close()
@@ -117,11 +116,12 @@ def plot_latency_statistics(uplink, downlink, output_dir):
     plt.close()
 
 
-def plot_latency_histograms(uplink, downlink, fig, num_rows, row_idx, trial_info):
+def plot_latency_histograms(uplink, downlink, fig, row_idx, trial_info):
     plt.figure(fig)
+    allaxes = fig.get_axes()
 
     # Downlink histogram
-    ax = fig.add_subplot(num_rows, 2, 2*row_idx+1)
+    ax = allaxes[2*row_idx]
     ax.hist(downlink, alpha=0.75, color='blue')
     ax.set_title(f'{trial_info} - Downlink Latency')
     ax.set_xlabel('Latency (ms)')
@@ -129,12 +129,14 @@ def plot_latency_histograms(uplink, downlink, fig, num_rows, row_idx, trial_info
     ax.grid(True, alpha=0.3)
 
     # Uplink histogram
-    ax = fig.add_subplot(num_rows, 2, 2*row_idx+2)
+    ax = allaxes[2*row_idx+1]
     ax.hist(uplink, alpha=0.75, color='green')
     ax.set_title(f'{trial_info} - Uplink Latency')
     ax.set_xlabel('Latency (ms)')
     ax.set_ylabel('Frequency')
     ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
 
 
 def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'):
@@ -229,7 +231,7 @@ def main(input_path: str) -> None:
     idx = 0
     colors = sns.color_palette()
     for configuration in data:
-        plot_latency_histograms(data[configuration]['Uplink'], data[configuration]['Downlink'], plots['Latency Hist'], num_configurations, idx, configuration)
+        plot_latency_histograms(data[configuration]['Uplink'], data[configuration]['Downlink'], plots['Latency Hist'], idx, configuration)
 
         plot_ml_metric(data[configuration]['Validation Accuracy'], val_acc_fig, configuration, colors[idx])
         plot_ml_metric(data[configuration]['Validation Loss'], val_loss_fig, configuration, colors[idx])
@@ -255,5 +257,4 @@ def main(input_path: str) -> None:
 if __name__ == '__main__':
     ML_CONFIDENCE_BANDS = False
     input_dir = input("Enter the path to the directory containing the trials: ")
-    # ../Library/CloudStorage/GoogleDrive-kaylacomer2029@u.northwestern.edu/My Drive/FL_5G_Experiments/
     main(input_dir)
