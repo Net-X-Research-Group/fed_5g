@@ -507,11 +507,11 @@ def plot_configurations(input_path, experiment_dir):
     
     format_save_ml_plots(input_dir, 'Validation Accuracy', val_acc_fig)
     format_save_ml_plots(input_dir, 'Validation Loss', val_loss_fig)
-
+    configuration = None
     for metric in time_metrics:
         try:
-            data = pd.concat([data[configuration][metric] for configuration in data], axis=1)
-            plot_time_histograms(data, input_path, metric)
+            data_concat = pd.concat([data[configuration][metric] for configuration in data], axis=1)
+            plot_time_histograms(data_concat, input_path, metric)
         except Exception as e:
             print(f"Error processing {metric} for {configuration}: {e}")
 
@@ -531,7 +531,7 @@ if __name__ == '__main__':
     
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
     AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
-    PLOT_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
+    PLOT_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     IMPORT_ALL_TRIAL_DATA = True # whether we should go into each trial (within in a configuration) and export the json data to CSV files. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     
     input_dir = input("Enter the path to the directory containing the trials: ")
