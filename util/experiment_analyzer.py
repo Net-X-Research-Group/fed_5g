@@ -352,6 +352,63 @@ def plot_latency_histograms_by_cid(agg_latencies, output_dir):
     # plt.show()
     plt.close()
 
+def retrieve_trial_metrics(configuration):
+    trial_dirs = [d for d in listdir(configuration) if isdir(join(configuration, d))]
+
+    # Latency
+    latencies = {}
+    agg_latencies = {}
+
+    # Times
+    training_times = {}
+    train_test_times = {}
+    val_test_times = {}
+
+    # ML Metrics
+    val_accuracies = {}
+    val_losses = {}
+    train_accuracies = {}
+    train_losses = {}
+
+    for trial_dir in trial_dirs:
+        trial_path = join(configuration, trial_dir)
+
+        # Convert individual metrics to csv
+        individual_metrics = _read_json(join(trial_path, 'individual_metrics.json'))
+        export_metrics_to_csv(individual_metrics, trial_path)
+
+        # Process latency data captured by Flower
+        try:
+            trial_results = process_trial_latency(trial_path)
+            for cid, df in trial_results.items():
+                if cid not in latencies:
+                    latencies[cid] = []
+                latencies[cid].append(df)
+        except Exception as e:
+            print(f"Error processing {trial_dir}: {e}")
+
+        # Process training time metrics, measured by flower
+        try:
+            training_times[trial_dir] = pd.read_csv(join(trial_path, 'training_time.csv'))
+            train_test_times[trial_dir] = pd.read_csv(join(trial_path, 'train_test_time.csv'))
+            val_test_times[trial_dir] = pd.read_csv(join(trial_path, 'val_test_time.csv'))
+        except Exception as e:
+            print(f"Error processing {trial_dir}: {e}")
+
+        # Process ML Metrics
+        try:
+            val_accuracies[trial_dir] = pd.read_csv(join(trial_path, 'val_acc.csv'))
+            val_losses[trial_dir] = pd.read_csv(join(trial_path, 'val_loss.csv'))
+            train_losses[trial_dir] = pd.read_csv(join(trial_path, 'train_loss.csv'))
+            train_accuracies[trial_dir] = pd.read_csv(join(trial_path, 'train_acc.csv'))
+        except Exception as e:
+            print(f"Error processing {trial_dir}: {e}")
+
+    for cid, dfs in latencies.items():
+        agg_df = pd.concat(dfs, axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
+        agg_latencies[cid] = agg_df
+
+    return trial_dirs
 
 def retrieveTrialMetrics(trial_path, trial_dir, configuration_path):
     # Convert individual metrics to csv
@@ -442,6 +499,9 @@ def retrieveTrialMetrics(trial_path, trial_dir, configuration_path):
 
 def retrieveConfigurationMetrics(input_path, experiment_dir):
     for configuration_dir in experiment_dir:
+        retrieve_trial_metrics(join(input_path, configuration_dir))
+        """
+        
         configuration_path = join(input_path, configuration_dir)
         trial_dirs = [d for d in listdir(configuration_path) if isdir(join(configuration_path, d))]
         for trial_dir in trial_dirs:
@@ -450,7 +510,7 @@ def retrieveConfigurationMetrics(input_path, experiment_dir):
                 retrieveTrialMetrics(trial_path, trial_dir, configuration_path)
             except Exception as e:
                 print(f"Error processing {trial_dir}: {e}")
-
+"""
 
 def plot_configurations(input_path, experiment_dir):
     time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time']
@@ -517,13 +577,13 @@ def plot_configurations(input_path, experiment_dir):
 
 
 def main(input_path: str) -> None:
-    experiment_dir = [d for d in listdir(input_path) if isdir(join(input_path, d))]
+    experiment_dirs = [d for d in listdir(input_path) if isdir(join(input_path, d))]
 
     if AGGREGATE_TRIAL_DATA:
-        retrieveConfigurationMetrics(input_path, experiment_dir)
+        retrieveConfigurationMetrics(input_path, experiment_dirs)
 
     if PLOT_EXPERIMENT_DATA:
-        plot_configurations(input_path, experiment_dir)
+        plot_configurations(input_path, experiment_dirs)
 
 
 if __name__ == '__main__':
