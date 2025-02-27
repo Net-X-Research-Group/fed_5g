@@ -126,7 +126,7 @@ def plot_ml_metric(data: pd.DataFrame, fig, label: str, color) -> None:
     # Create the plot
     sns.lineplot(data=mean, label=label, color=color, ax=ax)
     if ML_CONFIDENCE_BANDS:
-        plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color)
+        plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color, label='±1 std')
 
     plt.legend()
 
@@ -277,10 +277,87 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     plt.close()
 
 
+def plot_latency_statistics_by_cid(agg_latencies, output_dir):
+    """
+    Create violin plots for the latencies captured by flower.
+    """
+    plot_data = []
+    for cid, df in agg_latencies.items():
+        plot_data.extend([{
+            'Client': cid,
+            'Direction': 'Downlink',
+            'Latency (ms)': value
+        } for value in df['Downlink']])
+        plot_data.extend([{
+            'Client': cid,
+            'Direction': 'Uplink',
+            'Latency (ms)': value
+        } for value in df['Uplink']])
+
+    plot_df = pd.DataFrame(plot_data)
+
+    plt.figure(figsize=(12, 6))
+    sns.violinplot(data=plot_df, x='Client', y='Latency (ms)',
+                   hue='Direction', split=True, inner='quartile')
+
+    plt.title('Latency Distribution by Client')
+    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(join(output_dir, 'latency_distribution'))
+    # plt.show()
+    plt.close()
+
+    # Split
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
+                   x='Client', y='Latency (ms)', inner='quartile', ax=ax1)
+    ax1.set_title('Downlink Latency Distribution')
+    ax1.grid(True, alpha=0.3)
+
+    sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
+                   x='Client', y='Latency (ms)', inner='quartile', ax=ax2)
+    ax2.set_title('Uplink Latency Distribution')
+    ax2.grid(True, alpha=0.3)
+    plt.xticks(rotation=45)
+    plt.suptitle('Latency Distribution by Client')
+    plt.tight_layout()
+    plt.savefig(join(output_dir, 'latency_distribution_split'))
+    # plt.show()
+    plt.close()
+
+
+def plot_latency_histograms_by_cid(agg_latencies, output_dir):
+    """Create histogram subplots for each CID's latencies"""
+    num_cids = len(agg_latencies)
+    fig, axs = plt.subplots(num_cids, 2, figsize=(12, 4 * num_cids))
+
+    for idx, (cid, df) in enumerate(agg_latencies.items()):
+        # Downlink histogram
+        axs[idx, 0].hist(df['Downlink'], alpha=0.75, color='blue')
+        axs[idx, 0].set_title(f'{cid.replace("_", " ")} - Downlink Latency')
+        axs[idx, 0].set_xlabel('Latency (ms)')
+        axs[idx, 0].set_ylabel('Frequency')
+        axs[idx, 0].grid(True, alpha=0.3)
+
+        # Uplink histogram
+        axs[idx, 1].hist(df['Uplink'], alpha=0.75, color='green')
+        axs[idx, 1].set_title(f'{cid.replace("_", " ")} - Uplink Latency')
+        axs[idx, 1].set_xlabel('Latency (ms)')
+        axs[idx, 1].set_ylabel('Frequency')
+        axs[idx, 1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(join(output_dir, 'latency_histograms'))
+    # plt.show()
+    plt.close()
+
+
 def retrieveTrialMetrics(trial_path, trial_dir, configuration_path):
     # Convert individual metrics to csv
-    individual_metrics = _read_json(join(trial_path, 'individual_metrics.json'))
-    export_metrics_to_csv(individual_metrics, trial_path)
+    if IMPORT_ALL_TRIAL_DATA:
+        individual_metrics = _read_json(join(trial_path, 'individual_metrics.json'))
+        export_metrics_to_csv(individual_metrics, trial_path)
 
     # Latency
     latencies = {}
@@ -342,6 +419,26 @@ def retrieveTrialMetrics(trial_path, trial_dir, configuration_path):
     avg_val_losses = _aggregate_ml_metrics(val_losses, configuration_path, name='val_loss')
     avg_train_losses = _aggregate_ml_metrics(train_losses, configuration_path, name='train_loss')
 
+    if PLOT_TRIAL_DATA:
+        plot_latency_histograms_by_cid(agg_latencies, configuration_path)
+        plot_latency_statistics_by_cid(agg_latencies, configuration_path)
+        plot_time_histograms(agg_training_times, configuration_path, name='Training Time')
+        plot_time_histograms(agg_train_test_times, configuration_path, name='Train Test Time')
+        plot_time_histograms(agg_val_test_times, configuration_path, name='Validation Test Time')
+        
+        accuracy_fig = plt.figure(figsize=(10, 6))
+        loss_fig = plt.figure(figsize=(10, 6))
+
+        colors = sns.color_palette()
+
+        plot_ml_metric(avg_train_accuracies, accuracy_fig, 'Train', colors[0])
+        plot_ml_metric(avg_val_accuracies, accuracy_fig, 'Validation', colors[1])
+        plot_ml_metric(avg_train_losses, loss_fig, 'Train', colors[0])
+        plot_ml_metric(avg_val_losses, loss_fig, 'Validation', colors[1])
+
+        format_save_ml_plots(configuration_path, 'Accuracy', accuracy_fig)
+        format_save_ml_plots(configuration_path, 'Loss', loss_fig)
+
 
 def retrieveConfigurationMetrics(input_path, experiment_dir):
     for configuration_dir in experiment_dir:
@@ -355,11 +452,7 @@ def retrieveConfigurationMetrics(input_path, experiment_dir):
                 print(f"Error processing {trial_dir}: {e}")
 
 
-def main(input_path: str) -> None:
-    experiment_dir = [d for d in listdir(input_path) if isdir(join(input_path, d))]
-
-    retrieveConfigurationMetrics(input_path, experiment_dir)
-    
+def plot_configurations(input_path, experiment_dir):
     time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time']
     data = {}
 
@@ -423,7 +516,23 @@ def main(input_path: str) -> None:
             print(f"Error processing {metric} for {configuration}: {e}")
 
 
+def main(input_path: str) -> None:
+    experiment_dir = [d for d in listdir(input_path) if isdir(join(input_path, d))]
+
+    if AGGREGATE_TRIAL_DATA:
+        retrieveConfigurationMetrics(input_path, experiment_dir)
+
+    if PLOT_EXPERIMENT_DATA:
+        plot_configurations(input_path, experiment_dir)
+
+
 if __name__ == '__main__':
     ML_CONFIDENCE_BANDS = False
+    
+    PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
+    AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
+    PLOT_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
+    IMPORT_ALL_TRIAL_DATA = True # whether we should go into each trial (within in a configuration) and export the json data to CSV files. sub-condition of AGGREGATE_ALL_TRIAL_DATA
+    
     input_dir = input("Enter the path to the directory containing the trials: ")
     main(input_dir)
