@@ -69,7 +69,8 @@ def export_metrics_to_csv(data, output_dir):
         filename = f"{metric}.csv"
         filepath = join(output_dir, filename)
         df.to_csv(filepath, index=False)
-        print(f"Saved {str(filepath)}")
+        if VERBOSITY == 2:
+            print(f"Saved {str(filepath)}")
 
 
 def process_trial_latency(path: str) -> dict:
@@ -91,6 +92,8 @@ def _aggregate_metrics(metrics_dict: dict, output_path: str, name: str) -> pd.Da
     """Aggregate metrics across trials by computing the mean for each round."""
     df = pd.concat(metrics_dict.values(), axis=1).T.groupby(level=0).mean().T
     df.to_csv(join(output_path, f'{name}_aggregated.csv'), index=False)
+    if VERBOSITY >= 1:
+        print(f'Saved {output_path}/{name}_aggregated.csv')
     return df
 
 
@@ -107,6 +110,8 @@ def _aggregate_ml_metrics(metrics_dict: dict, output_path: str, name: str) -> li
         # Drop all but 'avg'
         agg_dfs.append(df[['avg']])
     pd.concat(agg_dfs, axis=1).to_csv(join(output_path, f'avg_{name}.csv'), index=False)  # Concat and save as csv
+    if VERBOSITY >= 1:
+        print(f'Saved {output_path}/avg_{name}.csv')
     return agg_dfs
 
 
@@ -416,6 +421,8 @@ def retrieve_trial_metrics(configuration):
     try:
         agg_latencies = dict(sorted(agg_latencies.items(), key=lambda x: int(x[0].split('_')[1]))) # Sort the dict by CID
         pd.concat(agg_latencies, axis=1).to_csv(join(configuration, f'latencies_aggregated.csv'), index=False)  # Concat and save as csv
+        if VERBOSITY >= 1:
+            print(f'Saved {configuration_path}/latencies_aggregated.csv')
     except Exception as e:
         print(f"Error processing agg_latencies for {configuration_path}: {e}")
     
@@ -467,19 +474,7 @@ def retrieve_trial_metrics(configuration):
 def retrieveConfigurationMetrics(input_path, experiment_dir):
     for configuration_dir in experiment_dir:
         retrieve_trial_metrics(join(input_path, configuration_dir))
-        
-    
-        """
-        
-        configuration_path = join(input_path, configuration_dir)
-        trial_dirs = [d for d in listdir(configuration_path) if isdir(join(configuration_path, d))]
-        for trial_dir in trial_dirs:
-            trial_path = join(configuration_path, trial_dir)
-            try:
-                retrieveTrialMetrics(trial_path, trial_dir, configuration_path)
-            except Exception as e:
-                print(f"Error processing {trial_path}: {e}")
-"""
+
 
 def plot_configurations(input_path, experiment_dir):
     time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time']
@@ -557,6 +552,13 @@ def main(input_path: str) -> None:
 
 if __name__ == '__main__':
     ML_CONFIDENCE_BANDS = False
+
+    ''' level of print statements (higher level -> more print statements)
+    - when csv files are created and saved from trial jsons (level 2)
+    - csv files created for aggregated metrics (level 1)
+    - errors always printed
+    '''
+    VERBOSITY = 1
     
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
     AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
