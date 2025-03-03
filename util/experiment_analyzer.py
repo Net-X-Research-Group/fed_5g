@@ -152,12 +152,18 @@ def plot_ml_metric(data: pd.DataFrame, fig, label: str, color, round_time) -> No
     lower = mean - std
     upper = mean + std
 
-    time = [sum(round_time[:i]) for i in range(len(round_time))]
-
     # Create the plot
-    sns.lineplot(x=time, y=mean, label=label, color=color, ax=ax)
-    if ML_CONFIDENCE_BANDS:
-        plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color, label='±1 std')
+    if PLOT_ROUNDS_INSTEAD_OF_TIME:
+        sns.lineplot(data=mean, label=label, color=color, ax=ax)
+        if ML_CONFIDENCE_BANDS:
+            plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color, label='±1 std')
+    else:
+        time = [sum(round_time[:i]) for i in range(len(round_time))]
+        sns.lineplot(x=time, y=mean, label=label, color=color, ax=ax)
+        if ML_CONFIDENCE_BANDS:
+            plt.fill_between(time, lower, upper, alpha=0.3, color=color, label='±1 std')
+
+    
 
     plt.legend()
 
@@ -167,7 +173,10 @@ def format_save_ml_plots(output_dir: str, name: str, fig) -> None:
     ax = plt.gca()
     
     plt.title(name)
-    plt.xlabel('Time (s)')
+    if PLOT_ROUNDS_INSTEAD_OF_TIME:
+        plt.xlabel('Round')
+    else:
+        plt.xlabel('Time (s)')
     plt.ylabel('')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -587,7 +596,8 @@ def main(input_path: str) -> None:
 
 
 if __name__ == '__main__':
-    ML_CONFIDENCE_BANDS = False
+    ML_CONFIDENCE_BANDS = True
+    PLOT_ROUNDS_INSTEAD_OF_TIME = True
 
     ''' level of print statements (higher level -> more print statements)
     - when csv files are created and saved from trial jsons (level 2)
@@ -596,7 +606,6 @@ if __name__ == '__main__':
     '''
     VERBOSITY = 1
     
-    PLOT_ROUNDS_INSTEAD_OF_TIME = False
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
     AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
     PLOT_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
