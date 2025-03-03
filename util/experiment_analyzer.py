@@ -139,7 +139,7 @@ def _aggregate_ml_metrics(metrics_dict: dict, output_path: str, name: str) -> li
     return agg_dfs
 
 
-def plot_ml_metric(data: pd.DataFrame, fig, label: str, color) -> None:
+def plot_ml_metric(data: pd.DataFrame, fig, label: str, color, round_time) -> None:
     plt.figure(fig)
     ax = plt.gca()
 
@@ -152,8 +152,11 @@ def plot_ml_metric(data: pd.DataFrame, fig, label: str, color) -> None:
     lower = mean - std
     upper = mean + std
 
+    time = [sum(round_time[:i]) for i in range(len(round_time))]
+    print(f'max time value: {max(time)} for trial {label}')
+
     # Create the plot
-    sns.lineplot(data=mean, label=label, color=color, ax=ax)
+    sns.lineplot(x=time, y=mean, label=label, color=color, ax=ax)
     if ML_CONFIDENCE_BANDS:
         plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color, label='±1 std')
 
@@ -165,7 +168,8 @@ def format_save_ml_plots(output_dir: str, name: str, fig) -> None:
     ax = plt.gca()
     
     plt.title(name)
-    plt.xlabel('Round')
+    plt.xlabel('Time (s)')
+    plt.ylabel('')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
@@ -489,10 +493,10 @@ def retrieve_trial_metrics(configuration):
 
             colors = sns.color_palette()
 
-            plot_ml_metric(avg_train_accuracies, accuracy_fig, 'Train', colors[0])
-            plot_ml_metric(avg_val_accuracies, accuracy_fig, 'Validation', colors[1])
-            plot_ml_metric(avg_train_losses, loss_fig, 'Train', colors[0])
-            plot_ml_metric(avg_val_losses, loss_fig, 'Validation', colors[1])
+            plot_ml_metric(avg_train_accuracies, accuracy_fig, 'Train', colors[0], agg_round_times)
+            plot_ml_metric(avg_val_accuracies, accuracy_fig, 'Validation', colors[1], agg_round_times)
+            plot_ml_metric(avg_train_losses, loss_fig, 'Train', colors[0], agg_round_times)
+            plot_ml_metric(avg_val_losses, loss_fig, 'Validation', colors[1], agg_round_times)
 
             format_save_ml_plots(configuration_path, 'Accuracy', accuracy_fig)
             format_save_ml_plots(configuration_path, 'Loss', loss_fig)
@@ -552,8 +556,8 @@ def plot_configurations(input_path, experiment_dir):
     for configuration in data:
         plot_latency_histograms(data[configuration]['Uplink'], data[configuration]['Downlink'], plots['Latency Hist'], idx, configuration)
 
-        plot_ml_metric(data[configuration]['Validation Accuracy'], val_acc_fig, configuration, colors[idx])
-        plot_ml_metric(data[configuration]['Validation Loss'], val_loss_fig, configuration, colors[idx])
+        plot_ml_metric(data[configuration]['Validation Accuracy'], val_acc_fig, configuration, colors[idx], data[configuration]['Round Time'])
+        plot_ml_metric(data[configuration]['Validation Loss'], val_loss_fig, configuration, colors[idx], data[configuration]['Round Time'])
         idx += 1
     
     save_latency_histograms(input_path, plots['Latency Hist'])
