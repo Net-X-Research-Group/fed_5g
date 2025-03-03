@@ -153,7 +153,6 @@ def plot_ml_metric(data: pd.DataFrame, fig, label: str, color, round_time) -> No
     upper = mean + std
 
     time = [sum(round_time[:i]) for i in range(len(round_time))]
-    print(f'max time value: {max(time)} for trial {label}')
 
     # Create the plot
     sns.lineplot(x=time, y=mean, label=label, color=color, ax=ax)
