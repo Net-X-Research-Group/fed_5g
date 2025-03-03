@@ -426,7 +426,8 @@ def retrieve_trial_metrics(configuration):
             train_test_times[trial_dir] = pd.read_csv(join(trial_path, 'train_test_time.csv'))
             val_test_times[trial_dir] = pd.read_csv(join(trial_path, 'val_test_time.csv'))
 
-            # Calculate round time metric by adding segments
+            # Process round time metric
+            round_times[trial_dir] = pd.read_csv(join(trial_path, 'round_time.csv'))
 
         except Exception as e:
             print(f"Error processing {trial_path}: {e}")
@@ -459,6 +460,9 @@ def retrieve_trial_metrics(configuration):
         agg_training_times = _aggregate_metrics(training_times, configuration_path, name='training_time')
         agg_train_test_times = _aggregate_metrics(train_test_times, configuration_path, name='train_test_time')
         agg_val_test_times = _aggregate_metrics(val_test_times, configuration_path, name='val_test_time')
+
+        agg_round_times = _aggregate_metrics(round_times, configuration_path, name='round_time')
+
     except Exception as e:
         print(f"Error processing training time metrics for {configuration_path}: {e}")
 
@@ -478,6 +482,7 @@ def retrieve_trial_metrics(configuration):
             plot_time_histograms(agg_training_times, configuration_path, name='Training Time')
             plot_time_histograms(agg_train_test_times, configuration_path, name='Train Test Time')
             plot_time_histograms(agg_val_test_times, configuration_path, name='Validation Test Time')
+            plot_time_histograms(agg_val_test_times, configuration_path, name='Round Time')
             
             accuracy_fig = plt.figure(figsize=(10, 6))
             loss_fig = plt.figure(figsize=(10, 6))
