@@ -50,6 +50,30 @@ def export_metrics_to_csv(data, output_dir):
     # Get all rounds
     rounds = sorted(list(data.keys()), key=int)
 
+    ''' Just repeat the code from the following for loop (for metric in metrics) to inelegantly calculate round time'''
+    round_time_df = pd.DataFrame(index=rounds)
+    for cid in cids:
+        cid_values = []
+        for round_num in rounds:
+            if cid in data[round_num]:
+                value = 0
+                for metric in list(data[first_round][first_cid].keys()):
+                    if 'time' in metric and 'start' not in metric and 'end' not in metric:
+                        # cid_values.append(data[round_num][cid][metric])
+                        value += data[round_num][cid][metric]
+                cid_values.append(value)
+            else:
+                cid_values.append(None)  # Handle missing data
+        round_time_df[f'CID_{cid}'] = cid_values
+    round_time_df.index.name = 'Round'
+    # Save to CSV
+    filename = f"round_time.csv"
+    filepath = join(output_dir, filename)
+    round_time_df.to_csv(filepath, index=False)
+    if VERBOSITY == 2:
+        print(f"Saved {str(filepath)}")
+    ''' End of repeated code section (repeats following code for one new metric)'''
+
     # For each metric, create a DataFrame and save to CSV
     for metric in metrics:
         # Create empty DataFrame with rounds as index
@@ -403,7 +427,7 @@ def retrieve_trial_metrics(configuration):
             val_test_times[trial_dir] = pd.read_csv(join(trial_path, 'val_test_time.csv'))
 
             # Calculate round time metric by adding segments
-            
+
         except Exception as e:
             print(f"Error processing {trial_path}: {e}")
 
