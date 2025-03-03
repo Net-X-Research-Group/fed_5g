@@ -510,7 +510,7 @@ def retrieveConfigurationMetrics(input_path, experiment_dir):
 
 
 def plot_configurations(input_path, experiment_dir):
-    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time']
+    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time', 'Round Time']
     data = {}
 
     for result in experiment_dir:
