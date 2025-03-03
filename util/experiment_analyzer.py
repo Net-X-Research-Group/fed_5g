@@ -596,6 +596,7 @@ if __name__ == '__main__':
     '''
     VERBOSITY = 1
     
+    PLOT_ROUNDS_INSTEAD_OF_TIME = False
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
     AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
     PLOT_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
