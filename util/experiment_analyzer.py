@@ -196,18 +196,18 @@ def plot_latency_statistics(uplink, downlink, output_dir):
         plot_data.extend([{
             'Configuration': configuration,
             'Direction': 'Downlink',
-            'Latency (ms)': value
+            'Latency (s)': value
         } for value in downlink[configuration]])
         plot_data.extend([{
             'Configuration': configuration,
             'Direction': 'Uplink',
-            'Latency (ms)': value
+            'Latency (s)': value
         } for value in uplink[configuration]])
 
     plot_df = pd.DataFrame(plot_data)
 
     plt.figure(figsize=(12, 6))
-    sns.violinplot(data=plot_df, x='Configuration', y='Latency (ms)',
+    sns.violinplot(data=plot_df, x='Configuration', y='Latency (s)',
                    hue='Direction', split=True, inner='quartile', density_norm="area", common_norm=True)
 
     plt.title('Latency Distribution by Configuration')
@@ -221,12 +221,12 @@ def plot_latency_statistics(uplink, downlink, output_dir):
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
-                   x='Configuration', y='Latency (ms)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
+                   x='Configuration', y='Latency (s)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
 
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
-                   x='Configuration', y='Latency (ms)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
+                   x='Configuration', y='Latency (s)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
     plt.xticks(rotation=45)
@@ -245,7 +245,7 @@ def plot_latency_histograms(uplink, downlink, fig, row_idx, trial_info):
     ax = allaxes[2*row_idx]
     ax.hist(downlink, alpha=0.75, color='blue')
     ax.set_title(f'{trial_info} - Downlink Latency')
-    ax.set_xlabel('Latency (ms)')
+    ax.set_xlabel('Latency (s)')
     ax.set_ylabel('Frequency')
     ax.grid(True, alpha=0.3)
 
@@ -253,7 +253,7 @@ def plot_latency_histograms(uplink, downlink, fig, row_idx, trial_info):
     ax = allaxes[2*row_idx+1]
     ax.hist(uplink, alpha=0.75, color='green')
     ax.set_title(f'{trial_info} - Uplink Latency')
-    ax.set_xlabel('Latency (ms)')
+    ax.set_xlabel('Latency (s)')
     ax.set_ylabel('Frequency')
     ax.grid(True, alpha=0.3)
 
@@ -318,18 +318,18 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
         plot_data.extend([{
             'Client': cid,
             'Direction': 'Downlink',
-            'Latency (ms)': value
+            'Latency (s)': value
         } for value in df['Downlink']])
         plot_data.extend([{
             'Client': cid,
             'Direction': 'Uplink',
-            'Latency (ms)': value
+            'Latency (s)': value
         } for value in df['Uplink']])
 
     plot_df = pd.DataFrame(plot_data)
 
     plt.figure(figsize=(12, 6))
-    sns.violinplot(data=plot_df, x='Client', y='Latency (ms)',
+    sns.violinplot(data=plot_df, x='Client', y='Latency (s)',
                    hue='Direction', split=True, inner='quartile', density_norm="area", common_norm=True)
 
     plt.title('Latency Distribution by Client')
@@ -343,12 +343,12 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
-                   x='Client', y='Latency (ms)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
+                   x='Client', y='Latency (s)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
 
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
-                   x='Client', y='Latency (ms)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
+                   x='Client', y='Latency (s)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
     plt.xticks(rotation=45)
@@ -368,14 +368,14 @@ def plot_latency_histograms_by_cid(agg_latencies, output_dir):
         # Downlink histogram
         axs[idx, 0].hist(df['Downlink'], alpha=0.75, color='blue')
         axs[idx, 0].set_title(f'{cid.replace("_", " ")} - Downlink Latency')
-        axs[idx, 0].set_xlabel('Latency (ms)')
+        axs[idx, 0].set_xlabel('Latency (s)')
         axs[idx, 0].set_ylabel('Frequency')
         axs[idx, 0].grid(True, alpha=0.3)
 
         # Uplink histogram
         axs[idx, 1].hist(df['Uplink'], alpha=0.75, color='green')
         axs[idx, 1].set_title(f'{cid.replace("_", " ")} - Uplink Latency')
-        axs[idx, 1].set_xlabel('Latency (ms)')
+        axs[idx, 1].set_xlabel('Latency (s)')
         axs[idx, 1].set_ylabel('Frequency')
         axs[idx, 1].grid(True, alpha=0.3)
 
