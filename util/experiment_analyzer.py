@@ -357,6 +357,9 @@ def plot_latency_histograms_by_cid(agg_latencies, output_dir):
     # plt.show()
     plt.close()
 
+def export_round_time(metrics, path):
+    pass
+
 def retrieve_trial_metrics(configuration):
     trial_dirs = [d for d in listdir(configuration) if isdir(join(configuration, d))]
 
@@ -368,6 +371,7 @@ def retrieve_trial_metrics(configuration):
     training_times = {}
     train_test_times = {}
     val_test_times = {}
+    round_times = {}
 
     # ML Metrics
     val_accuracies = {}
@@ -385,21 +389,21 @@ def retrieve_trial_metrics(configuration):
         except Exception as e:
             print(f"Error processing {str(trial_path)}: {e}")
 
-        # Process latency data captured by Flower
         try:
+            # Process latency data captured by Flower
             trial_results = process_trial_latency(trial_path)
             for cid, df in trial_results.items():
                 if cid not in latencies:
                     latencies[cid] = []
                 latencies[cid].append(df)
-        except Exception as e:
-            print(f"Error processing {trial_path}: {e}")
-
-        # Process training time metrics, measured by flower
-        try:
+            
+            # Process training time metrics, measured by flower
             training_times[trial_dir] = pd.read_csv(join(trial_path, 'training_time.csv'))
             train_test_times[trial_dir] = pd.read_csv(join(trial_path, 'train_test_time.csv'))
             val_test_times[trial_dir] = pd.read_csv(join(trial_path, 'val_test_time.csv'))
+
+            # Calculate round time metric by adding segments
+            
         except Exception as e:
             print(f"Error processing {trial_path}: {e}")
 
