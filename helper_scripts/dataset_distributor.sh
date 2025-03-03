@@ -29,7 +29,7 @@ $PYTHON "$PARTITIONER_SCRIPT" -d $DATASET -n "$NUM_CLIENTS" -p $STRATEGY
 # Distribute
 for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     LOGIN=$DEVICE_NAME_PREFIX$CID@$IP_PREFIX${IP_SUFFIXES[$CID-1]}
-    FOLDER="~/${NUM_CLIENTS}node_datasets/"
+    FOLDER="~/node_datasets/"
     ssh "$LOGIN" mkdir -p "$FOLDER"
     echo "Copying part ${CID} to $DEVICE_NAME_PREFIX${CID}"
     scp -r ~/datasets/"${STRATEGY}"/${DATASET}_"${STRATEGY}"_part_${CID}/ "$LOGIN":"$FOLDER"
