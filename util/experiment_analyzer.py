@@ -482,7 +482,7 @@ def retrieve_trial_metrics(configuration):
             plot_time_histograms(agg_training_times, configuration_path, name='Training Time')
             plot_time_histograms(agg_train_test_times, configuration_path, name='Train Test Time')
             plot_time_histograms(agg_val_test_times, configuration_path, name='Validation Test Time')
-            plot_time_histograms(agg_val_test_times, configuration_path, name='Round Time')
+            plot_time_histograms(agg_round_times, configuration_path, name='Round Time')
             
             accuracy_fig = plt.figure(figsize=(10, 6))
             loss_fig = plt.figure(figsize=(10, 6))
