@@ -110,7 +110,7 @@ def server_fn(context: Context):
         run_id=context.run_id,
     )
 
-    config = ServerConfig(num_rounds=rounds, round_timeout=40)
+    config = ServerConfig(num_rounds=rounds)
 
     return ServerAppComponents(strategy=strategy, config=config)
 
