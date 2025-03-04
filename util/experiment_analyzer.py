@@ -50,6 +50,30 @@ def export_metrics_to_csv(data, output_dir):
     # Get all rounds
     rounds = sorted(list(data.keys()), key=int)
 
+    ''' Just repeat the code from the following for loop (for metric in metrics) to inelegantly calculate round time'''
+    round_time_df = pd.DataFrame(index=rounds)
+    for cid in cids:
+        cid_values = []
+        for round_num in rounds:
+            if cid in data[round_num]:
+                value = 0
+                for metric in list(data[first_round][first_cid].keys()):
+                    if 'time' in metric and 'start' not in metric and 'end' not in metric:
+                        # cid_values.append(data[round_num][cid][metric])
+                        value += data[round_num][cid][metric]
+                cid_values.append(value)
+            else:
+                cid_values.append(None)  # Handle missing data
+        round_time_df[f'CID_{cid}'] = cid_values
+    round_time_df.index.name = 'Round'
+    # Save to CSV
+    filename = f"round_time.csv"
+    filepath = join(output_dir, filename)
+    round_time_df.to_csv(filepath, index=False)
+    if VERBOSITY == 2:
+        print(f"Saved {str(filepath)}")
+    ''' End of repeated code section (repeats following code for one new metric)'''
+
     # For each metric, create a DataFrame and save to CSV
     for metric in metrics:
         # Create empty DataFrame with rounds as index
@@ -115,7 +139,7 @@ def _aggregate_ml_metrics(metrics_dict: dict, output_path: str, name: str) -> li
     return agg_dfs
 
 
-def plot_ml_metric(data: pd.DataFrame, fig, label: str, color) -> None:
+def plot_ml_metric(data: pd.DataFrame, fig, label: str, color, round_time) -> None:
     plt.figure(fig)
     ax = plt.gca()
 
@@ -129,9 +153,17 @@ def plot_ml_metric(data: pd.DataFrame, fig, label: str, color) -> None:
     upper = mean + std
 
     # Create the plot
-    sns.lineplot(data=mean, label=label, color=color, ax=ax)
-    if ML_CONFIDENCE_BANDS:
-        plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color, label='±1 std')
+    if PLOT_ROUNDS_INSTEAD_OF_TIME:
+        sns.lineplot(data=mean, label=label, color=color, ax=ax)
+        if ML_CONFIDENCE_BANDS:
+            plt.fill_between(mean.index, lower, upper, alpha=0.3, color=color, label='±1 std')
+    else:
+        time = [sum(round_time[:i]) for i in range(len(round_time))]
+        sns.lineplot(x=time, y=mean, label=label, color=color, ax=ax)
+        if ML_CONFIDENCE_BANDS:
+            plt.fill_between(time, lower, upper, alpha=0.3, color=color, label='±1 std')
+
+    
 
     plt.legend()
 
@@ -141,7 +173,11 @@ def format_save_ml_plots(output_dir: str, name: str, fig) -> None:
     ax = plt.gca()
     
     plt.title(name)
-    plt.xlabel('Round')
+    if PLOT_ROUNDS_INSTEAD_OF_TIME:
+        plt.xlabel('Round')
+    else:
+        plt.xlabel('Time (s)')
+    plt.ylabel('')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
@@ -169,18 +205,18 @@ def plot_latency_statistics(uplink, downlink, output_dir):
         plot_data.extend([{
             'Configuration': configuration,
             'Direction': 'Downlink',
-            'Latency (ms)': value
+            'Latency (s)': value
         } for value in downlink[configuration]])
         plot_data.extend([{
             'Configuration': configuration,
             'Direction': 'Uplink',
-            'Latency (ms)': value
+            'Latency (s)': value
         } for value in uplink[configuration]])
 
     plot_df = pd.DataFrame(plot_data)
 
     plt.figure(figsize=(12, 6))
-    sns.violinplot(data=plot_df, x='Configuration', y='Latency (ms)',
+    sns.violinplot(data=plot_df, x='Configuration', y='Latency (s)',
                    hue='Direction', split=True, inner='quartile', density_norm="area", common_norm=True)
 
     plt.title('Latency Distribution by Configuration')
@@ -194,12 +230,12 @@ def plot_latency_statistics(uplink, downlink, output_dir):
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
-                   x='Configuration', y='Latency (ms)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
+                   x='Configuration', y='Latency (s)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
 
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
-                   x='Configuration', y='Latency (ms)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
+                   x='Configuration', y='Latency (s)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
     plt.xticks(rotation=45)
@@ -218,7 +254,7 @@ def plot_latency_histograms(uplink, downlink, fig, row_idx, trial_info):
     ax = allaxes[2*row_idx]
     ax.hist(downlink, alpha=0.75, color='blue')
     ax.set_title(f'{trial_info} - Downlink Latency')
-    ax.set_xlabel('Latency (ms)')
+    ax.set_xlabel('Latency (s)')
     ax.set_ylabel('Frequency')
     ax.grid(True, alpha=0.3)
 
@@ -226,7 +262,7 @@ def plot_latency_histograms(uplink, downlink, fig, row_idx, trial_info):
     ax = allaxes[2*row_idx+1]
     ax.hist(uplink, alpha=0.75, color='green')
     ax.set_title(f'{trial_info} - Uplink Latency')
-    ax.set_xlabel('Latency (ms)')
+    ax.set_xlabel('Latency (s)')
     ax.set_ylabel('Frequency')
     ax.grid(True, alpha=0.3)
 
@@ -291,18 +327,18 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
         plot_data.extend([{
             'Client': cid,
             'Direction': 'Downlink',
-            'Latency (ms)': value
+            'Latency (s)': value
         } for value in df['Downlink']])
         plot_data.extend([{
             'Client': cid,
             'Direction': 'Uplink',
-            'Latency (ms)': value
+            'Latency (s)': value
         } for value in df['Uplink']])
 
     plot_df = pd.DataFrame(plot_data)
 
     plt.figure(figsize=(12, 6))
-    sns.violinplot(data=plot_df, x='Client', y='Latency (ms)',
+    sns.violinplot(data=plot_df, x='Client', y='Latency (s)',
                    hue='Direction', split=True, inner='quartile', density_norm="area", common_norm=True)
 
     plt.title('Latency Distribution by Client')
@@ -316,12 +352,12 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
-                   x='Client', y='Latency (ms)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
+                   x='Client', y='Latency (s)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
 
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
-                   x='Client', y='Latency (ms)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
+                   x='Client', y='Latency (s)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
     plt.xticks(rotation=45)
@@ -341,14 +377,14 @@ def plot_latency_histograms_by_cid(agg_latencies, output_dir):
         # Downlink histogram
         axs[idx, 0].hist(df['Downlink'], alpha=0.75, color='blue')
         axs[idx, 0].set_title(f'{cid.replace("_", " ")} - Downlink Latency')
-        axs[idx, 0].set_xlabel('Latency (ms)')
+        axs[idx, 0].set_xlabel('Latency (s)')
         axs[idx, 0].set_ylabel('Frequency')
         axs[idx, 0].grid(True, alpha=0.3)
 
         # Uplink histogram
         axs[idx, 1].hist(df['Uplink'], alpha=0.75, color='green')
         axs[idx, 1].set_title(f'{cid.replace("_", " ")} - Uplink Latency')
-        axs[idx, 1].set_xlabel('Latency (ms)')
+        axs[idx, 1].set_xlabel('Latency (s)')
         axs[idx, 1].set_ylabel('Frequency')
         axs[idx, 1].grid(True, alpha=0.3)
 
@@ -356,6 +392,9 @@ def plot_latency_histograms_by_cid(agg_latencies, output_dir):
     plt.savefig(join(output_dir, 'latency_histograms'))
     # plt.show()
     plt.close()
+
+def export_round_time(metrics, path):
+    pass
 
 def retrieve_trial_metrics(configuration):
     trial_dirs = [d for d in listdir(configuration) if isdir(join(configuration, d))]
@@ -368,6 +407,7 @@ def retrieve_trial_metrics(configuration):
     training_times = {}
     train_test_times = {}
     val_test_times = {}
+    round_times = {}
 
     # ML Metrics
     val_accuracies = {}
@@ -385,21 +425,22 @@ def retrieve_trial_metrics(configuration):
         except Exception as e:
             print(f"Error processing {str(trial_path)}: {e}")
 
-        # Process latency data captured by Flower
         try:
+            # Process latency data captured by Flower
             trial_results = process_trial_latency(trial_path)
             for cid, df in trial_results.items():
                 if cid not in latencies:
                     latencies[cid] = []
                 latencies[cid].append(df)
-        except Exception as e:
-            print(f"Error processing {trial_path}: {e}")
-
-        # Process training time metrics, measured by flower
-        try:
+            
+            # Process training time metrics, measured by flower
             training_times[trial_dir] = pd.read_csv(join(trial_path, 'training_time.csv'))
             train_test_times[trial_dir] = pd.read_csv(join(trial_path, 'train_test_time.csv'))
             val_test_times[trial_dir] = pd.read_csv(join(trial_path, 'val_test_time.csv'))
+
+            # Process round time metric
+            round_times[trial_dir] = pd.read_csv(join(trial_path, 'round_time.csv'))
+
         except Exception as e:
             print(f"Error processing {trial_path}: {e}")
 
@@ -431,6 +472,9 @@ def retrieve_trial_metrics(configuration):
         agg_training_times = _aggregate_metrics(training_times, configuration_path, name='training_time')
         agg_train_test_times = _aggregate_metrics(train_test_times, configuration_path, name='train_test_time')
         agg_val_test_times = _aggregate_metrics(val_test_times, configuration_path, name='val_test_time')
+
+        agg_round_times = _aggregate_metrics(round_times, configuration_path, name='round_time')
+
     except Exception as e:
         print(f"Error processing training time metrics for {configuration_path}: {e}")
 
@@ -450,16 +494,17 @@ def retrieve_trial_metrics(configuration):
             plot_time_histograms(agg_training_times, configuration_path, name='Training Time')
             plot_time_histograms(agg_train_test_times, configuration_path, name='Train Test Time')
             plot_time_histograms(agg_val_test_times, configuration_path, name='Validation Test Time')
+            plot_time_histograms(agg_round_times, configuration_path, name='Round Time')
             
             accuracy_fig = plt.figure(figsize=(10, 6))
             loss_fig = plt.figure(figsize=(10, 6))
 
             colors = sns.color_palette()
 
-            plot_ml_metric(avg_train_accuracies, accuracy_fig, 'Train', colors[0])
-            plot_ml_metric(avg_val_accuracies, accuracy_fig, 'Validation', colors[1])
-            plot_ml_metric(avg_train_losses, loss_fig, 'Train', colors[0])
-            plot_ml_metric(avg_val_losses, loss_fig, 'Validation', colors[1])
+            plot_ml_metric(avg_train_accuracies, accuracy_fig, 'Train', colors[0], agg_round_times)
+            plot_ml_metric(avg_val_accuracies, accuracy_fig, 'Validation', colors[1], agg_round_times)
+            plot_ml_metric(avg_train_losses, loss_fig, 'Train', colors[0], agg_round_times)
+            plot_ml_metric(avg_val_losses, loss_fig, 'Validation', colors[1], agg_round_times)
 
             format_save_ml_plots(configuration_path, 'Accuracy', accuracy_fig)
             format_save_ml_plots(configuration_path, 'Loss', loss_fig)
@@ -477,7 +522,7 @@ def retrieveConfigurationMetrics(input_path, experiment_dir):
 
 
 def plot_configurations(input_path, experiment_dir):
-    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time']
+    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time', 'Round Time']
     data = {}
 
     for result in experiment_dir:
@@ -519,8 +564,8 @@ def plot_configurations(input_path, experiment_dir):
     for configuration in data:
         plot_latency_histograms(data[configuration]['Uplink'], data[configuration]['Downlink'], plots['Latency Hist'], idx, configuration)
 
-        plot_ml_metric(data[configuration]['Validation Accuracy'], val_acc_fig, configuration, colors[idx])
-        plot_ml_metric(data[configuration]['Validation Loss'], val_loss_fig, configuration, colors[idx])
+        plot_ml_metric(data[configuration]['Validation Accuracy'], val_acc_fig, configuration, colors[idx], data[configuration]['Round Time'])
+        plot_ml_metric(data[configuration]['Validation Loss'], val_loss_fig, configuration, colors[idx], data[configuration]['Round Time'])
         idx += 1
     
     save_latency_histograms(input_path, plots['Latency Hist'])
@@ -551,7 +596,8 @@ def main(input_path: str) -> None:
 
 
 if __name__ == '__main__':
-    ML_CONFIDENCE_BANDS = False
+    ML_CONFIDENCE_BANDS = True
+    PLOT_ROUNDS_INSTEAD_OF_TIME = True
 
     ''' level of print statements (higher level -> more print statements)
     - when csv files are created and saved from trial jsons (level 2)
