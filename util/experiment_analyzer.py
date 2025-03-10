@@ -17,7 +17,7 @@ plt.rcParams.update({
         'ytick.labelsize': 8,
         'figure.dpi': 600,
         'savefig.dpi': 600,
-        'savefig.format': 'png',
+        'savefig.format': 'svg',
         'savefig.bbox': 'tight'
     })
 
@@ -214,10 +214,16 @@ def plot_latency_statistics(uplink, downlink, output_dir):
         } for value in uplink[configuration]])
 
     plot_df = pd.DataFrame(plot_data)
+    downlink_expired = plot_df[(plot_df['Direction'] == 'Downlink') & (plot_df['Latency (s)'] >= 60)]
+    uplink_expired = plot_df[(plot_df['Direction'] == 'Uplink') & (plot_df['Latency (s)'] >= 60)]
+
+    print(f'Number of expired DL: {len(downlink_expired)}')
+    print(f'Number of expired UL: {len(uplink_expired)}')
+
 
     plt.figure(figsize=(12, 6))
-    sns.violinplot(data=plot_df, x='Configuration', y='Latency (s)',
-                   hue='Direction', split=True, inner='quartile', density_norm="area", common_norm=True)
+    sns.boxplot(data=plot_df, x='Configuration', y='Latency (s)',
+                   hue='Direction')
 
     plt.title('Latency Distribution by Configuration')
     plt.xticks(rotation=45)
@@ -336,6 +342,7 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
         } for value in df['Uplink']])
 
     plot_df = pd.DataFrame(plot_data)
+
 
     plt.figure(figsize=(12, 6))
     sns.violinplot(data=plot_df, x='Client', y='Latency (s)',
@@ -596,7 +603,7 @@ def main(input_path: str) -> None:
 
 
 if __name__ == '__main__':
-    ML_CONFIDENCE_BANDS = True
+    ML_CONFIDENCE_BANDS = False
     PLOT_ROUNDS_INSTEAD_OF_TIME = True
 
     ''' level of print statements (higher level -> more print statements)
@@ -608,7 +615,7 @@ if __name__ == '__main__':
     
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
     AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
-    PLOT_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
+    PLOT_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     IMPORT_ALL_TRIAL_DATA = True # whether we should go into each trial (within in a configuration) and export the json data to CSV files. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     
     input_dir = input("Enter the path to the directory containing the trials: ")
