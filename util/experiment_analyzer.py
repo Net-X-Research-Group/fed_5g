@@ -407,8 +407,6 @@ def plot_latency_histograms_by_cid(agg_latencies, output_dir):
     # plt.show()
     plt.close()
 
-def export_round_time(metrics, path):
-    pass
 
 def retrieve_trial_metrics(configuration):
     trial_dirs = [d for d in listdir(configuration) if isdir(join(configuration, d))]
@@ -611,7 +609,7 @@ def main(input_path: str) -> None:
 
 if __name__ == '__main__':
     ML_CONFIDENCE_BANDS = False
-    PLOT_ROUNDS_INSTEAD_OF_TIME = True
+    PLOT_ROUNDS_INSTEAD_OF_TIME = False
 
     ''' level of print statements (higher level -> more print statements)
     - when csv files are created and saved from trial jsons (level 2)
