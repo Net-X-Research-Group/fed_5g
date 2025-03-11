@@ -10,14 +10,14 @@ import seaborn as sns
 plt.rcParams.update({
         'text.usetex': True,
         'font.family': 'serif',
-        'font.size': 10,
+        'font.size': 12,
         'axes.labelsize': 10,
         'legend.fontsize': 8,
         'xtick.labelsize': 8,
         'ytick.labelsize': 8,
         'figure.dpi': 600,
         'savefig.dpi': 600,
-        'savefig.format': 'svg',
+        'savefig.format': 'png',
         'savefig.bbox': 'tight'
     })
 
@@ -214,15 +214,22 @@ def plot_latency_statistics(uplink, downlink, output_dir):
         } for value in uplink[configuration]])
 
     plot_df = pd.DataFrame(plot_data)
-    downlink_expired = plot_df[(plot_df['Direction'] == 'Downlink') & (plot_df['Latency (s)'] >= 60)]
-    uplink_expired = plot_df[(plot_df['Direction'] == 'Uplink') & (plot_df['Latency (s)'] >= 60)]
+    # Store the filtered values to examine them
+    filtered_values = plot_df[plot_df['Latency (s)'] >= 60]
 
-    print(f'Number of expired DL: {len(downlink_expired)}')
-    print(f'Number of expired UL: {len(uplink_expired)}')
+    # Count how many values are filtered out
+    filtered_count = len(filtered_values)
 
+    # Print the filtered values for inspection
+    print("Filtered values (latencies ≥ 60s):")
+    print(filtered_values)
+    print(f"Total number of latencies filtered out: {filtered_count}")
+
+    # Create the filtered dataframe
+    filtered_plot_df = plot_df[plot_df['Latency (s)'] < 60]
 
     plt.figure(figsize=(12, 6))
-    sns.boxplot(data=plot_df, x='Configuration', y='Latency (s)',
+    sns.boxplot(data=filtered_plot_df, x='Configuration', y='Latency (s)',
                    hue='Direction')
 
     plt.title('Latency Distribution by Configuration')
@@ -235,12 +242,12 @@ def plot_latency_statistics(uplink, downlink, output_dir):
 
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-    sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
+    sns.violinplot(data=filtered_plot_df[filtered_plot_df['Direction'] == 'Downlink'],
                    x='Configuration', y='Latency (s)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
 
-    sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
+    sns.violinplot(data=filtered_plot_df[filtered_plot_df['Direction'] == 'Uplink'],
                    x='Configuration', y='Latency (s)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
@@ -614,8 +621,8 @@ if __name__ == '__main__':
     VERBOSITY = 1
     
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
-    AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
-    PLOT_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
+    AGGREGATE_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
+    PLOT_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     IMPORT_ALL_TRIAL_DATA = True # whether we should go into each trial (within in a configuration) and export the json data to CSV files. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     
     input_dir = input("Enter the path to the directory containing the trials: ")
