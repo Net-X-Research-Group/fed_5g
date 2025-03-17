@@ -47,7 +47,7 @@ def main(input_path: str) -> None:
         for metric in data[result]:
             table[result][metric] = data[result][metric].mean()
         
-        filename = f'{result}_stats.csv'
+        filename = f'{input_path}/{result}_stats.csv'
         with open(filename, 'w', newline='') as f:
             w = csv.DictWriter(f, table[result].keys())
             w.writeheader()
