@@ -44,6 +44,8 @@ def main(input_path: str) -> None:
     # mydict = {k: v for k, v in blahs}
     table = {result: {} for result in data}
     for result in data:
+        convergence_time = sum(data[result]['Round Time'])
+        table[result]['Convergence Time'] = convergence_time
         for metric in data[result]:
             table[result][metric] = data[result][metric].mean()
         
