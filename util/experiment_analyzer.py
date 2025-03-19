@@ -492,8 +492,8 @@ def retrieve_trial_metrics(configuration):
 
         ## Client-side round time
         uplink = pd.DataFrame({df : agg_latencies[df]['Uplink'] for df in agg_latencies})
-        client_times = agg_training_times + agg_train_test_times + agg_val_test_times
-        client_times += uplink
+        client_times = uplink + agg_training_times + agg_train_test_times + agg_val_test_times
+
         client_times.to_csv(join(configuration_path, f'client_time_aggregated.csv'), index=False)
         if VERBOSITY >= 1:
             print(f'Saved {configuration_path}/client_time_aggregated.csv')
@@ -555,8 +555,17 @@ def plot_configurations(input_path, experiment_dir):
 
             for metric in time_metrics:
                 filename = f'{metric.lower().replace(" ", "_")}_aggregated.csv'
-                data[result][metric] = pd.read_csv(join(result_path, filename)).mean(axis=1)
+                raw = pd.read_csv(join(result_path, filename)).mean(axis=1)
+
+                filtered = raw[raw >= 100]
+                if len(filtered):
+                    print(f'filtered {len(filtered)} values out of {metric} for {result}')
+
+                data[result][metric] = raw[raw < 100]
                 data[result][metric].name = result
+
+                # data[result][metric] = pd.read_csv(join(result_path, filename)).mean(axis=1)
+                # data[result][metric].name = result
             
             data[result]['Validation Accuracy'] = pd.read_csv(join(result_path, 'avg_val_acc.csv'))
             data[result]['Validation Loss'] = pd.read_csv(join(result_path, 'avg_val_loss.csv'))
