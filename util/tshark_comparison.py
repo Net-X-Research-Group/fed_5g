@@ -9,6 +9,8 @@ import seaborn as sns
 
 import numpy as np
 
+from experiment_analyzer import plot_latency_histograms, save_latency_histograms
+
 def _read_json(file):
     with open(file, 'r') as f:
         raw = json.load(f)
@@ -26,14 +28,15 @@ def main(input_path: str) -> None:
         tshark_uplink.append(uplink_file[key]['latency'])
     for key in downlink_file:
         tshark_downlink.append(downlink_file[key]['latency'])
-    
-    avg_uplink = np.mean(tshark_uplink)
-    avg_downlink = np.mean(tshark_downlink)
 
-    print(f'average uplink latency: {avg_uplink}')
-    print(f'average downlink latency: {avg_downlink}')
+    flower_uplink = pd.read_csv(join(input_path, 'uplink.csv'))
+    flower_downlink = pd.read_csv(join(input_path, 'downlink.csv'))
 
-    
+    fig, axs = plt.subplots(2, 2, figsize=(12, 4 * 2))
+    plot_latency_histograms(tshark_uplink, tshark_downlink, fig, 0, 'Wireshark')
+    plot_latency_histograms(flower_uplink, flower_downlink, fig, 1, 'Flower')
+
+    save_latency_histograms(input_path, fig)
 
 
 if __name__ == '__main__':
