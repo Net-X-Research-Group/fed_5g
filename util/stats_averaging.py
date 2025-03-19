@@ -13,7 +13,7 @@ import csv
 def main(input_path: str) -> None:
     experiment_dir = [d for d in listdir(input_path) if isdir(join(input_path, d))]
 
-    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time', 'Round Time']
+    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time', 'Round Time', 'Client Time']
     data = {}
 
     for result in experiment_dir:
