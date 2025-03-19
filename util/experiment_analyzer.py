@@ -476,10 +476,7 @@ def retrieve_trial_metrics(configuration):
         pd.concat(agg_latencies, axis=1).to_csv(join(configuration, f'latencies_aggregated.csv'), index=False)  # Concat and save as csv
         if VERBOSITY >= 1:
             print(f'Saved {configuration_path}/latencies_aggregated.csv')
-    except Exception as e:
-        print(f"Error processing agg_latencies for {configuration_path}: {e}")
-    
-    try:
+
         # Training Time Metrics
         agg_training_times = _aggregate_metrics(training_times, configuration_path, name='training_time')
         agg_train_test_times = _aggregate_metrics(train_test_times, configuration_path, name='train_test_time')
@@ -487,17 +484,22 @@ def retrieve_trial_metrics(configuration):
 
         agg_round_times = _aggregate_metrics(round_times, configuration_path, name='round_time')
 
-    except Exception as e:
-        print(f"Error processing training time metrics for {configuration_path}: {e}")
-
-    try:
         # ML Metrics
         avg_val_accuracies = _aggregate_ml_metrics(val_accuracies, configuration_path, name='val_acc')
         avg_train_accuracies = _aggregate_ml_metrics(train_accuracies, configuration_path, name='train_acc')
         avg_val_losses = _aggregate_ml_metrics(val_losses, configuration_path, name='val_loss')
         avg_train_losses = _aggregate_ml_metrics(train_losses, configuration_path, name='train_loss')
+
+        ## Client-side round time
+        uplink = pd.DataFrame({df : agg_latencies[df]['Uplink'] for df in agg_latencies})
+        client_times = agg_training_times + agg_train_test_times + agg_val_test_times
+        client_times += uplink
+        client_times.to_csv(join(configuration_path, f'client_time_aggregated.csv'), index=False)
+        if VERBOSITY >= 1:
+            print(f'Saved {configuration_path}/client_time_aggregated.csv')
+
     except Exception as e:
-        print(f"Error processing ML metrics for {configuration_path}: {e}")
+        print(f"Error processing metrics for {configuration_path}: {e}")
 
     if PLOT_TRIAL_DATA:
         try:
@@ -507,6 +509,7 @@ def retrieve_trial_metrics(configuration):
             plot_time_histograms(agg_train_test_times, configuration_path, name='Train Test Time')
             plot_time_histograms(agg_val_test_times, configuration_path, name='Validation Test Time')
             plot_time_histograms(agg_round_times, configuration_path, name='Round Time')
+            plot_time_histograms(client_times, configuration_path, name='Client-Side Time')
             
             accuracy_fig = plt.figure(figsize=(10, 6))
             loss_fig = plt.figure(figsize=(10, 6))
@@ -534,7 +537,7 @@ def retrieveConfigurationMetrics(input_path, experiment_dir):
 
 
 def plot_configurations(input_path, experiment_dir):
-    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time', 'Round Time']
+    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time', 'Round Time', 'Client Time']
     data = {}
 
     for result in experiment_dir:
@@ -557,6 +560,9 @@ def plot_configurations(input_path, experiment_dir):
             
             data[result]['Validation Accuracy'] = pd.read_csv(join(result_path, 'avg_val_acc.csv'))
             data[result]['Validation Loss'] = pd.read_csv(join(result_path, 'avg_val_loss.csv'))
+
+            # data[result]['Client Round Time'] = data[result]['Uplink'] + data[result]['Training Time'] + data[result]['Train Test Time'] + data[result]['Val Test Time']
+            # pd.to_csv(join(result_path, 'client_time_aggregated.csv'))
         
         except Exception as e:
             data.popitem()
@@ -619,9 +625,9 @@ if __name__ == '__main__':
     VERBOSITY = 1
     
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
-    AGGREGATE_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
+    AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
     PLOT_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
-    IMPORT_ALL_TRIAL_DATA = True # whether we should go into each trial (within in a configuration) and export the json data to CSV files. sub-condition of AGGREGATE_ALL_TRIAL_DATA
+    IMPORT_ALL_TRIAL_DATA = False # whether we should go into each trial (within in a configuration) and export the json data to CSV files. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     
     input_dir = input("Enter the path to the directory containing the trials: ")
     main(input_dir)
