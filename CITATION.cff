@@ -16,6 +16,5 @@ authors:
   given-names: "Igor"
 title: "FedAvg for 5G: Application, Architecure, and Analysis (fed_5g)"
 version: 1.0.0
-doi: 10.5281/zenodo.1234
-date-released: 2025-03-20
+date-released: 2025-04-01
 url: "https://github.com/Net-X-Research-Group/fed_5g"
