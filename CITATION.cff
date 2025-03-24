@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Hayek"
+  given-names: "Robert J."
+  orcid: "https://orcid.org/0000-0002-4015-5897"
+- family-names: "Chung"
+  given-names: "Joaquin"
+- family-names: "Comer"
+  given-names: "Kayla"
+- family-names: "Murthy"
+  given-names: "Chandra"
+- family-names: "Kettimuthu"
+  given-names: "Rajkumar"
+- family-names: "Kadota"
+  given-names: "Igor"
+title: "FedAvg for 5G: Application, Architecure, and Analysis (fed_5g)"
+version: 1.0.0
+date-released: 2025-04-01
+url: "https://github.com/Net-X-Research-Group/fed_5g"
