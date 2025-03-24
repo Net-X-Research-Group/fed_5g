@@ -5,7 +5,7 @@ numpy
 matplotlib
 torchinfo
 pandas
-flwr==1.15.2
+flwr==1.17.0
 flwr-datasets
 markdown-it-py
 tqdm
