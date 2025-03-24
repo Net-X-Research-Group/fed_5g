@@ -10,14 +10,10 @@ import seaborn as sns
 plt.rcParams.update({
         'text.usetex': True,
         'font.family': 'serif',
-        'font.size': 12,
-        'axes.labelsize': 10,
-        'legend.fontsize': 8,
-        'xtick.labelsize': 8,
-        'ytick.labelsize': 8,
+        'font.size': 18,
         'figure.dpi': 600,
         'savefig.dpi': 600,
-        'savefig.format': 'png',
+        'savefig.format': 'svg',
         'savefig.bbox': 'tight'
     })
 
@@ -215,18 +211,18 @@ def plot_latency_statistics(uplink, downlink, output_dir):
 
     plot_df = pd.DataFrame(plot_data)
     # Store the filtered values to examine them
-    filtered_values = plot_df[plot_df['Latency (s)'] >= 60]
+    filtered_values = plot_df[plot_df['Latency (s)'] >= 30]
 
     # Count how many values are filtered out
     filtered_count = len(filtered_values)
 
     # Print the filtered values for inspection
-    print("Filtered values (latencies ≥ 60s):")
+    print("Filtered values (latencies ≥ 30s):")
     print(filtered_values)
     print(f"Total number of latencies filtered out: {filtered_count}")
 
     # Create the filtered dataframe
-    filtered_plot_df = plot_df[plot_df['Latency (s)'] < 60]
+    filtered_plot_df = plot_df[plot_df['Latency (s)'] < 30]
 
     plt.figure(figsize=(12, 6))
     sns.boxplot(data=filtered_plot_df, x='Configuration', y='Latency (s)',
@@ -350,6 +346,19 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
 
     plot_df = pd.DataFrame(plot_data)
 
+    # Store the filtered values to examine them
+    filtered_values = plot_df[plot_df['Latency (s)'] >= 30]
+
+    # Count how many values are filtered out
+    filtered_count = len(filtered_values)
+
+    # Print the filtered values for inspection
+    print("Filtered values (latencies ≥ 30s):")
+    print(filtered_values)
+    print(f"Total number of latencies filtered out: {filtered_count}")
+
+    # Create the filtered dataframe
+    plot_df = plot_df[plot_df['Latency (s)'] < 30]
 
     plt.figure(figsize=(12, 6))
     sns.violinplot(data=plot_df, x='Client', y='Latency (s)',
@@ -608,7 +617,7 @@ def main(input_path: str) -> None:
 
 
 if __name__ == '__main__':
-    ML_CONFIDENCE_BANDS = False
+    ML_CONFIDENCE_BANDS = True
     PLOT_ROUNDS_INSTEAD_OF_TIME = False
 
     ''' level of print statements (higher level -> more print statements)
@@ -619,8 +628,8 @@ if __name__ == '__main__':
     VERBOSITY = 1
     
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
-    AGGREGATE_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
-    PLOT_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
+    AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
+    PLOT_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     IMPORT_ALL_TRIAL_DATA = True # whether we should go into each trial (within in a configuration) and export the json data to CSV files. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     
     input_dir = input("Enter the path to the directory containing the trials: ")
