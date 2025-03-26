@@ -38,7 +38,7 @@ def main(input_path: str) -> None:
             data[result]['Validation Loss'] = pd.read_csv(join(result_path, 'avg_val_loss.csv')).mean(axis=1)
 
         except Exception as e:
-            data.popitem()
+            data.pop(result, None)
             print(f"Error processing {result}: {e}")
 
     # mydict = {k: v for k, v in blahs}
