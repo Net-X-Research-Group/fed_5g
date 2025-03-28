@@ -13,7 +13,7 @@ plt.rcParams.update({
         'font.size': 18,
         'figure.dpi': 600,
         'savefig.dpi': 600,
-        'savefig.format': 'svg',
+        'savefig.format': 'png',
         'savefig.bbox': 'tight'
     })
 
@@ -69,6 +69,12 @@ def export_metrics_to_csv(data, output_dir):
     if VERBOSITY == 2:
         print(f"Saved {str(filepath)}")
     ''' End of repeated code section (repeats following code for one new metric)'''
+
+    comm_round_time = round_time_df.max(axis=1, numeric_only=True)
+    comm_round_time.to_csv(join(output_dir, 'comm_' + filename), index=False)
+    # df = pd.concat(metrics_dict.values(), axis=1).T.groupby(level=0).mean().T #here
+    # data[display_name][metric] = pd.read_csv(join(str(result_path), filename)).mean(axis=1)
+    
 
     # For each metric, create a DataFrame and save to CSV
     for metric in metrics:
@@ -493,6 +499,7 @@ def retrieve_trial_metrics(configuration):
     train_test_times = {}
     val_test_times = {}
     round_times = {}
+    comm_round_times = {}
 
     # ML Metrics
     val_accuracies = {}
@@ -525,6 +532,7 @@ def retrieve_trial_metrics(configuration):
 
             # Process round time metric
             round_times[trial_dir] = pd.read_csv(join(trial_path, 'round_time.csv'))
+            comm_round_times[trial_dir] = pd.read_csv(join(trial_path, 'comm_round_time.csv'))
 
         except Exception as e:
             print(f"Error processing {trial_path}: {e}")
@@ -556,6 +564,7 @@ def retrieve_trial_metrics(configuration):
     agg_train_test_times = pd.DataFrame()
     agg_val_test_times = pd.DataFrame()
     agg_round_times = pd.DataFrame()
+    agg_comm_round_times = pd.DataFrame()
     try:
         # Training Time Metrics
         agg_training_times = _aggregate_metrics(training_times, configuration_path, name='training_time')
@@ -563,6 +572,7 @@ def retrieve_trial_metrics(configuration):
         agg_val_test_times = _aggregate_metrics(val_test_times, configuration_path, name='val_test_time')
 
         agg_round_times = _aggregate_metrics(round_times, configuration_path, name='round_time')
+        agg_comm_round_times = _aggregate_metrics(comm_round_times, configuration_path, name='comm_round_time')
 
     except Exception as e:
         print(f"Error processing training time metrics for {configuration_path}: {e}")
@@ -606,6 +616,7 @@ def retrieve_trial_metrics(configuration):
             plot_time_histograms(agg_val_test_times, configuration_path, name='Validation Test Time')
             plot_time_histograms(agg_round_times, configuration_path, name='Round Time')
             plot_time_histograms(client_times, configuration_path, name='Client-Side Time')
+            plot_time_histograms(agg_comm_round_times, configuration_path, name='Communication Round Time')
             accuracy_fig = plt.figure(figsize=(10, 6))
             loss_fig = plt.figure(figsize=(10, 6))
 
@@ -632,7 +643,7 @@ def retrieveConfigurationMetrics(input_path, experiment_dir):
 
 
 def plot_configurations(input_path, experiment_dir):
-    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time', 'Round Time', 'Client Time']
+    time_metrics = ['Training Time', 'Train Test Time', 'Val Test Time', 'Round Time', 'Client Time', 'Comm Round Time']
     data = {}
 
     for result in experiment_dir:
