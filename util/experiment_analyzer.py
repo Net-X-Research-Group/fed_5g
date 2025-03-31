@@ -320,18 +320,6 @@ def plot_latency_statistics(uplink, downlink, output_dir):
                    x='Configuration', y='Time (s)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     #ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
-    # Create custom legend elements
-    legend_elements = [
-        Line2D([0], [0], color='black', lw=2, label='Violin (Distribution)'),
-        Line2D([0], [0], color='white', marker='|', markersize=10, markeredgecolor='black',
-               label='Median Line'),
-        Line2D([0], [0], color='white', marker='s', markersize=10, markeredgecolor='black',
-               markerfacecolor='white', label='Interquartile Range')
-    ]
-
-    # Add the legend
-    ax1.legend(handles=legend_elements, loc='upper right')
-
     sns.violinplot(data=filtered_plot_df[filtered_plot_df['Direction'] == '$t_u$'],
                    x='Configuration', y='Time (s)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     #ax2.set_title('Uplink Latency Distribution')
