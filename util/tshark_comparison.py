@@ -66,7 +66,7 @@ def main(input_path: str) -> None:
     sns.histplot(tshark_uplink['$t_u$'].dropna(), ax=axs[0], color='blue', label='Tshark')
     sns.histplot(flower_latency['$t_u$'].dropna(), ax=axs[0], color='red', label='Flower')
     #axs[0].set_title('Uplink Latency Distribution')
-    axs[0].set_xlabel('Time (ms)')
+    axs[0].set_xlabel('Time (s)')
     axs[0].set_ylabel('Frequency')
     axs[0].legend()
 
@@ -74,13 +74,32 @@ def main(input_path: str) -> None:
     sns.histplot(tshark_downlink['$t_d$'].dropna(), ax=axs[1], color='blue', label='Tshark')
     sns.histplot(flower_latency['$t_d$'].dropna(), ax=axs[1], color='red', label='Flower')
     #axs[1].set_title('Downlink Latency Distribution')
-    axs[1].set_xlabel('Time (ms)')
+    axs[1].set_xlabel('Time (s)')
     axs[1].set_ylabel('Frequency')
     axs[1].legend()
 
     plt.tight_layout()
 
     save_latency_histograms(input_path, fig)
+
+    # Calculate average differences between methods
+    tshark_uplink_mean = tshark_uplink['$t_u$'].mean()
+    flower_uplink_mean = flower_latency['$t_u$'].mean()
+    uplink_diff = abs(tshark_uplink_mean - flower_uplink_mean)
+
+    tshark_downlink_mean = tshark_downlink['$t_d$'].mean()
+    flower_downlink_mean = flower_latency['$t_d$'].mean()
+    downlink_diff = abs(tshark_downlink_mean - flower_downlink_mean)
+
+    # Calculate percentage differences
+    uplink_percent_diff = (uplink_diff / tshark_uplink_mean) * 100
+    downlink_percent_diff = (downlink_diff / tshark_downlink_mean) * 100
+
+    # Print the results to console as well
+    print(f"Uplink - Tshark mean: {tshark_uplink_mean:.5f}s, Flower mean: {flower_uplink_mean:.5f}s")
+    print(f"Uplink - Absolute difference: {uplink_diff:.5f}s ({uplink_percent_diff:.2f}%)")
+    print(f"Downlink - Tshark mean: {tshark_downlink_mean:.5f}s, Flower mean: {flower_downlink_mean:.5f}s")
+    print(f"Downlink - Absolute difference: {downlink_diff:.5f}s ({downlink_percent_diff:.2f}%)")
 
 
 if __name__ == '__main__':
