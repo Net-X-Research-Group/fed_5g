@@ -145,7 +145,7 @@ def _aggregate_ml_metrics(metrics_dict: dict, output_path: str, name: str) -> li
 
 def _rename_for_latex(df: pd.DataFrame) -> pd.DataFrame:
     changed_df = df.copy()
-    changed_df.rename(columns={'Latency (s)': 'Time (sec)'}, inplace=True)
+    changed_df.rename(columns={'Latency (s)': 'Time (s)'}, inplace=True)
     changed_df.loc[changed_df['Direction'] == 'Downlink', 'Direction'] = '$t_d$'
     changed_df.loc[changed_df['Direction'] == 'Uplink', 'Direction'] = '$t_u$'
 
@@ -241,7 +241,7 @@ def format_save_ml_plots(output_dir: str, name: str, fig) -> None:
     if PLOT_ROUNDS_INSTEAD_OF_TIME:
         plt.xlabel('Round')
     else:
-        plt.xlabel('Time (sec)')
+        plt.xlabel('Time (s)')
     plt.ylabel('')
     if 'accuracy' in name.lower():
         plt.ylabel('Accuracy')
@@ -304,7 +304,7 @@ def plot_latency_statistics(uplink, downlink, output_dir):
     filtered_plot_df = _rename_for_latex(filtered_plot_df)  # Rename axis and legend
 
     plt.figure(figsize=(12, 6))
-    sns.boxplot(data=filtered_plot_df, x='Configuration', y='Time (sec)',
+    sns.boxplot(data=filtered_plot_df, x='Configuration', y='Time (s)',
                    hue='Direction')
 
     #plt.title('Latency Distribution by Configuration')
@@ -317,7 +317,7 @@ def plot_latency_statistics(uplink, downlink, output_dir):
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     sns.violinplot(data=filtered_plot_df[filtered_plot_df['Direction'] == '$t_d$'],
-                   x='Configuration', y='Time (sec)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
+                   x='Configuration', y='Time (s)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     #ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
     # Create custom legend elements
@@ -333,7 +333,7 @@ def plot_latency_statistics(uplink, downlink, output_dir):
     ax1.legend(handles=legend_elements, loc='upper right')
 
     sns.violinplot(data=filtered_plot_df[filtered_plot_df['Direction'] == '$t_u$'],
-                   x='Configuration', y='Time (sec)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
+                   x='Configuration', y='Time (s)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     #ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
     #plt.suptitle('Latency Distribution by Configuration')
@@ -351,7 +351,7 @@ def plot_latency_histograms(uplink, downlink, fig, row_idx, trial_info):
     ax = allaxes[2*row_idx]
     ax.hist(downlink, alpha=0.75, color='blue')
     #ax.set_title(f'{trial_info} - Downlink Latency')
-    ax.set_xlabel('Time (sec)')
+    ax.set_xlabel('Time (s)')
     ax.set_ylabel('Frequency')
     ax.grid(True, alpha=0.3)
 
@@ -359,7 +359,7 @@ def plot_latency_histograms(uplink, downlink, fig, row_idx, trial_info):
     ax = allaxes[2*row_idx+1]
     ax.hist(uplink, alpha=0.75, color='green')
     #ax.set_title(f'{trial_info} - Uplink Latency')
-    ax.set_xlabel('Time (sec)')
+    ax.set_xlabel('Time (ss)')
     ax.set_ylabel('Frequency')
     ax.grid(True, alpha=0.3)
 
@@ -389,7 +389,7 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     for idx, col in enumerate(data.columns):
         axs[idx].hist(data[col], alpha=0.75, color='blue')
         #axs[idx].set_title(f'{col.replace("_", " ")} Distribution')
-        axs[idx].set_xlabel('Time (sec)')
+        axs[idx].set_xlabel('Time (s)')
         axs[idx].set_ylabel('Frequency')
         axs[idx].grid(True, alpha=0.3)
     #plt.suptitle(f'{name} Distribution by Configuration')
@@ -400,8 +400,8 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
 
     # Violin plots
     plt.figure(figsize=(10, 6))
-    plot_data = pd.melt(data, var_name='Configuration', value_name='Time (sec)')
-    sns.violinplot(data=plot_data, x='Configuration', y='Time (sec)', inner='quartile', density_norm="area", common_norm=True)
+    plot_data = pd.melt(data, var_name='Configuration', value_name='Time (s)')
+    sns.violinplot(data=plot_data, x='Configuration', y='Time (s)', inner='quartile', density_norm="area", common_norm=True)
     #plt.title(f'{name} Distribution by Configuration')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -414,7 +414,7 @@ def plot_time_histograms(data: pd.DataFrame, output_dir: str, name: str = 'Time'
     for col in data.columns:
         ax.hist(data[col], alpha=0.75, label=col.replace("_", " "))
     #ax.set_title(f'{name} Distribution')
-    ax.set_xlabel('Time (sec)')
+    ax.set_xlabel('Time (s)')
     ax.set_ylabel('Frequency')
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -458,7 +458,7 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
     plot_df = plot_df[plot_df['Latency (s)'] < 30]
     plot_df = _rename_for_latex(plot_df) # Rename axis and legend
     plt.figure(figsize=(12, 6))
-    sns.violinplot(data=plot_df, x='Client', y='Time (sec)',
+    sns.violinplot(data=plot_df, x='Client', y='Time (s)',
                    hue='Direction', split=True, inner='quartile', density_norm="area", common_norm=True)
 
     #plt.title('Latency Distribution by Client')
@@ -471,12 +471,12 @@ def plot_latency_statistics_by_cid(agg_latencies, output_dir):
     # Split
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Downlink'],
-                   x='Client', y='Time (sec)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
+                   x='Client', y='Time (s)', inner='quartile', ax=ax1, density_norm="area", common_norm=True)
     #ax1.set_title('Downlink Latency Distribution')
     ax1.grid(True, alpha=0.3)
 
     sns.violinplot(data=plot_df[plot_df['Direction'] == 'Uplink'],
-                   x='Client', y='Time (sec)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
+                   x='Client', y='Time (s)', inner='quartile', ax=ax2, density_norm="area", common_norm=True)
     #ax2.set_title('Uplink Latency Distribution')
     ax2.grid(True, alpha=0.3)
     #plt.suptitle('Latency Distribution by Client')
@@ -495,14 +495,14 @@ def plot_latency_histograms_by_cid(agg_latencies, output_dir):
             # Downlink histogram
             axs[idx, 0].hist(df['Downlink'], alpha=0.75, color='blue')
             #axs[idx, 0].set_title(f'{cid.replace("_", " ")} - Downlink Latency')
-            axs[idx, 0].set_xlabel('Time (sec)')
+            axs[idx, 0].set_xlabel('Time (s)')
             axs[idx, 0].set_ylabel('Frequency')
             axs[idx, 0].grid(True, alpha=0.3)
 
             # Uplink histogram
             axs[idx, 1].hist(df['Uplink'], alpha=0.75, color='green')
             #axs[idx, 1].set_title(f'{cid.replace("_", " ")} - Uplink Latency')
-            axs[idx, 1].set_xlabel('Time (sec)')
+            axs[idx, 1].set_xlabel('Time (ss)')
             axs[idx, 1].set_ylabel('Frequency')
             axs[idx, 1].grid(True, alpha=0.3)
     except Exception as e:
