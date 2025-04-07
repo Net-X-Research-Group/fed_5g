@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import numpy as np
-from matplotlib.lines import Line2D
 
 plt.rcParams.update({
         'text.usetex': True,
@@ -76,7 +75,7 @@ def export_metrics_to_csv(data, output_dir):
     comm_round_time.to_csv(join(output_dir, 'comm_' + filename), index=False)
     # df = pd.concat(metrics_dict.values(), axis=1).T.groupby(level=0).mean().T #here
     # data[display_name][metric] = pd.read_csv(join(str(result_path), filename)).mean(axis=1)
-    
+
 
     # For each metric, create a DataFrame and save to CSV
     for metric in metrics:
@@ -97,7 +96,7 @@ def export_metrics_to_csv(data, output_dir):
         filename = f"{metric}.csv"
         filepath = join(output_dir, filename)
         df.to_csv(filepath, index=False)
-        if VERBOSITY == 2:
+        if VERBOSITY == 1:
             print(f"Saved {str(filepath)}")
 
 
@@ -180,7 +179,7 @@ def plot_ml_metric(data, fig, label: str, color, round_time) -> None:
             plt.fill_between(x_values,
                             lower.values.tolist(),
                             upper.values.tolist(),
-                            alpha=0.3, color=color, label='±1 std')
+                            alpha=0.3, color=color, label='STD')
     else:
         try:
             # First ensure we're working with pandas Series to use pandas methods
@@ -221,7 +220,7 @@ def plot_ml_metric(data, fig, label: str, color, round_time) -> None:
             sns.lineplot(x=x_values, y=y_values, label=label, color=color, ax=ax)
             if ML_CONFIDENCE_BANDS:
                 plt.fill_between(x_values, lower_values, upper_values,
-                                alpha=0.3, color=color, label='±1 std')
+                                alpha=0.3, color=color, label='STD')
 
         except Exception as e:
             print(f"Error in plotting with time: {e}")
@@ -538,7 +537,7 @@ def retrieve_trial_metrics(configuration):
                 if cid not in latencies:
                     latencies[cid] = []
                 latencies[cid].append(df)
-            
+
             # Process training time metrics, measured by flower
             training_times[trial_dir] = pd.read_csv(join(trial_path, 'training_time.csv'))
             train_test_times[trial_dir] = pd.read_csv(join(trial_path, 'train_test_time.csv'))
@@ -563,7 +562,7 @@ def retrieve_trial_metrics(configuration):
     for cid, dfs in latencies.items():
         agg_df = pd.concat(dfs, axis=1).T.groupby(level=0).mean().T.drop('Round', axis=1)
         agg_latencies[cid] = agg_df
-    
+
     configuration_path = str(configuration)
 
     try:
@@ -606,7 +605,7 @@ def retrieve_trial_metrics(configuration):
     try:
         # Client-side round time
         uplink = pd.DataFrame({df: agg_latencies[df]['Uplink'] for df in agg_latencies})
-
+        downlink = pd.DataFrame({df: agg_latencies[df]['Downlink'] for df in agg_latencies})
         # Convert all DataFrames to numeric types before addition
         client_times = agg_training_times.apply(pd.to_numeric, errors='coerce')
         client_times = client_times.add(agg_train_test_times.apply(pd.to_numeric, errors='coerce'), fill_value=0)
@@ -614,6 +613,7 @@ def retrieve_trial_metrics(configuration):
 
         # Use pandas add method instead of += operator
         client_times = client_times.add(uplink.apply(pd.to_numeric, errors='coerce'), fill_value=0)
+        client_times = client_times.add(downlink.apply(pd.to_numeric, errors='coerce'), fill_value=0)
 
         client_times.to_csv(join(configuration_path, f'client_time_aggregated.csv'), index=False)
         if VERBOSITY >= 1:
@@ -643,10 +643,10 @@ def retrieve_trial_metrics(configuration):
 
             format_save_ml_plots(configuration_path, 'Accuracy', accuracy_fig)
             format_save_ml_plots(configuration_path, 'Loss', loss_fig)
-        
+
         except Exception as e:
             print(f"Error plotting trial data on {configuration_path}: {e}")
-    
+
 
     return trial_dirs
 
@@ -747,11 +747,11 @@ if __name__ == '__main__':
     - errors always printed
     '''
     VERBOSITY = 1
-    
+
     PLOT_EXPERIMENT_DATA = True # whether we should plot overview figures of all configurations
-    AGGREGATE_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
-    PLOT_TRIAL_DATA = True # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
+    AGGREGATE_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and aggregate data from all trials (directories named with run IDs)
+    PLOT_TRIAL_DATA = False # whether we should go into each configuration (ex. 3Node_Ethernet_IID) and plot time, latency data by CID; ML training and validation data. sub-condition of AGGREGATE_ALL_TRIAL_DATA
     IMPORT_ALL_TRIAL_DATA = True # whether we should go into each trial (within in a configuration) and export the json data to CSV files. sub-condition of AGGREGATE_ALL_TRIAL_DATA
-    
+
     input_dir = input("Enter the path to the directory containing the trials: ")
     main(input_dir)
