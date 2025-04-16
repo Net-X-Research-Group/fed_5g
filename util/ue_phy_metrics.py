@@ -18,12 +18,32 @@ def setup_serial(port: str = '/dev/ttyUSB2', baudrate: int = 115200, parity: str
         assert f"Error opening serial port {port}: {e}"
         return None
 
+def send_command(ser: serial.Serial, command: str) -> str:
+    response = ""
+    ser.write(f'{command}\r'.encode())
+
+    timeout = 0.1
+    quantity = ser.in_waiting
+
+    while True:
+        if quantity > 0:
+            response += ser.read(quantity)
+        else:
+            time.sleep(timeout)
+        quantity = ser.in_waiting
+        if quantity == 0:
+            break
+    return response
+
+
 
 def main():
     ser_device = setup_serial()
 
-    ser_device.write('AT+CIMI'.encode())
-    print(ser_device.readall().decode())
+    rsp = send_command(ser_device, 'at+cimi')
+
+    print(rsp)
+
 
 if __name__ == '__main__':
     main()
