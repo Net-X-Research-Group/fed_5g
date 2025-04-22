@@ -5,15 +5,14 @@ import time
 import csv
 import re
 import os
+import signal
 
 ser_device = serial.Serial
 
 def signal_handler(sig, frame):
-    global ser_device
-    if ser_device is not None:
-        ser_device.close()
-
-
+    global running
+    print('Exiting gracefully...')
+    running = False
 
 def setup_serial(port: str = '/dev/ttyUSB2', baudrate: int = 115200, parity: str = 'N', bits: int = 8):
     """
@@ -79,12 +78,31 @@ def parse_rfsts(response: List[str]):
         save_response(response, 'rfsts.csv')
 
 def main():
-    global ser_device
+    global ser_device, running
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     ser_device = setup_serial()
-    rsp = send_command(ser_device, 'at#rfsts')
+    if ser_device is None:
+        print("Failed to open serial port.")
+        return
+
+    print('Starting UE PHY metrics collection...')
+    try:
+        while running:
+            rsp = send_command(ser_device, 'at#rfsts')
+            parse_rfsts(rsp)
+            time.sleep(1)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        if ser_device is not None:
+            ser_device.close()
+            print("Serial port closed.")
+
     # Command Ran, Line Br, Response, Line Br, Status
     # Response: PLMN, NR_CH, NR_ULCH, NR_RSRP, NR_RSSI, NR_RSRQ, NR_BAND, NR_BW, NR_ULBW, NR_TXPWR
-    parse_rfsts(rsp)
 
 
 if __name__ == '__main__':
