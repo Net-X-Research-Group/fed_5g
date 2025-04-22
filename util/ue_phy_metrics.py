@@ -8,6 +8,7 @@ import os
 import signal
 
 ser_device = serial.Serial
+running = True
 
 def signal_handler(sig, frame):
     global running
