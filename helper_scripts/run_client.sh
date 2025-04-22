@@ -10,7 +10,7 @@ SERVER_IP=$3
 
 source "${HOME}"/fl_venv/bin/activate
 
-python "${HOME}"/fed_5g/util/ue_phy_metrics.csv &
+python "${HOME}"/fed_5g/util/ue_phy_metrics.py &
 PYTHON_PID=$!
 
 trap "kill $PYTHON_PID 2>/dev/null" EXIT INT TERM
