@@ -81,7 +81,7 @@ def parse_rfsts(response: List[str]):
 def main():
     global ser_device
     ser_device = setup_serial()
-    rsp = send_command(ser_device, 'at+cimi')
+    rsp = send_command(ser_device, 'at#rfsts')
     # Command Ran, Line Br, Response, Line Br, Status
     # Response: PLMN, NR_CH, NR_ULCH, NR_RSRP, NR_RSSI, NR_RSRQ, NR_BAND, NR_BW, NR_ULBW, NR_TXPWR
     parse_rfsts(rsp)
