@@ -76,7 +76,7 @@ def parse_rfsts(response: List[str]):
             'ul_bandwidth': match.group(9),
             'tx_power': match.group(10)
         }
-        save_response(response, 'rfsts.csv')
+        save_response(response, os.path.expanduser('~/rfsts.csv'))
 
 def main():
     global ser_device, running
