@@ -8,6 +8,9 @@ DISTRIBUTION=$1
 CID=$2
 SERVER_IP=$3
 
+# Pull repo
+pushd "${HOME}"/fed_5g && git pull && popd || exit
+
 source "${HOME}"/fl_venv/bin/activate
 
 python "${HOME}"/fed_5g/util/ue_phy_metrics.py &
