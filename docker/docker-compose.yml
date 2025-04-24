@@ -7,10 +7,13 @@ services:
       dockerfile: docker/Dockerfile
     volumes:
       - ../node_datasets:/app/node_datasets
-      - ../ssh_configs:/ssh_configs
       - ${HOME}:/app/host_home
+      - /dev/ttyUSB2:/dev/ttyUSB2
     environment:
       - DISTRIBUTION=iid
       - CLINT_ID=1
       - SERVER_IP=172.17.0.1
     network_mode: "host"
+    devices:
+        - /dev/ttyUSB2:/dev/ttyUSB2
+    privileged: true
