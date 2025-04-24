@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  fl-client:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../node_datasets:/app/node_datasets
+      - ../ssh_configs:/ssh_configs
+      - ${HOME}:/app/host_home
+    environment:
+      - DISTRIBUTION=iid
+      - CLINT_ID=1
+      - SERVER_IP=172.17.0.1
+    network_mode: "host"
