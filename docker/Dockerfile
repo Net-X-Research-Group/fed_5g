@@ -5,7 +5,7 @@ WORKDIR /app
 COPY ../flwr-application /app/flwr-application
 COPY ../helper_scripts /app/helper_scripts
 COPY ../dist /app/dist
-
+COPY ../util /app/util
 
 # Copy the requirements file into the container
 COPY ../requirements.txt /app/
@@ -24,4 +24,3 @@ RUN chmod +x /app/docker-entrypoint.sh
 
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-
