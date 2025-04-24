@@ -2,9 +2,9 @@ name: Build FL Client Docker Image
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "dockerize" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "dockerize" ]
   # Allow manual trigger
   workflow_dispatch:
 
@@ -29,7 +29,7 @@ jobs:
           outputs: type=docker,dest=/tmp/fl-client-image.tar
 
       - name: Upload Docker image as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: fl-client-docker-image
           path: /tmp/fl-client-image.tar
