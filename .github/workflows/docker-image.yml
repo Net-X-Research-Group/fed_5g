@@ -1,0 +1,36 @@
+name: Build FL Client Docker Image
+
+on:
+  push:
+    branches: [ "dockerize" ]
+  pull_request:
+    branches: [ "dockerize" ]
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  build-docker-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: false
+          tags: fl-client:latest
+          outputs: type=docker,dest=/tmp/fl-client-image.tar
+
+      - name: Upload Docker image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fl-client-docker-image
+          path: /tmp/fl-client-image.tar
+          retention-days: 3
