@@ -29,6 +29,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract repository name in lowercase
+        id: repo_name
+        run: echo "REPO_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Build and push to GitHub Container Registry
         uses: docker/build-push-action@v4
         with:
@@ -36,5 +40,5 @@ jobs:
           file: ./docker/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/fl-client:latest
-            ghcr.io/${{ github.repository }}/fl-client:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}/fl-client:latest
+            ghcr.io/${{ env.REPO_NAME }}/fl-client:${{ github.sha }}
