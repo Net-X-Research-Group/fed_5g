@@ -36,5 +36,5 @@ jobs:
           file: ./docker/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/fl-client:latest
-            ghcr.io/${{ github.repository_owner }}/fl-client:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/fl-client:latest
+            ghcr.io/${{ github.repository }}/fl-client:${{ github.sha }}
