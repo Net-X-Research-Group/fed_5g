@@ -20,6 +20,6 @@ for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     NEW_FILE_NAME="${FILE_NAME%.csv}_CID${CID}.csv"
     scp "${LOGIN}:${FILE_NAME}" "${DIR_PATH}"/"${NEW_FILE_NAME}"
     ssh "${LOGIN}" rm latency_*
-    scp "${LOGIN}:${FILE_NAME}" "${DIR_PATH}"/"${PHY_FILE_NAME}_${RUN_ID}_CID${CID}"
+    scp "${LOGIN}:${PHY_FILE_NAME}" "${DIR_PATH}"/"${PHY_FILE_NAME}_${RUN_ID}_CID${CID}"
     ssh "${LOGIN}" rm rfsts.csv
   done
