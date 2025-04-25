@@ -39,6 +39,7 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           push: true
+          platforms: linux/amd64, linux/arm64
           tags: |
             ghcr.io/${{ env.REPO_NAME }}/fl-client:latest
             ghcr.io/${{ env.REPO_NAME }}/fl-client:${{ github.sha }}
