@@ -7,7 +7,7 @@ services:
       - /dev/ttyUSB2:/dev/ttyUSB2
     environment:
       - DISTRIBUTION=iid
-      - CLINT_ID=1
+      - CLIENT_ID=1
       - SERVER_IP=172.17.0.1
     network_mode: "host"
     devices:
