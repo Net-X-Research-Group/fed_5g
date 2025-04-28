@@ -6,7 +6,7 @@ CLIENT_ID=${CLIENT_ID:-1}
 SERVER_IP=${SERVER_IP:-"localhost"}
 
 echo "Starting UE_PHY Logging Fork"
-python "${HOME}"/fed_5g/util/ue_phy_metrics.py > "${HOME}"/ue_log.txt 2>&1 &
+python /app/util/ue_phy_metrics.py > /app/host_home/ue_log.txt 2>&1 &
 PYTHON_PID=$!
 echo "Python process started with PID: $PYTHON_PID"
 trap "kill $PYTHON_PID 2>/dev/null" EXIT INT TERM
