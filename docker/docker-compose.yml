@@ -1,0 +1,15 @@
+services:
+  fl-client:
+    image: ghcr.io/net-x-research-group/fed_5g/fl-client:latest
+    volumes:
+      - ${HOME}/node_datasets:/app/node_datasets
+      - ${HOME}:/app/host_home
+      - /dev/ttyUSB2:/dev/ttyUSB2
+    environment:
+      - DISTRIBUTION=iid
+      - CLIENT_ID=1
+      - SERVER_IP=172.17.0.1
+    network_mode: "host"
+    devices:
+        - /dev/ttyUSB2:/dev/ttyUSB2
+    privileged: true
