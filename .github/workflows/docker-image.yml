@@ -1,8 +1,6 @@
 name: Build FL Client Docker Image
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   # Allow manual trigger
