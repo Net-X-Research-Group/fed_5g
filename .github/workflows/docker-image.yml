@@ -2,9 +2,9 @@ name: Build FL Client Docker Image
 
 on:
   push:
-    branches: [ "dockerize" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "dockerize" ]
+    branches: [ "main" ]
   # Allow manual trigger
   workflow_dispatch:
 
