@@ -13,7 +13,7 @@ RUN apt update && apt install -y \
     build-essential
 
 RUN pip install --no-cache-dir -r /app/requirements.txt
-RUN pip install /app/dist/flwr-1.18.0-py3-none-any
+RUN pip install /app/dist/flwr-1.18.0-py3-none-any.whl
 
 ENV PYTHONPATH=/app
 
