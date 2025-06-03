@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from datetime import datetime
+from time import perf_counter
 
 import wandb
 from flwr.common import Parameters, FitIns
@@ -118,7 +119,10 @@ class MetricsFedAvg(FedAvg):
             server_round (int): The current round of training.
             results (dict): The aggregated results from the clients, including individual metrics.
         """
-        self.individual_metrics[server_round] = results.pop('individual_metrics')
+
+        # Fix condition/edge case where results is None
+        if 'individual_metrics' in results:
+            self.individual_metrics[server_round] = results.pop('individual_metrics')
         self.results[server_round] = results
         if self.enable_wandb:
             wandb.log(results, step=server_round)
@@ -143,7 +147,10 @@ class MetricsFedAvg(FedAvg):
         Returns:
             tuple: The aggregated parameters and metrics.
         """
+        start = perf_counter()
         params, metrics = super().aggregate_fit(server_round, results, failures)
+        end = perf_counter()
+        metrics['aggregation_time'] = end - start
         self._log_results(server_round, metrics)
         if ENABLE_EARLY_STOPPING:
             if metrics['val_acc'] <= 0.20 and server_round >= 15:

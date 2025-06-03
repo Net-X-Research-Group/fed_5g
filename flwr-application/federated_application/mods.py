@@ -1,5 +1,6 @@
 import logging
-import time
+from time import time
+from time import perf_counter
 from datetime import datetime
 
 import wandb
@@ -20,11 +21,11 @@ logger = logging.getLogger(__name__)
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 def comm_time_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
-    downlink_time = time.time() - message.content.configs_records['fitins.config']['server_timestamp']
+    downlink_time = time() - message.content.configs_records['fitins.config']['server_timestamp']
     reply = app(message, context)
     if reply.metadata.message_type == MessageType.TRAIN:
         reply.content.configs_records['fitres.metrics']['downlink_time'] = downlink_time
-        reply.content.configs_records['fitres.metrics']['uplink_time'] = time.time()
+        reply.content.configs_records['fitres.metrics']['uplink_time'] = time()
     return reply
 
 
@@ -54,11 +55,9 @@ def wandb_metrics_mod(message: Message, context: Context, app: ClientAppCallable
                 }
     )
 
-    start = time.time()
-
+    start = perf_counter()
     reply = app(message, context)
-
-    end = time.time()
+    end = perf_counter()
 
     if reply.metadata.message_type == MessageType.TRAIN and reply.has_content():
         metrics = reply.content.configs_records

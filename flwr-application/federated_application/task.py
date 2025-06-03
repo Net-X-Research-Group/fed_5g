@@ -1,6 +1,6 @@
 import logging
-import time
 from collections import OrderedDict
+from time import perf_counter
 
 import torch
 import torch.nn as nn
@@ -53,7 +53,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, momentum, weight_d
 
     logger.info(f"Training {epochs} epoch(s) w/ {len(trainloader)} examples each")
     running_loss = 0.0
-    tr_start = time.time()
+    tr_start = perf_counter()
     for epoch in range(epochs):
         logger.info(f"Starting epoch {epoch + 1}/{epochs}")
         for batch in trainloader:
@@ -63,7 +63,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, momentum, weight_d
             loss.backward()  # Forward, backward, and optimize
             optimizer.step()
             running_loss += loss.item()
-    tr_end = time.time()
+    tr_end = perf_counter()
     avg_trainloss = running_loss / len(trainloader)
     train_loss, train_acc, train_test_time = test(net=net, testloader=trainloader, device=device)
     val_loss, val_acc, val_test_time = test(net=net, testloader=valloader, device=device)
@@ -89,7 +89,7 @@ def test(net, testloader, device) -> tuple[float, float, float]:
     criterion = nn.CrossEntropyLoss()  # Use classification cross-entropy loss
     correct, loss = 0, 0.0
     net.eval()
-    start = time.time()
+    start = perf_counter()
     with torch.no_grad():
         for batch in testloader:
             images, labels = batch['img'].to(device), batch['label'].to(device)
@@ -97,7 +97,7 @@ def test(net, testloader, device) -> tuple[float, float, float]:
             loss += criterion(outputs, labels).item()
             _, predicted = torch.max(outputs.data, 1)
             correct += (predicted == labels).sum().item()
-    end = time.time()
+    end = perf_counter()
     accuracy = correct / len(testloader.dataset)
     loss = loss / len(testloader)
     return loss, accuracy, end - start
