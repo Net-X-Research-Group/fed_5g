@@ -48,6 +48,10 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> dict:
     val_test_times = [m["val_test_time"] for _, m in metrics]
     training_times = [m["training_time"] for _, m in metrics]
 
+    rsrps = [m['rsrp'] for _, m in metrics]
+    rssis = [m['rssi'] for _, m in metrics]
+    rsrqs = [m['rsrq'] for _, m in metrics]
+
     individual_metrics = {m['cid']: {
         'uplink_time': recv_time - m['uplink_time'],
         'downlink_time': m['downlink_time'],
@@ -60,7 +64,10 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> dict:
         'training_time': m['training_time'],
         'train_start_time': m['train_start'],
         'train_end_time': m['train_start'],
-        'avg_trainloss': m['avg_train_loss']} for _, m in metrics}
+        'avg_trainloss': m['avg_train_loss'],
+        'rsrp': m['rsrp'],
+        'rssi': m['rssi'],
+        'rsrq': m['rsrq']} for _, m in metrics}
 
     results = {
         "train_acc": sum(train_accuracies) / sum(examples),
@@ -72,6 +79,9 @@ def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> dict:
         "downlink_time": sum(downlink_times) / len(downlink_times),
         'train_test_time': sum(train_test_times) / len(train_test_times),
         'val_test_time': sum(val_test_times) / len(val_test_times),
+        'rsrp': sum(rsrps) / len(rsrps),
+        'rssi': sum(rssis) / len(rssis),
+        'rsrq': sum(rsrqs) / len(rsrqs),
         'individual_metrics': individual_metrics
     }
     return results
