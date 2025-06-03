@@ -61,6 +61,11 @@ def phy_layer_measurement_mod(message: Message, context: Context, app: ClientApp
             reply.content.configs_records['fitres.metrics']['rsrp'] = match.group(4)
             reply.content.configs_records['fitres.metrics']['rssi'] = match.group(5)
             reply.content.configs_records['fitres.metrics']['rsrq'] = match.group(6)
+        else:
+            logger.error("No match found in the response")
+            reply.content.configs_records['fitres.metrics']['rsrp'] = None
+            reply.content.configs_records['fitres.metrics']['rssi'] = None
+            reply.content.configs_records['fitres.metrics']['rsrq'] = None
         ser.close()
     except Exception as e:
         logger.error(f"Error executing AT command: {e}")
