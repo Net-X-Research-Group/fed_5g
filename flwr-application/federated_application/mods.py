@@ -45,31 +45,33 @@ def phy_layer_measurement_mod(message: Message, context: Context, app: ClientApp
     Hardcoded for Telit 980m on /dev/cdc-wdm0 interface with serial interface /dev/ttyUSB2
     """
     reply = app(message, context)
+    ser = None
+
     try:
         ser = serial.Serial(port='/dev/ttyUSB2', baudrate=115200)
+        try:
+            rsp = _send_serial_command(ser, 'at#rfsts')
+            extracted_response = rsp[2]
+            pattern = r'#RFSTS:\s*\"([^\"]+)\",(\d+),(\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),(\d+),(\d+),(\d+)'
+
+            match = re.search(pattern, extracted_response)
+            if match:
+                reply.content.configs_records['fitres.metrics']['rsrp'] = match.group(4)
+                reply.content.configs_records['fitres.metrics']['rssi'] = match.group(5)
+                reply.content.configs_records['fitres.metrics']['rsrq'] = match.group(6)
+            else:
+                logger.error("No match found in the response")
+                reply.content.configs_records['fitres.metrics']['rsrp'] = None
+                reply.content.configs_records['fitres.metrics']['rssi'] = None
+                reply.content.configs_records['fitres.metrics']['rsrq'] = None
+        except Exception as e:
+            logger.error(f"Error executing AT command: {e}")
+            return reply
     except Exception as e:
         logger.error(f"Error opening serial port: {e}")
-        return reply
-
-    try:
-        rsp = _send_serial_command(ser, 'at#rfsts')
-        extracted_response = rsp[2]
-        pattern = r'#RFSTS:\s*\"([^\"]+)\",(\d+),(\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),(\d+),(\d+),(\d+)'
-
-        match = re.search(pattern, extracted_response)
-        if match:
-            reply.content.configs_records['fitres.metrics']['rsrp'] = match.group(4)
-            reply.content.configs_records['fitres.metrics']['rssi'] = match.group(5)
-            reply.content.configs_records['fitres.metrics']['rsrq'] = match.group(6)
-        else:
-            logger.error("No match found in the response")
-            reply.content.configs_records['fitres.metrics']['rsrp'] = None
-            reply.content.configs_records['fitres.metrics']['rssi'] = None
-            reply.content.configs_records['fitres.metrics']['rsrq'] = None
-        ser.close()
-    except Exception as e:
-        logger.error(f"Error executing AT command: {e}")
-        return reply
+    finally:
+        if ser and ser.is_open:
+            ser.close()
     return reply
 
 def comm_time_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
