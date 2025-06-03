@@ -13,9 +13,4 @@ pushd "${HOME}"/fed_5g && git pull && popd || exit
 
 source "${HOME}"/fl_venv/bin/activate
 
-python "${HOME}"/fed_5g/util/ue_phy_metrics.py > "${HOME}"/ue_log.txt 2>&1 &
-PYTHON_PID=$!
-echo "Python process started with PID: $PYTHON_PID"
-trap "kill $PYTHON_PID 2>/dev/null" EXIT INT TERM
-
 flower-supernode --insecure --superlink="${SERVER_IP}:9092" --node-config="dataset='~/node_datasets/cifar10_${DISTRIBUTION}' cid=${CID}"
