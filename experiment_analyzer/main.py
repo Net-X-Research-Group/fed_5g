@@ -4,6 +4,7 @@ import colorlog
 
 from experiment_analyzer.metrics.latency import LatencyMetric
 from experiment_analyzer.metrics.ml_metrics import MLMetric
+from experiment_analyzer.metrics.physical_layer import PHYMetric
 from experiment_analyzer.processor import Experiment
 
 handler = colorlog.StreamHandler()
@@ -30,7 +31,9 @@ def main():
     metrics = [LatencyMetric(),
                MLMetric('validation_accuracy'),
                MLMetric('train_accuracy'),
-               MLMetric('train_loss')
+               MLMetric('train_loss'),
+               MLMetric('validation_loss'),
+               PHYMetric('rsrp'),
                ]
 
     if not input_dir.exists():
