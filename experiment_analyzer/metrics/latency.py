@@ -47,9 +47,8 @@ class LatencyMetric(Metric):
 
         return uplink_df, downlink_df
 
-    def aggregate_across_trials(self, configuration: Configuration) -> Optional[pd.DataFrame]:
-        # TODO
-        pass
+    def aggregate_across_trials(self, configuration: Configuration, trial_data) -> Optional[pd.DataFrame]:
+        print(configuration)
 
     def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[
         pd.DataFrame]:

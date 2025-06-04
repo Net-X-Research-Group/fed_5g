@@ -39,12 +39,15 @@ def main():
 
     experiment = Experiment(path=input_dir)
 
-    for config in experiment.get_configurations():
-        logger.info(f'Processing configuration: {config.identifier}')
-        for trial in config.get_trials():
+    for configuration in experiment.get_configurations():
+        logger.info(f'Processing configuration: {configuration.identifier}')
+        trials_all_metrics = {}
+        for trial in configuration.get_trials():
             logger.info(f'Processing trial: {trial.identifier}')
             output_path = trial.get_output_path()
-            trial.process_trial(output_path, metrics)
+            trials_all_metrics[trial.identifier] = trial.process_trial(output_path, metrics)
+        configuration.aggregate_trials(trials_all_metrics, metrics)
+
 
 
 if __name__ == '__main__':

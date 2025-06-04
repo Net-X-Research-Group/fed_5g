@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict
 
-from experiment_analyzer.metrics.base import Metric
 import pandas as pd
+
+from experiment_analyzer.metrics.base import Metric
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class Trial:
@@ -36,9 +38,10 @@ class Trial:
         figure_path = self.get_figure_path()
         for metric in metrics:
             df = metric.extract_from_trial(self)
-            metric.visualize_trial(df, figure_path)
+            # metric.visualize_trial(df, figure_path) # TODO: UNDO COMMENT OUT, or build in switch
             results[metric.name] = df
         return results
+
 
 @dataclass
 class Configuration:
@@ -66,6 +69,20 @@ class Configuration:
             Returns: A list of trials"""
         return [Trial(item) for item in self.path.iterdir() if item.is_dir() and item not in ['output', 'figures']]
 
+    def aggregate_trials(self, trial_data, metrics):
+        aggregated_metrics = {}
+        for metric in metrics:
+            metric_data_over_trials = []
+            for trial_id, trial_metrics in trial_data.items():
+                if metric.name in trial_metrics:
+                    metric_data_over_trials.append(trial_metrics[metric.name])
+
+            if metric_data_over_trials:
+                aggregated_df = metric.aggregate_across_trials(self, metric_data_over_trials)
+                aggregated_metrics[metric.name] = aggregated_df
+        return aggregated_metrics
+
+
 @dataclass
 class Experiment:
     """This represents an experiment, it contains multiple configurations."""
@@ -88,5 +105,5 @@ class Experiment:
 
     def get_configurations(self) -> List[Configuration]:
         """Returns a list of all configurations"""
-        return [Configuration(item) for item in self.path.iterdir() if item.is_dir() and item not in ['output', 'figures']]
-
+        return [Configuration(item) for item in self.path.iterdir() if
+                item.is_dir() and item not in ['output', 'figures']]

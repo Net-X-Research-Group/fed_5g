@@ -5,7 +5,7 @@ from pathlib import Path # Added for type hinting
 import pandas as pd
 
 class Metric(ABC):
-    " Base class for all metrics used in the experiment analyzer."
+    """ Base class for all metrics used in the experiment analyzer."""
     @property
     @abstractmethod
     def name(self) -> str:
@@ -14,12 +14,12 @@ class Metric(ABC):
 
     @abstractmethod
     def extract_from_trial(self, trial) -> Optional[pd.DataFrame]:
-        "Extracts metric from raw data in single trial. Should return a DataFrame, saving is optional here."
+        """Extracts metric from raw data in single trial. Should return a DataFrame, saving is optional here."""
         pass
 
     @abstractmethod
-    def aggregate_across_trials(self, configuration) -> Optional[pd.DataFrame]:
-        "Aggregate a metric across multiple trials inside a configuration. Saves to output dir in config path and returns aggregated DataFrame."
+    def aggregate_across_trials(self, configuration, trial_data: Dict) -> Optional[pd.DataFrame]:
+        """Aggregate a metric across multiple trials inside a configuration. Saves to output dir in config path and returns aggregated DataFrame."""
         pass
 
     @abstractmethod
@@ -36,10 +36,10 @@ class Metric(ABC):
 
     @abstractmethod
     def visualize_single_config(self, df: pd.DataFrame, output_path_str: str) -> None:
-        "Visualizes a single configuration metric. Saves to output path."
+        """Visualizes a single configuration metric. Saves to output path."""
         pass
 
     @abstractmethod
     def visualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
-        "Visualizes aggregated metric across configurations. Saves to output path."
+        """Visualizes aggregated metric across configurations. Saves to output path."""
         pass
