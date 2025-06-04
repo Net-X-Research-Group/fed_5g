@@ -10,7 +10,7 @@ from flwr.client.mod import message_size_mod
 from flwr.common import Context
 
 from federated_application.models import ModelWrapper
-from federated_application.mods import comm_time_mod
+from federated_application.mods import comm_time_mod, phy_layer_measurement_mod
 from federated_application.task import (
     get_weights,
     set_weights,
@@ -119,4 +119,4 @@ def client_fn(context: Context):
                         run_config=config).to_client()
 
 
-app = ClientApp(client_fn=client_fn, mods=[comm_time_mod, message_size_mod])
+app = ClientApp(client_fn=client_fn, mods=[comm_time_mod, message_size_mod, phy_layer_measurement_mod])
