@@ -19,30 +19,9 @@ class PHYMetric(Metric):
         return self._metric_name
 
     def extract_from_trial(self, trial):
-        with open(trial.path / 'individual_metrics.json', 'r') as f:
-            data = json.load(f)
-        cids = set()
-        for round_data in data.values():
-            cids.update(round_data.keys())
-        cids = sorted(list(cids))
-
-        # Get all rounds
-        rounds = sorted(list(data.keys()), key=int)
-        result = pd.DataFrame(index=rounds)
-
-        # Fill in data for each CID
-        for cid in cids:
-            cid_values = []
-            for round_num in rounds:
-                if cid in data[round_num]:
-                    cid_values.append(data[round_num][cid][self.name])
-                else:
-                    cid_values.append(None)  # Handle missing data
-            result[f'CID_{cid}'] = cid_values
-
-        result.to_csv(trial.get_output_path() / f'{self.name}.csv')
-
-        return result
+        individual = self._extract_metric_from_individual(trial=trial, json_key=self.name)
+        aggregated = self._extract_metric_from_aggregated(trial=trial, json_key=self.name)
+        return individual, aggregated
 
     def aggregate_across_trials(self, trials: List[pd.DataFrame], config_output_path: Path) -> Optional[pd.DataFrame]:
         pass
@@ -51,10 +30,11 @@ class PHYMetric(Metric):
         pass
 
     def visualize_trial(self, data: Optional[pd.DataFrame], figure_path: Path) -> None:
+        individual, aggregated = data
         setup_plotting()
-        data = remove_underscore(data)
+        individual = remove_underscore(individual)
         plt.figure(figsize=(12, 6))
-        sns.violinplot(data=data)
+        sns.violinplot(data=individual)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.savefig(figure_path / f'{self.name}_box_by_cid.png')

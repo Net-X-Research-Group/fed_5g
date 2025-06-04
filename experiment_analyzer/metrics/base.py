@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, TYPE_CHECKING
-from pathlib import Path # Added for type hinting
+from pathlib import Path
+from json import load
 
 import pandas as pd
 
@@ -10,6 +11,7 @@ if TYPE_CHECKING:
 
 class Metric(ABC):
     """ Base class for all metrics used in the experiment analyzer."""
+
     @property
     def name(self) -> str:
         """Returns the name of the metric."""
@@ -47,4 +49,46 @@ class Metric(ABC):
         """Visualizes aggregated metric across configurations. Saves to output path."""
         pass
 
+    def _extract_metric_from_individual(self, trial: "Trial", json_key: str) -> Optional[pd.DataFrame]:
+        with open(trial.path / 'individual_metrics.json', 'r') as f:
+            data = load(f)
+        cids = set()
+        for round_data in data.values():
+            cids.update(round_data.keys())
+        cids = sorted(list(cids))
 
+        # Get all rounds
+        rounds = sorted(list(data.keys()), key=int)
+        result = pd.DataFrame(index=rounds)
+
+        # Fill in data for each CID
+        for cid in cids:
+            cid_values = []
+            for round_num in rounds:
+                if cid in data[round_num]:
+                    cid_values.append(data[round_num][cid][json_key])
+                else:
+                    cid_values.append(None)  # Handle missing data
+            result[f'CID_{cid}'] = cid_values
+
+        result.to_csv(trial.get_output_path() / f'{self.name}.csv')
+        return result if not result.empty else None
+
+    def _extract_metric_from_aggregated(self, trial: "Trial", json_key: str) -> Optional[pd.DataFrame]:
+        """No CID, just round based aggregation parsing"""
+        with open(trial.path / 'agg_metrics.json', 'r') as f:
+            data = load(f)
+        rounds = sorted(list(data.keys()), key=int)
+        result = pd.DataFrame(index=rounds)
+
+
+
+        values = []
+        for round_num in rounds:
+            if data[round_num]:
+                values.append(data[round_num][json_key])
+            else:
+                values.append(None)
+        result['avg'] = values
+        result.to_csv(trial.get_output_path() / f'{self.name}_server_agg_.csv')
+        return result if not result.empty else None

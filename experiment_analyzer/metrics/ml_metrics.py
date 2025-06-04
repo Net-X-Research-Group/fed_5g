@@ -27,30 +27,10 @@ class MLMetric(Metric):
 
 
     def extract_from_trial(self, trial):
-        with open(trial.path / 'individual_metrics.json', 'r') as f:
-            data = json.load(f)
-        cids = set()
-        for round_data in data.values():
-            cids.update(round_data.keys())
-        cids = sorted(list(cids))
+        individual = self._extract_metric_from_individual(trial=trial, json_key=self._json_key)
+        aggregated = self._extract_metric_from_aggregated(trial=trial, json_key=self._json_key)
 
-        # Get all rounds
-        rounds = sorted(list(data.keys()), key=int)
-        result = pd.DataFrame(index=rounds)
-
-        # Fill in data for each CID
-        for cid in cids:
-            cid_values = []
-            for round_num in rounds:
-                if cid in data[round_num]:
-                    cid_values.append(data[round_num][cid][self._json_key])
-                else:
-                    cid_values.append(None)  # Handle missing data
-            result[f'CID_{cid}'] = cid_values
-
-        result.to_csv(trial.get_output_path() / f'{self.name}.csv')
-
-        return result
+        return individual, aggregated
 
     def aggregate_across_trials(self, trials: List[pd.DataFrame], config_output_path: Path) -> Optional[pd.DataFrame]:
         pass
