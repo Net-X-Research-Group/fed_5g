@@ -26,14 +26,18 @@ class Trial:
         output_path.mkdir(exist_ok=True)
         return output_path
 
-    def process_trial(self, metrics: List[Metric]) -> Dict[str, pd.DataFrame]:
+    def get_figure_path(self) -> Path:
+        figure_path = self.path / "figures"
+        figure_path.mkdir(exist_ok=True)
+        return figure_path
+
+    def process_trial(self, output: Path, metrics: List[Metric]) -> Dict[str, pd.DataFrame]:
         results = {}
         for metric in metrics:
-            df = metric.extract_from_trial(str(self.path))
+            df = metric.extract_from_trial(self)
+            metric.visualize_trial(df)
             results[metric.name] = df
         return results
-
-
 
 @dataclass
 class Configuration:
