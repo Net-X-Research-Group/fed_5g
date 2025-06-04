@@ -10,7 +10,6 @@ NUM_CLIENTS=$1
 DEVICE_NAME_PREFIX="commnetpi0"
 IP_PREFIX="129.105.6."
 IP_SUFFIXES=(17 18 19 20 21 22)
-PHY_FILE_NAME="rfsts.csv"
 
 for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     LOGIN=$DEVICE_NAME_PREFIX$CID@$IP_PREFIX${IP_SUFFIXES[$CID-1]}
@@ -20,6 +19,4 @@ for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     NEW_FILE_NAME="${FILE_NAME%.csv}_CID${CID}.csv"
     scp "${LOGIN}:${FILE_NAME}" "${DIR_PATH}"/"${NEW_FILE_NAME}"
     ssh "${LOGIN}" rm latency_*
-    scp "${LOGIN}:${PHY_FILE_NAME}" "${DIR_PATH}"/"${PHY_FILE_NAME%.csv}_${RUN_ID}_CID${CID}.csv"
-    ssh "${LOGIN}" rm rfsts.csv
   done
