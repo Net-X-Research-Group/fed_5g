@@ -34,6 +34,8 @@ def main():
                MLMetric('train_loss'),
                MLMetric('validation_loss'),
                PHYMetric('rsrp'),
+               PHYMetric('rsrq'),
+               PHYMetric('rssi')
                ]
 
     if not input_dir.exists():
@@ -42,6 +44,7 @@ def main():
 
     experiment = Experiment(path=input_dir)
 
+    configurations_all_metrics = {}
     for configuration in experiment.get_configurations():
         logger.info(f'Processing configuration: {configuration.identifier}')
         trials_all_metrics = {}
@@ -49,8 +52,9 @@ def main():
             logger.info(f'Processing trial: {trial.identifier}')
             output_path = trial.get_output_path()
             trials_all_metrics[trial.identifier] = trial.process_trial(output_path, metrics)
-        configuration.aggregate_trials(trials_all_metrics, metrics)
+        configurations_all_metrics[configuration.identifier] = configuration.aggregate_trials(trials_all_metrics, metrics)
 
+    print('stop')
 
 
 if __name__ == '__main__':

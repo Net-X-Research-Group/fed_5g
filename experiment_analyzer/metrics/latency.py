@@ -47,13 +47,8 @@ class LatencyMetric(Metric):
 
         return uplink_df, downlink_df
 
-    def aggregate_across_trials(self, configuration: Configuration, trial_data) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        uplinks = [] # List of dfs
-        downlinks = [] # List of dfs
-        for trial in trial_data:
-            uplink, downlink = trial # Tuple of uplink and downlink dfs
-            uplinks.append(uplink)
-            downlinks.append(downlink)
+    def aggregate_across_trials(self, configuration: Configuration, trial_data: List[Tuple[pd.DataFrame, pd.DataFrame]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        uplinks, downlinks = self._parse_tuple(trial_data)
 
         uplink_aggregated = pd.concat(uplinks, axis=1).T.groupby(level=0).mean().T
         downlink_aggregated = pd.concat(downlinks, axis=1).T.groupby(level=0).mean().T

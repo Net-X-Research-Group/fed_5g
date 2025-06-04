@@ -70,6 +70,7 @@ class Configuration:
         return [Trial(item) for item in self.path.iterdir() if item.is_dir() and item.name not in ['output', 'figures']]
 
     def aggregate_trials(self, trial_data, metrics):
+        figure_path = self.get_figure_path()
         aggregated_metrics = {}
         for metric in metrics:
             metric_data_over_trials = []
@@ -80,6 +81,7 @@ class Configuration:
             if metric_data_over_trials:
                 aggregated_df = metric.aggregate_across_trials(self, metric_data_over_trials)
                 aggregated_metrics[metric.name] = aggregated_df
+                #metric.visualize_trial(aggregated_df, figure_path)
         return aggregated_metrics
 
 

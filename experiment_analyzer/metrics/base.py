@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import Optional, List, Dict, TYPE_CHECKING, Tuple
 from pathlib import Path
 from json import load
 
@@ -90,3 +90,15 @@ class Metric(ABC):
         result['avg'] = values
         result.to_csv(trial.get_output_path() / f'{self.name}_server_agg_.csv')
         return result if not result.empty else None
+
+    @staticmethod
+    def _parse_tuple(dataset: List[Tuple[pd.DataFrame, pd.DataFrame]]) -> Tuple[List, List]:
+        """Parses a list of tuples and returns two lists containing all the data"""
+        firsts = []
+        seconds = []
+        for data in dataset:
+            first, second = data # Tuple of uplink and downlink dfs
+            firsts.append(first)
+            seconds.append(second)
+
+        return firsts, seconds
