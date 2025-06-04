@@ -58,11 +58,11 @@ class MLMetric(Metric):
     def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[pd.DataFrame]:
         pass
 
-    def visualize_trial(self, data: Optional[pd.DataFrame]) -> None:
+    def visualize_trial(self, data: Optional[pd.DataFrame], figure_path: Path) -> None:
         pass
 
-    def vizualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
+    def visualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
         pass
 
-    def vizualize_single_config(self, df: pd.DataFrame, output_path_str: str) -> None:
+    def visualize_single_config(self, df: pd.DataFrame, output_path_str: str) -> None:
         pass

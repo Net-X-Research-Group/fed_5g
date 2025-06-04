@@ -18,7 +18,7 @@ class Metric(ABC):
         pass
 
     @abstractmethod
-    def aggregate_across_trials(self, trials: List[pd.DataFrame], config_output_path: Path) -> Optional[pd.DataFrame]:
+    def aggregate_across_trials(self, configuration) -> Optional[pd.DataFrame]:
         "Aggregate a metric across multiple trials inside a configuration. Saves to output dir in config path and returns aggregated DataFrame."
         pass
 
@@ -31,15 +31,15 @@ class Metric(ABC):
         pass
 
     @abstractmethod
-    def visualize_trial(self, data: Optional[pd.DataFrame]) -> None:
+    def visualize_trial(self, data: Optional[pd.DataFrame], figure_path: Path) -> None:
         pass
 
     @abstractmethod
-    def vizualize_single_config(self, df: pd.DataFrame, output_path_str: str) -> None:
+    def visualize_single_config(self, df: pd.DataFrame, output_path_str: str) -> None:
         "Visualizes a single configuration metric. Saves to output path."
         pass
 
     @abstractmethod
-    def vizualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
+    def visualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
         "Visualizes aggregated metric across configurations. Saves to output path."
         pass

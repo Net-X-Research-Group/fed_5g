@@ -33,9 +33,10 @@ class Trial:
 
     def process_trial(self, output: Path, metrics: List[Metric]) -> Dict[str, pd.DataFrame]:
         results = {}
+        figure_path = self.get_figure_path()
         for metric in metrics:
             df = metric.extract_from_trial(self)
-            metric.visualize_trial(df)
+            metric.visualize_trial(df, figure_path)
             results[metric.name] = df
         return results
 

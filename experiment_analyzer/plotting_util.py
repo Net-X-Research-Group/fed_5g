@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import pandas as pd
+
 
 def setup_plotting():
     plt.rcParams.update({
@@ -10,3 +12,7 @@ def setup_plotting():
         'savefig.format': 'png',
         'savefig.bbox': 'tight'
     })
+
+def remove_underscore(df) -> pd.DataFrame:
+    edited = df.rename(columns=lambda name: name.replace('_', ' '))
+    return edited
