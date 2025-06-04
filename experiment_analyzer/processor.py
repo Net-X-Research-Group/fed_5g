@@ -38,7 +38,7 @@ class Trial:
         figure_path = self.get_figure_path()
         for metric in metrics:
             df = metric.extract_from_trial(self)
-            metric.visualize_trial(df, figure_path) # TODO: UNDO COMMENT OUT, or build in switch
+            #metric.visualize_trial(df, figure_path) # TODO: UNDO COMMENT OUT, or build in switch
             results[metric.name] = df
         return results
 

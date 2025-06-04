@@ -81,8 +81,6 @@ class Metric(ABC):
         rounds = sorted(list(data.keys()), key=int)
         result = pd.DataFrame(index=rounds)
 
-
-
         values = []
         for round_num in rounds:
             if data[round_num]:
