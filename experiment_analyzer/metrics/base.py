@@ -1,8 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, TYPE_CHECKING
 from pathlib import Path # Added for type hinting
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from experiment_analyzer.processor import Trial, Configuration
+
 
 class Metric(ABC):
     """ Base class for all metrics used in the experiment analyzer."""
@@ -12,12 +16,12 @@ class Metric(ABC):
         return self.__class__.__name__.replace('Metric', '').lower()
 
     @abstractmethod
-    def extract_from_trial(self, trial) -> Optional[pd.DataFrame]:
+    def extract_from_trial(self, trial: "Trial") -> Optional[pd.DataFrame]:
         """Extracts metric from raw data in single trial. Should return a DataFrame, saving is optional here."""
         pass
 
     @abstractmethod
-    def aggregate_across_trials(self, configuration, trial_data: Dict) -> Optional[pd.DataFrame]:
+    def aggregate_across_trials(self, configuration: "Configuration", trial_data: Dict) -> Optional[pd.DataFrame]:
         """Aggregate a metric across multiple trials inside a configuration. Saves to output dir in config path and returns aggregated DataFrame."""
         pass
 
