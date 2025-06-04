@@ -7,10 +7,9 @@ import pandas as pd
 class Metric(ABC):
     """ Base class for all metrics used in the experiment analyzer."""
     @property
-    @abstractmethod
     def name(self) -> str:
         """Returns the name of the metric."""
-        pass
+        return self.__class__.__name__.replace('Metric', '').lower()
 
     @abstractmethod
     def extract_from_trial(self, trial) -> Optional[pd.DataFrame]:
@@ -43,3 +42,5 @@ class Metric(ABC):
     def visualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
         """Visualizes aggregated metric across configurations. Saves to output path."""
         pass
+
+
