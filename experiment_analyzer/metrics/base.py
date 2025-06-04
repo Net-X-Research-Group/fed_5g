@@ -9,7 +9,7 @@ class Metric(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        "Returns the name of the metric."
+        """Returns the name of the metric."""
         pass
 
     @abstractmethod

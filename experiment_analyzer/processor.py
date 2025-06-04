@@ -67,7 +67,7 @@ class Configuration:
     def get_trials(self) -> List[Trial]:
         """Get all trials inside a configuration
             Returns: A list of trials"""
-        return [Trial(item) for item in self.path.iterdir() if item.is_dir() and item not in ['output', 'figures']]
+        return [Trial(item) for item in self.path.iterdir() if item.is_dir() and item.name not in ['output', 'figures']]
 
     def aggregate_trials(self, trial_data, metrics):
         aggregated_metrics = {}
