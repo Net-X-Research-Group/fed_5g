@@ -29,4 +29,6 @@ class LatencyMetric(Metric):
             uplink_df[cid] = df['Uplink']
             downlink_df[cid] = df['Downlink']
 
+        uplink_df.to_csv()
+
         return [uplink_df, downlink_df]
