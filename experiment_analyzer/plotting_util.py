@@ -14,5 +14,4 @@ def setup_plotting():
     })
 
 def remove_underscore(df) -> pd.DataFrame:
-    edited = df.rename(columns=lambda name: name.replace('_', ' '))
-    return edited
+    return df.rename(columns=lambda name: name.replace('_', ' '))
