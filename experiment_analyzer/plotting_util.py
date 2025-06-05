@@ -13,5 +13,6 @@ def setup_plotting():
         'savefig.bbox': 'tight'
     })
 
+
 def remove_underscore(df) -> pd.DataFrame:
     return df.rename(columns=lambda name: name.replace('_', ' '))

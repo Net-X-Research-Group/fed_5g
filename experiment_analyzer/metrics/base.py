@@ -4,6 +4,10 @@ from pathlib import Path
 from json import load
 
 import pandas as pd
+import logging_setup
+
+logger = logging_setup.setup_logging('debug')
+
 
 if TYPE_CHECKING:
     from experiment_analyzer.processor import Trial, Configuration
