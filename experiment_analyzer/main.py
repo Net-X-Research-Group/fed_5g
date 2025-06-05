@@ -54,6 +54,8 @@ def main():
             trials_all_metrics[trial.identifier] = trial.process_trial(output_path, metrics)
         configurations_all_metrics[configuration.identifier] = configuration.aggregate_trials(trials_all_metrics, metrics)
 
+    experiment.process(configurations_all_metrics, metrics)
+
     print('stop')
 
 

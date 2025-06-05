@@ -40,12 +40,12 @@ class Metric(ABC):
         pass
 
     @abstractmethod
-    def visualize_single_config(self, df: pd.DataFrame, output_path_str: str) -> None:
+    def visualize_single_config(self, df: pd.DataFrame, output_path_str: Path) -> None:
         """Visualizes a single configuration metric. Saves to output path."""
         pass
 
     @abstractmethod
-    def visualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
+    def visualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: Path) -> None:
         """Visualizes aggregated metric across configurations. Saves to output path."""
         pass
 
