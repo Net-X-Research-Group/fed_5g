@@ -109,14 +109,3 @@ class Experiment:
         """Returns a list of all configurations"""
         return [Configuration(item) for item in self.path.iterdir() if
                 item.is_dir() and item not in ['output', 'figures']]
-
-    def process(self, configuration_data, metrics: List[Metric]):
-        figure_path = self.get_figure_path()
-        for metric in metrics:
-            experiment_data = {}
-            for configuration_id, configuration_metrics in configuration_data.items():
-                if metric.name in configuration_metrics:
-                    experiment_data[configuration_id] = configuration_metrics[metric.name]
-            output_path = self.get_output_path()
-            metric.aggregate_across_configs(experiment_data, output_path)
-            metric.visualize_across_configs(experiment_data, figure_path)
