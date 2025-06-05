@@ -1,17 +1,14 @@
 # This is the main pipeline processor for the experiment analyzer.
-
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict
 
 import pandas as pd
 
+import logging_setup
 from experiment_analyzer.metrics.base import Metric
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+logger = logging_setup.setup_logging('info')
 
 @dataclass
 class Trial:

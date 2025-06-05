@@ -1,28 +1,12 @@
 from pathlib import Path
-import logging
-import colorlog
 
+import logging_setup
 from experiment_analyzer.metrics.latency import LatencyMetric
 from experiment_analyzer.metrics.ml_metrics import MLMetric
 from experiment_analyzer.metrics.physical_layer import PHYMetric
 from experiment_analyzer.processor import Experiment
 
-handler = colorlog.StreamHandler()
-handler.setFormatter(colorlog.ColoredFormatter(
-    '%(log_color)s%(asctime)s %(levelname)s %(message)s',
-    datefmt='%H:%M:%S',
-    log_colors={
-        'DEBUG': 'cyan',
-        'INFO': 'green',
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'CRITICAL': 'red,bg_white',
-    }
-))
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-logger.handlers = [handler]
+logger = logging_setup.setup_logging('info')
 
 
 def main():
