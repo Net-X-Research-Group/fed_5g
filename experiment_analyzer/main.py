@@ -26,7 +26,7 @@ logger.handlers = [handler]
 
 
 def main():
-    input_dir = Path('/Users/roberthayek/5G_Test')
+    input_dir = Path('/Users/roberthayek/5G_Test/')
 
     metrics = [LatencyMetric(),
                MLMetric('validation_accuracy'),

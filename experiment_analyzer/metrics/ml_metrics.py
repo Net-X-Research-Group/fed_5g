@@ -20,7 +20,8 @@ class MLMetric(Metric):
             'validation_accuracy': 'val_acc',
             'validation_loss': 'val_loss',
             'train_accuracy': 'train_acc',
-            'train_loss': 'train_loss'
+            'train_loss': 'train_loss',
+            'avg_trainloss': 'avg_trainloss'
         }
         return matches.get(metric_name, metric_name)
 
