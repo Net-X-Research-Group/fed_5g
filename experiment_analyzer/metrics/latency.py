@@ -90,7 +90,7 @@ class LatencyMetric(Metric):
 
         return uplink_aggregated, downlink_aggregated
 
-    def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Dict:
+    def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
         """
         Aggregates uplink and downlink latencies across multiple configurations. The individual node times are averaged
         row wise for each config. Then returned {Config: pd.DataFrame}
@@ -163,7 +163,7 @@ class LatencyMetric(Metric):
 
         return
 
-    def visualize_across_configs(self, dfs: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]], figure_path: Path) -> None:
+    def visualize_across_configs(self, dfs: Dict[str, Dict], figure_path: Path) -> None:
         """
         dfs is {Config: pd.Series} representing each configs average. This function visualizes the uplink and downlink latencies across configurations.
         FileIO: Outputs a combined box plot in the figure path.

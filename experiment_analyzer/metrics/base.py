@@ -32,7 +32,7 @@ class Metric(ABC):
         pass
 
     @abstractmethod
-    def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[pd.DataFrame]:
+    def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[Dict]:
         """
         Aggregate/combine metrics across configurations for comparison. Saves to output dir in experiment path.
         Returns a DataFrame suitable for comparison plotting.
