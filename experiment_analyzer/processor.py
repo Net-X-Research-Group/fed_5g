@@ -35,7 +35,7 @@ class Trial:
         figure_path = self.get_figure_path()
         for metric in metrics:
             df = metric.extract_from_trial(self)
-            #metric.visualize_trial(df, figure_path) # TODO: UNDO COMMENT OUT, or build in switch
+            metric.visualize_trial(df, figure_path) # TODO: UNDO COMMENT OUT, or build in switch
             results[metric.name] = df
         return results
 
@@ -105,7 +105,7 @@ class Experiment:
     def get_configurations(self) -> List[Configuration]:
         """Returns a list of all configurations"""
         return [Configuration(item) for item in self.path.iterdir() if
-                item.is_dir() and item not in ['output', 'figures']]
+                item.is_dir() and item.name not in ['output', 'figures']]
 
     def process(self, configuration_data, metrics: List[Metric]):
         figure_path = self.get_figure_path()
@@ -115,5 +115,5 @@ class Experiment:
                 if metric.name in configuration_metrics:
                     experiment_data[configuration_id] = configuration_metrics[metric.name]
             output_path = self.get_output_path()
-            metric.aggregate_across_configs(experiment_data, output_path)
-            metric.visualize_across_configs(experiment_data, figure_path)
+            experiment_aggregated = metric.aggregate_across_configs(experiment_data, output_path)
+            metric.visualize_across_configs(experiment_aggregated, figure_path)
