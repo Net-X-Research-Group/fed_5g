@@ -11,7 +11,7 @@ import seaborn as sns
 import logging_setup
 from experiment_analyzer.metrics.base import Metric
 from experiment_analyzer.plotting_util import setup_plotting, remove_underscore
-from experiment_analyzer.processor import Trial, Configuration
+from experiment_analyzer.data_models import Trial, Configuration
 
 logger = logging_setup.setup_logging('debug') # Custom logging setup for the module
 
