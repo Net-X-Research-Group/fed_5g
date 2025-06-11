@@ -1,17 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, TYPE_CHECKING, Tuple
-from pathlib import Path
 from json import load
+from pathlib import Path
+from typing import Optional, List, Dict, Tuple
 
 import pandas as pd
+
 import logging_setup
+from experiment_analyzer.data_models import Trial, Configuration
 
 logger = logging_setup.setup_logging('debug')
-
-
-if TYPE_CHECKING:
-    from experiment_analyzer.processor import Trial, Configuration
-
 
 class Metric(ABC):
     """ Base class for all metrics used in the experiment analyzer."""
@@ -22,17 +19,17 @@ class Metric(ABC):
         return self.__class__.__name__.replace('Metric', '').lower()
 
     @abstractmethod
-    def extract_from_trial(self, trial: "Trial") -> Optional[pd.DataFrame]:
+    def extract_from_trial(self, trial: Trial) -> Optional[pd.DataFrame]:
         """Extracts metric from raw data in single trial. Should return a DataFrame, saving is optional here."""
         pass
 
     @abstractmethod
-    def aggregate_across_trials(self, configuration: "Configuration", trial_data: Dict) -> Optional[pd.DataFrame]:
+    def aggregate_across_trials(self, configuration: Configuration, trial_data: List) -> Optional[pd.DataFrame]:
         """Aggregate a metric across multiple trials inside a configuration. Saves to output dir in config path and returns aggregated DataFrame."""
         pass
 
     @abstractmethod
-    def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[pd.DataFrame]:
+    def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[Dict]:
         """
         Aggregate/combine metrics across configurations for comparison. Saves to output dir in experiment path.
         Returns a DataFrame suitable for comparison plotting.

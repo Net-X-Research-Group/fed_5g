@@ -1,8 +1,11 @@
 from pathlib import Path
+from typing import List, Optional, Dict, Tuple
 
 import pandas as pd
-from typing import List, Optional, Dict
+
 from experiment_analyzer.metrics.base import Metric
+
+from experiment_analyzer.data_models import Trial, Configuration
 
 
 class MLMetric(Metric):
@@ -26,14 +29,14 @@ class MLMetric(Metric):
         return matches.get(metric_name, metric_name)
 
 
-    def extract_from_trial(self, trial):
+    def extract_from_trial(self, trial: Trial):
         individual = self._extract_metric_from_individual(trial=trial, json_key=self._json_key)
         aggregated = self._extract_metric_from_aggregated(trial=trial, json_key=self._json_key)
 
         return individual, aggregated
 
-    def aggregate_across_trials(self, trials: List[pd.DataFrame], config_output_path: Path) -> Optional[pd.DataFrame]:
-        pass
+    def aggregate_across_trials(self, configuration: Configuration, trial_data: List[Tuple[pd.DataFrame, pd.DataFrame]]) -> Optional[pd.DataFrame]:
+        print('aggregating across trials')
 
     def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[pd.DataFrame]:
         pass

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from experiment_analyzer.plotting_util import remove_underscore, setup_plotting
-from experiment_analyzer.processor import Trial, Configuration
+from experiment_analyzer.data_models import Trial, Configuration
 
 class PHYMetric(Metric):
     def __init__(self, metric_name: str) -> None:
