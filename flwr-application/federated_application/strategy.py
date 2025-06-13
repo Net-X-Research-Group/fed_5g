@@ -118,11 +118,14 @@ class MetricsFedAvg(FedAvg):
             server_round (int): The current round of training.
             results (dict): The aggregated results from the clients, including individual metrics.
         """
-        self.individual_metrics[server_round] = results.pop('individual_metrics')
-        self.results[server_round] = results
-        if self.enable_wandb:
-            wandb.log(results, step=server_round)
-        self._write_logs()
+        try:
+            self.individual_metrics[server_round] = results.pop('individual_metrics')
+            if self.enable_wandb:
+                wandb.log(results, step=server_round)
+            self._write_logs()
+            self.results[server_round] = results
+        except KeyError:
+            logger.info('No results to log. LOCATION OF SERVERAPP EXCEPTION')
         if server_round == self.num_rounds or self.early_stop:
             if ENABLE_WIRESHARK:
                 try:
@@ -144,6 +147,7 @@ class MetricsFedAvg(FedAvg):
             tuple: The aggregated parameters and metrics.
         """
         params, metrics = super().aggregate_fit(server_round, results, failures)
+        logger.info(f'params: {params}\nmetrics: {metrics}')
         self._log_results(server_round, metrics)
         if ENABLE_EARLY_STOPPING:
             if metrics['val_acc'] <= 0.20 and server_round >= 15:
