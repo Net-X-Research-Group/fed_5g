@@ -162,9 +162,7 @@ class MetricsFedAvg(FedAvg):
                         self.early_stop = True
                 if self.enable_wandb:
                     wandb.log({"patience": self.patience}, step=server_round)
-            return params, metrics
-        else:
-            logger.info('params empty. ERROR')
+        return params, metrics
 
     def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[
         tuple[ClientProxy, FitIns]]:
