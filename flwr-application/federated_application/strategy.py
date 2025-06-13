@@ -148,20 +148,23 @@ class MetricsFedAvg(FedAvg):
         """
         params, metrics = super().aggregate_fit(server_round, results, failures)
         logger.info(f'params: {params}\nmetrics: {metrics}')
-        self._log_results(server_round, metrics)
-        if ENABLE_EARLY_STOPPING:
-            if metrics['val_acc'] <= 0.20 and server_round >= 15:
-                self.early_stop = True
-            elif metrics['val_loss'] + EARLY_STOPPING_TOLERANCE < self.best_loss:
-                self.best_loss = metrics['val_loss']
-                self.patience = EARLY_STOPPING_PATIENCE
-            else:
-                self.patience -= 1
-                if self.patience == 0:
+        if params:
+            self._log_results(server_round, metrics)
+            if ENABLE_EARLY_STOPPING:
+                if metrics['val_acc'] <= 0.20 and server_round >= 15:
                     self.early_stop = True
-            if self.enable_wandb:
-                wandb.log({"patience": self.patience}, step=server_round)
-        return params, metrics
+                elif metrics['val_loss'] + EARLY_STOPPING_TOLERANCE < self.best_loss:
+                    self.best_loss = metrics['val_loss']
+                    self.patience = EARLY_STOPPING_PATIENCE
+                else:
+                    self.patience -= 1
+                    if self.patience == 0:
+                        self.early_stop = True
+                if self.enable_wandb:
+                    wandb.log({"patience": self.patience}, step=server_round)
+            return params, metrics
+        else:
+            logger.info('params empty. ERROR')
 
     def configure_fit(self, server_round: int, parameters: Parameters, client_manager: ClientManager) -> list[
         tuple[ClientProxy, FitIns]]:
