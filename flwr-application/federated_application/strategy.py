@@ -147,7 +147,6 @@ class MetricsFedAvg(FedAvg):
             tuple: The aggregated parameters and metrics.
         """
         params, metrics = super().aggregate_fit(server_round, results, failures)
-        logger.info(f'params: {params}\nmetrics: {metrics}')
         if params:
             self._log_results(server_round, metrics)
             if ENABLE_EARLY_STOPPING:
