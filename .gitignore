@@ -3,3 +3,6 @@ venv/
 flwr-application/pyproject.toml
 *.csv
 *.json
+*.png
+.DS_Store
+*.pyc
