@@ -5,6 +5,7 @@ from typing import List, Optional, Dict
 from metrics.base import Metric
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import seaborn as sns
 from plotting_util import setup_plotting, remove_underscore
 
@@ -62,15 +63,15 @@ class TimeMetric(Metric):
         df = remove_underscore(individual)
 
         # Line graph
-        fig, ax = plt.subplots(figsize=(12, 10))
-        sns.lineplot(data=df, ax=ax, dashes=False)
-        ax.set_title(self.name)
-        ax.set_ylabel("Time (s)")
-        ax.set_xlabel("Round Number")
-        ax.legend(title="Client ID")
-
+        fig = plt.figure(figsize=(12, 6))
+        sns.lineplot(data=df, dashes=False)
+        plt.xlabel('Round Number')
+        plt.gca().xaxis.set_major_locator(ticker.MultipleLocator(10))
+        plt.ylabel('Time (s)')
+        plt.title(self._metric_name)
+        plt.legend(title="Client ID")
         plt.tight_layout()
-        plt.savefig(figure_path / f'{self.name}_split_linegraph')
+        plt.savefig(figure_path / f'{self.name}_linegraph')
         plt.close()
 
         # Box plot
@@ -81,7 +82,7 @@ class TimeMetric(Metric):
         plt.savefig(figure_path / f'{self.name}_box_by_cid.png')
         plt.close()
 
-        logger.info(f'{self.name}: Outputted line graph and box plot for trial.')
+        logger.info(f'{self._metric_name}: Outputted line graph and box plot for trial.')
 
         return
 
