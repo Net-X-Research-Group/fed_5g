@@ -3,9 +3,9 @@ from typing import List, Optional, Dict, Tuple
 
 import pandas as pd
 
-from experiment_analyzer.metrics.base import Metric
+from metrics.base import Metric
 
-from experiment_analyzer.data_models import Trial, Configuration
+from data_models import Trial, Configuration
 
 
 class MLMetric(Metric):

@@ -2,7 +2,14 @@ from pathlib import Path
 
 import pandas as pd
 from typing import List, Optional, Dict
-from experiment_analyzer.metrics.base import Metric
+from metrics.base import Metric
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from plotting_util import setup_plotting, remove_underscore
+
+import logging_setup
+logger = logging_setup.setup_logging('debug') # Custom logging setup for the module
 
 class TimeMetric(Metric):
     def __init__(self, metric_name: str) -> None:
@@ -34,13 +41,49 @@ class TimeMetric(Metric):
         return individual, aggregated
 
     def aggregate_across_trials(self, trials: List[pd.DataFrame], config_output_path: Path) -> Optional[pd.DataFrame]:
-        pass
+        aggregated = pd.concat(trials, axis=1).T.groupby(level=0).mean().T
+        aggregated.to_csv(config_output_path / f'aggregated_{self.name}.csv', index=False)
+
+        return aggregated
 
     def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[pd.DataFrame]:
-        pass
+        configurations = config_dfs.keys()
+
+        results = {}
+        for configuration in configurations:
+            results[configuration] = config_dfs[configuration].mean(axis=1)
+
+        return results
 
     def visualize_trial(self, data: Optional[pd.DataFrame], figure_path: Path) -> None:
-        pass
+        setup_plotting()
+
+        individual, aggregated = data
+        df = remove_underscore(individual)
+
+        # Line graph
+        fig, ax = plt.subplots(figsize=(12, 10))
+        sns.lineplot(data=df, ax=ax, dashes=False)
+        ax.set_title(self.name)
+        ax.set_ylabel("Time (s)")
+        ax.set_xlabel("Round Number")
+        ax.legend(title="Client ID")
+
+        plt.tight_layout()
+        plt.savefig(figure_path / f'{self.name}_split_linegraph')
+        plt.close()
+
+        # Box plot
+        plt.figure(figsize=(12, 6))
+        sns.boxplot(data=df)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(figure_path / f'{self.name}_box_by_cid.png')
+        plt.close()
+
+        logger.info(f'{self.name}: Outputted line graph and box plot for trial.')
+
+        return
 
     def visualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
         pass

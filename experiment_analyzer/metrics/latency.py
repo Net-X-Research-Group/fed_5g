@@ -9,9 +9,9 @@ import pandas as pd
 import seaborn as sns
 
 import logging_setup
-from experiment_analyzer.metrics.base import Metric
-from experiment_analyzer.plotting_util import setup_plotting, remove_underscore
-from experiment_analyzer.data_models import Trial, Configuration
+from metrics.base import Metric
+from plotting_util import setup_plotting, remove_underscore
+from data_models import Trial, Configuration
 
 logger = logging_setup.setup_logging('debug') # Custom logging setup for the module
 
@@ -157,6 +157,7 @@ class LatencyMetric(Metric):
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.savefig(figure_path / f'uplink_{self.name}_box_by_cid.png')
+        plt.close()
 
 
         logger.info('Latency Metric: Outputted split line graph and box plot for trial.')

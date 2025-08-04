@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Tuple
 import pandas as pd
 
 import logging_setup
-from experiment_analyzer.data_models import Trial, Configuration
+from data_models import Trial, Configuration
 
 logger = logging_setup.setup_logging('debug')
 
@@ -89,7 +89,7 @@ class Metric(ABC):
             else:
                 values.append(None)
         result['avg'] = values
-        result.to_csv(trial.get_output_path() / f'{self.name}_server_agg_.csv')
+        result.to_csv(trial.get_output_path() / f'{self.name}_server_agg.csv')
         return result if not result.empty else None
 
     @staticmethod

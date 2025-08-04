@@ -1,11 +1,12 @@
 from pathlib import Path
 
 import logging_setup
-from experiment_analyzer.metrics.latency import LatencyMetric
-from experiment_analyzer.metrics.ml_metrics import MLMetric
-from experiment_analyzer.metrics.physical_layer import PHYMetric
-from experiment_analyzer.metrics.base import Metric
-from experiment_analyzer.data_models import Trial, Configuration, Experiment
+from metrics.latency import LatencyMetric
+from metrics.ml_metrics import MLMetric
+from metrics.physical_layer import PHYMetric
+from metrics.time_metrics import TimeMetric
+from metrics.base import Metric
+from data_models import Trial, Configuration, Experiment
 from typing import List, Dict
 import pandas as pd
 
@@ -50,16 +51,23 @@ def process_experiment(experiment: Experiment, configuration_data: Dict, metrics
 
 
 def main():
-    input_dir = Path('/Users/roberthayek/5G_Test/')
+    input_dir = Path('5G_IID')
 
     metrics = [LatencyMetric(),
-               MLMetric('validation_accuracy'),
-               MLMetric('train_accuracy'),
-               MLMetric('train_loss'),
-               MLMetric('validation_loss'),
-               PHYMetric('rsrp'),
-               PHYMetric('rsrq'),
-               PHYMetric('rssi')
+               TimeMetric('fake_uplink_time'),
+            #    TimeMetric('fake_downlink_time'),
+            #    TimeMetric('training_time'),
+            #    TimeMetric('train_dataset_eval_time'),
+            #    TimeMetric('validation_dataset_eval_time'),
+            #    TimeMetric('train_start_timestamp'),
+            #    TimeMetric('train_end_timestamp'),
+            #    MLMetric('validation_accuracy'),
+            #    MLMetric('train_accuracy'),
+            #    MLMetric('train_loss'),
+            #    MLMetric('validation_loss'),
+            #    PHYMetric('rsrp'),
+            #    PHYMetric('rsrq'),
+            #    PHYMetric('rssi')
                ]
 
     if not input_dir.exists():

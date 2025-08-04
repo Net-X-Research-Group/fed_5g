@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pandas as pd
 from typing import List, Optional, Dict, Tuple
-from experiment_analyzer.metrics.base import Metric
+from metrics.base import Metric
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from experiment_analyzer.plotting_util import remove_underscore, setup_plotting
-from experiment_analyzer.data_models import Trial, Configuration
+from plotting_util import remove_underscore, setup_plotting
+from data_models import Trial, Configuration
 
 class PHYMetric(Metric):
     def __init__(self, metric_name: str) -> None:
