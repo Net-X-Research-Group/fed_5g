@@ -61,7 +61,11 @@ class TimeMetric(Metric):
 
         results = {}
         for configuration in configurations:
-            results[configuration] = config_dfs[configuration].mean(axis=1)
+            individual_aggregated, early_aggregated = config_dfs[configuration]
+            individual_aggregated = individual_aggregated.mean(axis=1)
+            early_aggregated = early_aggregated.mean(axis=1)
+
+            results[configuration] = individual_aggregated, early_aggregated
 
         return results
 
