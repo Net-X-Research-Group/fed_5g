@@ -1,3 +1,5 @@
 venv/
 .idea/
 flwr-application/pyproject.toml
+*.csv
+*.json
