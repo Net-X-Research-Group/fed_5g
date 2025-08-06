@@ -124,7 +124,7 @@ class TimeMetric(Metric):
 
         plot_df = pd.DataFrame(plot_data)
         plt.figure(figsize=(12, 6))
-        sns.boxplot(data=plot_df, x='Configuration', y='Time (s)', hue='Direction', showfliers=False)
+        sns.boxplot(data=plot_df, x='Configuration', y='Time (s)', showfliers=False)
         plt.grid(True, alpha=0.3)
         plt.savefig(output_path_str / f'{self.name}_combined_box_plot.png')
         plt.close()
