@@ -96,7 +96,7 @@ class TimeMetric(Metric):
         plt.savefig(figure_path / f'{self.name}_box_by_cid.png')
         plt.close()
 
-        logger.info(f'{self._metric_name}: Outputted line graph and box plot for trial.')
+        logger.info(f'{self._metric_name}: Outputted line graph and box plot for trial(s).')
 
         return
 
@@ -107,73 +107,21 @@ class TimeMetric(Metric):
         sorted_configs = sorted(dfs.keys())
 
         for config_name in sorted_configs:
-            # uplink_df, downlink_df = dfs[config_name]
             df = dfs[config_name]
             for _, value in df.items():
                 plot_data.append({
                     'Configuration': config_name,
-                    # 'Direction': 'Uplink',
                     'Time (s)': value
                 })
-            # for _, downlink_value in downlink_df.items():
-            #     plot_data.append({
-            #         'Configuration': config_name,
-            #         'Direction': 'Downlink',
-            #         'Time (s)': downlink_value
-            #     })
 
         plot_df = pd.DataFrame(plot_data)
         plt.figure(figsize=(12, 6))
         sns.boxplot(data=plot_df, x='Configuration', y='Time (s)', showfliers=False)
         plt.grid(True, alpha=0.3)
-        plt.savefig(output_path_str / f'{self.name}_combined_box_plot.png')
+        plt.savefig(output_path_str / f'{self.name}_box_plot.png')
         plt.close()
 
-    #     fig, axs = plt.subplots(num_configurations, 1, figsize=(10, 4 * num_configurations))
-
-    # # Handle single column case
-    # if num_configurations == 1:
-    #     axs = [axs]
-
-    # # Main Histogram
-    # for idx, col in enumerate(data.columns):
-    #     axs[idx].hist(data[col], alpha=0.75, color='blue')
-    #     #axs[idx].set_title(f'{col.replace("_", " ")} Distribution')
-    #     axs[idx].set_xlabel('Time (s)')
-    #     axs[idx].set_ylabel('Frequency')
-    #     axs[idx].grid(True, alpha=0.3)
-    # #plt.suptitle(f'{name} Distribution by Configuration')
-    # plt.tight_layout()
-    # plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_histograms'))
-    # # plt.show()
-    # plt.close()
-
-    # # Violin plots
-    # plt.figure(figsize=(10, 6))
-    # plot_data = pd.melt(data, var_name='Configuration', value_name='Time (s)')
-    # sns.violinplot(data=plot_data, x='Configuration', y='Time (s)', inner='quartile', density_norm="area", common_norm=True)
-    # #plt.title(f'{name} Distribution by Configuration')
-    # plt.grid(True, alpha=0.3)
-    # plt.tight_layout()
-    # plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_violin'))
-    # # plt.show()
-    # plt.close()
-
-    # # Overlay Histograms
-    # fig, ax = plt.subplots(figsize=(10, 6))
-    # for col in data.columns:
-    #     ax.hist(data[col], alpha=0.75, label=col.replace("_", " "))
-    # #ax.set_title(f'{name} Distribution')
-    # ax.set_xlabel('Time (s)')
-    # ax.set_ylabel('Frequency')
-    # ax.legend()
-    # ax.grid(True, alpha=0.3)
-    # plt.tight_layout()
-    # plt.savefig(join(output_dir, f'{name.lower().replace(" ", "_")}_overlay_histogram'))
-    # # plt.show()
-    # plt.close()
-
-        # logger.info(f'{self._metric_name} Metric: Outputted combined box plot for configurations.')
+        logger.info(f'{self._metric_name} Metric: Outputted box plot for configurations.')
 
         return
 
