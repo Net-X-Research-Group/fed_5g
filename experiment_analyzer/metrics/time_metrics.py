@@ -40,40 +40,41 @@ class TimeMetric(Metric):
 
     def extract_from_trial(self, trial):
         individual = self._extract_metric_from_individual(trial=trial, json_key=self._json_key)
-        aggregated = self._extract_metric_from_aggregated(trial=trial, json_key=self._json_key)
+        # aggregated = self._extract_metric_from_aggregated(trial=trial, json_key=self._json_key)
 
-        return individual, aggregated
+        return individual#, aggregated
 
     def aggregate_across_trials(self, configuration: Configuration, trials: List[pd.DataFrame]) -> Optional[pd.DataFrame]:
         output_dir = configuration.get_output_path()
         
-        individual_dfs = [trial[0] for trial in trials]
-        aggregated_dfs = [trial[1] for trial in trials]
+        # individual_dfs = [trial[0] for trial in trials]
 
-        aggregated = pd.concat(individual_dfs, axis=1).T.groupby(level=0).mean().T
-        aggregated_dfs_aggregated = pd.concat(aggregated_dfs, axis=1).T.groupby(level=0).mean().T
+        aggregated = pd.concat(trials, axis=1).T.groupby(level=0).mean().T
         aggregated.to_csv(output_dir / f'aggregated_{self.name}.csv', index=False)
 
-        return aggregated, aggregated_dfs_aggregated
+        return aggregated
 
     def aggregate_across_configs(self, config_dfs: Dict[str, pd.DataFrame], experiment_output_path: Path) -> Optional[pd.DataFrame]:
         configurations = config_dfs.keys()
 
         results = {}
         for configuration in configurations:
-            individual_aggregated, early_aggregated = config_dfs[configuration]
-            individual_aggregated = individual_aggregated.mean(axis=1)
-            early_aggregated = early_aggregated.mean(axis=1)
+            # individual_aggregated, early_aggregated = config_dfs[configuration]
+            # individual_aggregated = individual_aggregated.mean(axis=1)
+            # early_aggregated = early_aggregated.mean(axis=1)
 
-            results[configuration] = individual_aggregated, early_aggregated
+            # results[configuration] = individual_aggregated, early_aggregated
+
+            results[configuration] = config_dfs[configuration].mean(axis=1)
 
         return results
 
     def visualize_trial(self, data: Optional[pd.DataFrame], figure_path: Path) -> None:
         setup_plotting()
 
-        individual, aggregated = data
-        df = remove_underscore(individual)
+        # individual, aggregated = data
+        # df = remove_underscore(individual)
+        df = remove_underscore(data)
 
         # Line graph
         fig = plt.figure(figsize=(12, 6))
@@ -102,30 +103,31 @@ class TimeMetric(Metric):
     def visualize_across_configs(self, dfs: Dict[str, pd.DataFrame], output_path_str: str) -> None:
         setup_plotting()
 
-        # plot_data = []
-        # sorted_configs = sorted(dfs.keys())
+        plot_data = []
+        sorted_configs = sorted(dfs.keys())
 
-        # for config_name in sorted_configs:
-        #     uplink_df, downlink_df = dfs[config_name]
-        #     for _, uplink_value in uplink_df.items():
-        #         plot_data.append({
-        #             'Configuration': config_name,
-        #             'Direction': 'Uplink',
-        #             'Time (s)': uplink_value
-        #         })
-        #     for _, downlink_value in downlink_df.items():
-        #         plot_data.append({
-        #             'Configuration': config_name,
-        #             'Direction': 'Downlink',
-        #             'Time (s)': downlink_value
-        #         })
+        for config_name in sorted_configs:
+            # uplink_df, downlink_df = dfs[config_name]
+            df = dfs[config_name]
+            for _, value in df.items():
+                plot_data.append({
+                    'Configuration': config_name,
+                    # 'Direction': 'Uplink',
+                    'Time (s)': value
+                })
+            # for _, downlink_value in downlink_df.items():
+            #     plot_data.append({
+            #         'Configuration': config_name,
+            #         'Direction': 'Downlink',
+            #         'Time (s)': downlink_value
+            #     })
 
-        # plot_df = pd.DataFrame(plot_data)
-        # plt.figure(figsize=(12, 6))
-        # sns.boxplot(data=plot_df, x='Configuration', y='Time (s)', hue='Direction', showfliers=False)
-        # plt.grid(True, alpha=0.3)
-        # plt.savefig(output_path_str / f'{self.name}_combined_box_plot.png')
-        # plt.close()
+        plot_df = pd.DataFrame(plot_data)
+        plt.figure(figsize=(12, 6))
+        sns.boxplot(data=plot_df, x='Configuration', y='Time (s)', hue='Direction', showfliers=False)
+        plt.grid(True, alpha=0.3)
+        plt.savefig(output_path_str / f'{self.name}_combined_box_plot.png')
+        plt.close()
 
     #     fig, axs = plt.subplots(num_configurations, 1, figsize=(10, 4 * num_configurations))
 
@@ -176,4 +178,7 @@ class TimeMetric(Metric):
         return
 
     def visualize_single_config(self, df: pd.DataFrame, output_path_str: str) -> None:
+        """this is identical functionality to visualize_single_trial. Pipeline visualize_single_trial instead
+         WILL NOT BE IMPLEMENTED"""
+        logger.warning('This function is not implemented; PASSING')
         pass
