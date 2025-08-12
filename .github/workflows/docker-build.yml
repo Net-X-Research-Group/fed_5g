@@ -36,7 +36,7 @@ jobs:
           file: ${{ inputs.dockerfile_path }}
           push: false
           platforms: linux/amd64, linux/arm64
-          tags: {{ inputs.image_name }}:pr-validation
+          tags: ${{ inputs.image_name }}:pr-validation
 
   build-and-deploy:
     runs-on: ubuntu-latest
