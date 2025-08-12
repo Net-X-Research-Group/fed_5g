@@ -1,4 +1,4 @@
-name: Build FL Client Docker Image
+name: Build FL Docker Image
 
 on:
   pull_request:
@@ -24,10 +24,10 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./docker/Dockerfile
+          file: ${{ inputs.dockerfile_path }}
           push: false
           platforms: linux/amd64, linux/arm64
-          tags: fl-client:pr-validation
+          tags: {{ inputs.image_name }}:pr-validation
 
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -59,9 +59,9 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./docker/Dockerfile
+          file: ${{ inputs.dockerfile_path }}
           push: true
           platforms: linux/amd64, linux/arm64
           tags: |
-            ghcr.io/${{ env.REPO_NAME }}/fl-client:latest
-            ghcr.io/${{ env.REPO_NAME }}/fl-client:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}/{{ inputs.image_name }}:latest
+            ghcr.io/${{ env.REPO_NAME }}/{{ inputs.image_name }}:${{ github.sha }}

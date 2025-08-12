@@ -1,6 +1,6 @@
 services:
   superlink:
-    image: fed_5g-server:latest
+    image: ghcr.io/net-x-research-group/fed_5g/fl-server:latest
     command:
       - --insecure
     volumes:
