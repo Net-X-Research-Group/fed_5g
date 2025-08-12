@@ -20,7 +20,7 @@ ENV PYTHONPATH=/app
 RUN mkdir -p /app/node_datasets
 RUN mkdir -p /app/flwr_output
 
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY docker/client/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 
