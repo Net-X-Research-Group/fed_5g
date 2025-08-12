@@ -13,5 +13,3 @@ jobs:
     with:
       image_name: fl-server
       dockerfile_path: ./docker/server/Dockerfile
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

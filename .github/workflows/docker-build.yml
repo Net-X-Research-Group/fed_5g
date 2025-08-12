@@ -11,12 +11,6 @@ on:
         required: true
         type: string
         description: 'Path to the Dockerfile'
-  pull_request:
-    branches: ["main"]
-  push:
-    branches: ["main"]
-  # Allow manual trigger
-  workflow_dispatch:
 
 jobs:
   build:
@@ -73,5 +67,5 @@ jobs:
           push: true
           platforms: linux/amd64, linux/arm64
           tags: |
-            ghcr.io/${{ env.REPO_NAME }}/{{ inputs.image_name }}:latest
-            ghcr.io/${{ env.REPO_NAME }}/{{ inputs.image_name }}:${{ github.sha }}
+            ghcr.io/${{ env.REPO_NAME }}/${{ inputs.image_name }}:latest
+            ghcr.io/${{ env.REPO_NAME }}/${{ inputs.image_name }}:${{ github.sha }}

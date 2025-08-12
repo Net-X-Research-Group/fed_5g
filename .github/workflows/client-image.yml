@@ -1,4 +1,4 @@
-name: Build FL Server Docker Image
+name: Build FL Client Docker Image
 
 on:
   pull_request:
@@ -13,5 +13,3 @@ jobs:
     with:
       image_name: fl-client
       dockerfile_path: ./docker/client/Dockerfile
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
