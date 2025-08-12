@@ -83,6 +83,10 @@ def comm_time_mod(message: Message, context: Context, app: ClientAppCallable) ->
     return reply
 
 
+def latency_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
+    print('Context:', context)
+
+
 def wandb_metrics_mod(message: Message, context: Context, app: ClientAppCallable) -> Message:
     current_round = int(message.metadata.group_id)
     # Authenticate with wandb

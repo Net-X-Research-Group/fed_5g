@@ -1,0 +1,7 @@
+services:
+  superlink:
+    command:
+      - --insecure
+    volumes:
+      - ${HOME}/flwr_output/:/app/flwr_output
+    network_mode: host

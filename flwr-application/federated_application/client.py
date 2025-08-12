@@ -119,4 +119,4 @@ def client_fn(context: Context):
                         run_config=config).to_client()
 
 
-app = ClientApp(client_fn=client_fn, mods=[comm_time_mod, message_size_mod, phy_layer_measurement_mod])
+app = ClientApp(client_fn=client_fn, mods=[comm_time_mod, message_size_mod, phy_layer_measurement_mod, latency_mod])
