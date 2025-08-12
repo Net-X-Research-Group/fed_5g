@@ -2,14 +2,15 @@ name: Build FL Docker Image
 
 on:
   workflow_call:
-    image_name:
-      required: true
-      type: string
-      description: 'Name of the Docker image'
-    dockerfile_path:
-      required: true
-      type: string
-      description: 'Path to the Dockerfile'
+    inputs:
+      image_name:
+        required: true
+        type: string
+        description: 'Name of the Docker image'
+      dockerfile_path:
+        required: true
+        type: string
+        description: 'Path to the Dockerfile'
   pull_request:
     branches: ["main"]
   push:
