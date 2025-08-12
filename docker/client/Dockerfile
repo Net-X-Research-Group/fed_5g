@@ -6,6 +6,7 @@ COPY ../../flwr-application /app/flwr-application
 COPY ../../helper_scripts /app/helper_scripts
 COPY ../../dist /app/dist
 COPY ../../util /app/util
+COPY docker/client/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # Copy the requirements file into the container
 COPY ../../requirements.txt /app/
@@ -20,7 +21,6 @@ ENV PYTHONPATH=/app
 RUN mkdir -p /app/node_datasets
 RUN mkdir -p /app/flwr_output
 
-COPY docker/client/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 

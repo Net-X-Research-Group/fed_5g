@@ -1,5 +1,6 @@
 services:
   superlink:
+    image: fed_5g-server:latest
     command:
       - --insecure
     volumes:
