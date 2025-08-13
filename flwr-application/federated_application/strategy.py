@@ -45,7 +45,7 @@ class MetricsFedAvg(FedAvg):
         self.run_id = run_id
         self.enable_wandb = enable_wandb
         self.tshark_process = None
-        self.dir_name = f'{self.run_id}'
+        self.dir_name = f'flwr_output/{self.run_id}'
 
         # Early Stopping Config
         self.early_stop = False
