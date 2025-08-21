@@ -1,0 +1,19 @@
+name: Build FL Trials Docker Image
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-trial:
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      image_name: fl-trials
+      dockerfile_path: ./docker/trials/Dockerfile

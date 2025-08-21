@@ -1,0 +1,8 @@
+services:
+  trials:
+    image: kmcomer/trials:latest
+    #privileged: true
+    volumes:
+    - ${HOME}/experiments:/app/experiments
+    command: 6 iid
+    network_mode: host
