@@ -12,7 +12,8 @@ COPY ../../requirements.txt /app/
 RUN apt update && apt install -y \
     build-essential \
     curl \
-    openssh-client
+    openssh-client \
+    sshpass
 
 RUN pip install --no-cache-dir -r /app/requirements.txt
 RUN pip install /app/dist/flwr-1.20.0-py3-none-any.whl
