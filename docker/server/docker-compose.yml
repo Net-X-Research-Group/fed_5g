@@ -5,4 +5,15 @@ services:
       - --insecure
     volumes:
       - ${HOME}/flwr_output/:/app/flwr_output
-    network_mode: host
+    networks:
+      flwr_network:
+        ipv4_address: 192.68.10.4
+
+networks:
+    flwr_network:
+      driver: macvlan
+      driver_opts:
+        parent: enp1s0
+      ipam:
+        config:
+          - subnet: 192.68.10.0/24
