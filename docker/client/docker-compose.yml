@@ -6,10 +6,6 @@ services:
       - ${HOME}:/app/host_home
       - /dev/ttyUSB2:/dev/ttyUSB2
     env_file: "client_vars.env"
-    environment:
-      - DISTRIBUTION=iid
-      - CLIENT_ID=1
-      - SERVER_IP=172.17.0.1
     network_mode: "host"
     devices:
         - /dev/ttyUSB2:/dev/ttyUSB2
