@@ -16,4 +16,4 @@ networks:
         parent: enp1s0
       ipam:
         config:
-          - subnet: 192.68.10.0/24
+          - subnet: 192.168.10.0/24
