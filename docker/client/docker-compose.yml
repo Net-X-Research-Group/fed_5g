@@ -5,6 +5,7 @@ services:
       - ${HOME}/node_datasets:/app/node_datasets
       - ${HOME}:/app/host_home
       - /dev/ttyUSB2:/dev/ttyUSB2
+    env_file: "client_vars.env"
     environment:
       - DISTRIBUTION=iid
       - CLIENT_ID=1
