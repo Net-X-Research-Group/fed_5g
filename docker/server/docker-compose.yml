@@ -7,7 +7,7 @@ services:
       - ${HOME}/flwr_output/:/app/flwr_output
     networks:
       flwr_network:
-        ipv4_address: 192.68.10.4
+        ipv4_address: 192.168.10.4
 
 networks:
     flwr_network:
