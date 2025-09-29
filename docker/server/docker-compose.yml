@@ -1,6 +1,6 @@
 services:
   superlink:
-    image: flwr/superlink:1.23.0
+    image: flwr/superlink:1.22.0
     command:
       - --insecure
       - --isolation
@@ -18,7 +18,7 @@ services:
     build:
       context: ../../flwr-application
       dockerfile_inline: |
-        FROM flwr/superexec:1.23.0
+        FROM flwr/superexec:1.22.0
         
         WORKDIR /app
         COPY --chown=app:app pyproject.toml .
