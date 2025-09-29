@@ -18,11 +18,11 @@ services:
     build:
       context: ../../flwr-application
       dockerfile_inline: |
-        FROM flwr/superexec:1.22.0
-        
+        FROM flwr/superexec:1.23.0
+
         WORKDIR /app
         COPY --chown=app:app pyproject.toml .
-        RUN sed -i 's/.*flwr.*//' pyproject.toml \
+        RUN sed -i '/"flwr",/d' pyproject.toml \
           && python -m pip install -U --no-cache-dir .
         
         ENTRYPOINT ["flwr-superexec"]
