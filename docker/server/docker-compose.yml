@@ -25,7 +25,7 @@ services:
         RUN sed -i '/"flwr",/d' pyproject.toml \
           && python -m pip install -U --no-cache-dir .
         
-        ENTRYPOINT ["flwr-superexec"]
+        ENTRYPOINT ["flower-superexec"]
     command:
       - --insecure
       - --plugin-type
