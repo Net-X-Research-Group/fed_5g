@@ -14,7 +14,7 @@ services:
       - --isolation
       - process
       - --node-config
-      - "dataset='/app/node_datasets/cifar10_${DISTRIBUTION}' cid=${CLIENT_ID}"
+      - "dataset='/host_home/node_datasets/cifar10_${DISTRIBUTION}' cid=${CLIENT_ID}"
     devices:
         - /dev/ttyUSB2:/dev/ttyUSB2
     privileged: true

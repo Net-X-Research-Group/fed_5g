@@ -96,7 +96,7 @@ class FlowerClient(NumPyClient):
 
 def client_fn(context: Context):
     cid = context.node_config['cid']
-    dataset_path = path.expanduser(f"host_home/{context.node_config['dataset']}_part_{cid}")
+    dataset_path = path.expanduser(f"{context.node_config['dataset']}_part_{cid}")
     batch_size = context.run_config['batch_size']
     local_epochs = context.run_config['local_epochs']
     learning_rate = context.run_config['learning_rate']
