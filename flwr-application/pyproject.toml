@@ -13,6 +13,7 @@ dependencies = [
     "torch",
     "torchvision",
     "wandb",
+    "pyserial"
 ]
 
 [tool.hatch.build.targets.wheel]
