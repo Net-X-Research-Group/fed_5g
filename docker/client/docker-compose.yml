@@ -1,15 +1,46 @@
 services:
-  fl-client:
+  supernode:
+    env_file: ".env"
     image: ghcr.io/net-x-research-group/fed_5g/fl-client:latest
     volumes:
       - ${HOME}/node_datasets:/app/node_datasets
       - ${HOME}:/app/host_home
       - /dev/ttyUSB2:/dev/ttyUSB2
-    environment:
-      - DISTRIBUTION=iid
-      - CLIENT_ID=1
-      - SERVER_IP=172.17.0.1
-    network_mode: "host"
+    command:
+      - --insecure
+      - --superlink
+      - ${SERVER_IP}:9092
+      - --clientappio-api-address
+      - 0.0.0.0:9094
+      - --isolation
+      - process
+      - --node-config
+      - "dataset='/node_datasets/cifar10_${DISTRIBUTION}' cid=${CLIENT_ID}"
     devices:
         - /dev/ttyUSB2:/dev/ttyUSB2
     privileged: true
+
+  superexec-clientapp:
+    build:
+      context: ../../flwr-application
+      dockerfile_inline: |
+        FROM flwr/superexec:1.22.0
+        
+        WORKDIR /app
+        COPY --chown=app:app pyproject.toml .
+        RUN sed -i '/"flwr",/d' pyproject.toml \
+          && python -m pip install -U --no-cache-dir .
+        
+        ENTRYPOINT ["flower-superexec"]
+    volumes:
+      - ${HOME}/node_datasets:/app/node_datasets
+      - ${HOME}:/app/host_home
+    command:
+      - --insecure
+      - --plugin-type
+      - clientapp
+      - --appio-api-address
+      - supernode:9094
+    stop_signal: SIGINT
+    depends_on:
+      - supernode

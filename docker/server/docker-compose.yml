@@ -1,8 +1,48 @@
 services:
   superlink:
-    image: ghcr.io/net-x-research-group/fed_5g/fl-server:latest
+    image: flwr/superlink:1.22.0
     command:
       - --insecure
+      - --isolation
+      - process
+    ports:
+      - 9092:9092
+      - 9093:9093
     volumes:
       - ${HOME}/flwr_output/:/app/flwr_output
-    network_mode: host
+    networks:
+      cellular_lan:
+        ipv4_address: 192.168.10.4
+
+  superexec-serverapp:
+    build:
+      context: ../../flwr-application
+      dockerfile_inline: |
+        FROM flwr/superexec:1.22.0
+
+        WORKDIR /app
+        COPY --chown=app:app pyproject.toml .
+        RUN sed -i '/"flwr",/d' pyproject.toml \
+          && python -m pip install -U --no-cache-dir .
+        
+        ENTRYPOINT ["flower-superexec"]
+    command:
+      - --insecure
+      - --plugin-type
+      - serverapp
+      - --appio-api-address
+      - superlink:9091
+    depends_on:
+        - superlink
+    networks:
+      cellular_lan:
+        ipv4_address: 192.168.10.5
+
+networks:
+    cellular_lan:
+      driver: macvlan
+      driver_opts:
+        parent: enp1s0
+      ipam:
+        config:
+          - subnet: 192.168.10.0/24

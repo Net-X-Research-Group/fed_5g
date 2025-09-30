@@ -17,8 +17,6 @@ logging.basicConfig(level=logging.INFO,
                     )
 logger = logging.getLogger(__name__)
 
-
-
 PROJECT_NAME = "Pytorch-5G-FLWR-CIFAR10"
 
 def _send_serial_command(ser: serial.Serial, command: str):

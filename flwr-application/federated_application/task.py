@@ -44,6 +44,7 @@ def load_dataset(dataset_path: str, batch_size: int) -> tuple:
     return trainloader, valloader
 
 
+
 def train(net, trainloader, valloader, epochs, learning_rate, momentum, weight_decay, device) -> dict:
     """Train the model on the training dataset"""
     net.to(device)
