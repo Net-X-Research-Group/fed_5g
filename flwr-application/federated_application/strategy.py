@@ -118,7 +118,11 @@ class MetricsFedAvg(FedAvg):
             server_round (int): The current round of training.
             results (dict): The aggregated results from the clients, including individual metrics.
         """
-        self.individual_metrics[server_round] = results.pop('individual_metrics')
+        try:
+            self.individual_metrics[server_round] = results.pop('individual_metrics')
+        except KeyError:
+            logger.warning(f"No individual metrics found for round {server_round}.")
+            pass
         self.results[server_round] = results
         if self.enable_wandb:
             wandb.log(results, step=server_round)
