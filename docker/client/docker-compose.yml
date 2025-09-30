@@ -6,8 +6,6 @@ services:
       - ${HOME}/node_datasets:/app/node_datasets
       - ${HOME}:/app/host_home
       - /dev/ttyUSB2:/dev/ttyUSB2
-
-    network_mode: "host"
     command:
       - --superlink
       - ${SERVER_IP}:9092
