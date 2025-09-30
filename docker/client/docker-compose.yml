@@ -31,8 +31,7 @@ services:
           && python -m pip install -U --no-cache-dir .
         
         ENTRYPOINT ["flower-superexec"]
-    volumes:
-      - ${HOME}/node_datasets:/app/node_datasets
+
     command:
       - --insecure
       - --plugin-type
