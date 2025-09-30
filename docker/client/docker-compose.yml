@@ -14,7 +14,7 @@ services:
       - --isolation
       - process
       - --node-config
-      - "dataset='/host_home/node_datasets/cifar10_${DISTRIBUTION}' cid=${CLIENT_ID}"
+      - "dataset='/node_datasets/cifar10_${DISTRIBUTION}' cid=${CLIENT_ID}"
     devices:
         - /dev/ttyUSB2:/dev/ttyUSB2
     privileged: true
@@ -31,6 +31,8 @@ services:
           && python -m pip install -U --no-cache-dir .
         
         ENTRYPOINT ["flower-superexec"]
+    volumes:
+      - ${HOME}/node_datasets:/app/node_datasets
     command:
       - --insecure
       - --plugin-type
