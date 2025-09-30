@@ -31,6 +31,13 @@ services:
           && python -m pip install -U --no-cache-dir .
         
         ENTRYPOINT ["flower-superexec"]
+    volumes:
+      - ${HOME}/node_datasets:/app/node_datasets
+      - ${HOME}:/app/host_home
+      - /dev/ttyUSB2:/dev/ttyUSB2
+    privileged: true
+    devices:
+      - /dev/ttyUSB2:/dev/ttyUSB2
     command:
       - --insecure
       - --plugin-type
