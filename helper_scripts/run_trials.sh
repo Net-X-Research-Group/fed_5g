@@ -7,12 +7,10 @@ fi
 
 N=$1
 DIST=$2
+DEPLOYMENT=$3
 
 	./dataset_distributor.sh "${N}" "${DIST}"
 	sleep 2
 	flwr run "$HOME"/fed_5g/flwr-application "${DEPLOYMENT}" --stream
 	sleep 2
 	#kill -9 $(pgrep tshark)
-  ./transfer_latency_measurements.sh "${N}"
-
-flwr ls "$HOME"/fed_5g/flwr-application --format json > "${HOME}"/trials.json
