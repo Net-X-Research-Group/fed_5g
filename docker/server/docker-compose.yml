@@ -35,6 +35,9 @@ services:
         - superlink
     volumes:
       - ${HOME}/flwr_output/:/app/flwr_output
+    ports:
+      - "22:22"
+      - "2222:2222"
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.5
