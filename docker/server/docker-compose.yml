@@ -34,7 +34,7 @@ services:
         - superlink
     volumes:
       - ${HOME}/flwr_output/:/app/flwr_output
-      - ${HOME}/.ssh:/app/.ssh:ro
+      - ${HOME}/shared_ssh:/app/.ssh
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.5
@@ -47,7 +47,7 @@ services:
           RUN apt-get update && apt-get install -y net-tools iputils-ping openssh-server
           ENTRYPOINT [ "/bin/bash", "-c", "sleep infinity" ]
     volumes:
-      - ${HOME}/.ssh:/home/.ssh:ro
+      - ${HOME}/shared_ssh:/home/.ssh
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.6
