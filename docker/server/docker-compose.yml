@@ -38,6 +38,14 @@ services:
       cellular_lan:
         ipv4_address: 192.168.10.5
 
+  # Test container
+  network_tools:
+    image: ubuntu-latest
+    networks:
+      cellular_lan:
+        ipv4_address: 192.168.10.6
+    entrypoint: [ "/bin/bash", "-c", "apt-get update && apt-get install -y net-tools && sleep infinity" ]
+
 networks:
     cellular_lan:
       driver: macvlan
