@@ -41,7 +41,7 @@ services:
 
   # Test container
   network_tools:
-    image: ubuntu-latest
+    image: ubuntu:latest
     volumes:
       - ${HOME}/.ssh:/home/.ssh:ro
     networks:
