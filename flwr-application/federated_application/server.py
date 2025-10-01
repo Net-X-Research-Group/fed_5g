@@ -26,7 +26,7 @@ def create_ssh_client(server, port, user):
     client = paramiko.SSHClient()
     client.load_system_host_keys()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(server, port, user, allow_agent=True, look_for_keys=True, key_filename='/home/app/.ssh/id_ed25519')
+    client.connect(server, port, user, allow_agent=True, look_for_keys=True, key_filename='/app/.ssh/id_ed25519')
     return client
 
 

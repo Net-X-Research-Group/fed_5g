@@ -34,7 +34,7 @@ services:
         - superlink
     volumes:
       - ${HOME}/flwr_output/:/app/flwr_output
-      - ${HOME}/.ssh:/home/app/.ssh:ro
+      - ${HOME}/.ssh:/app/.ssh:ro
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.5
