@@ -12,7 +12,7 @@ from flwr.common import ArrayRecord, MetricRecord, ConfigRecord
 from flwr.common import log
 from flwr.server import Grid
 from flwr.serverapp.strategy import FedAvg, Result
-from flwr.serverapp.strategy.strategy_utils import log_strategy_start_info
+from flwr.serverapp.strategy.strategy_utils import log_strategy_start_info, aggregate_arrayrecords
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,13 +28,47 @@ class CellFedAvg(FedAvg):
         return super().configure_train(server_round, arrays, config, grid)
 
     def aggregate_train(self, server_round, replies):
-        return super().aggregate_train(server_round, replies)
+        """Aggregate ArrayRecords and MetricRecords in the received Messages."""
+        valid_replies, _ = self._check_and_log_replies(replies, is_train=True)
+
+        arrays, metrics = None, None
+        if valid_replies:
+            reply_contents = [msg.content for msg in valid_replies]
+
+            # Aggregate ArrayRecords
+            arrays = aggregate_arrayrecords(
+                reply_contents,
+                self.weighted_by_key,
+            )
+
+            # Aggregate MetricRecords
+            metrics = self.train_metrics_aggr_fn(
+                reply_contents,
+                self.weighted_by_key,
+                server_round,
+                'train'
+            )
+        return arrays, metrics
 
     def configure_evaluate(self, server_round, arrays, config, grid):
         return super().configure_evaluate(server_round, arrays, config, grid)
 
     def aggregate_evaluate(self, server_round, replies):
-        return super().aggregate_evaluate(server_round, replies)
+        """Aggregate MetricRecords in the received Messages."""
+        valid_replies, _ = self._check_and_log_replies(replies, is_train=False)
+
+        metrics = None
+        if valid_replies:
+            reply_contents = [msg.content for msg in valid_replies]
+
+            # Aggregate MetricRecords
+            metrics = self.evaluate_metrics_aggr_fn(
+                reply_contents,
+                self.weighted_by_key,
+                server_round,
+                'evaluate'
+            )
+        return metrics
 
     def summary(self):
         super().summary()
@@ -53,7 +87,7 @@ class CellFedAvg(FedAvg):
         headers = ['server_round'] + list(results.keys())
         row = [server_round] + list(results.values())
 
-        with open(output_path, 'a+', newline='') as f: # a+ is open file for updating
+        with open(output_path, 'a+', newline='') as f:  # a+ is open file for updating
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(headers)
@@ -164,7 +198,6 @@ class CellFedAvg(FedAvg):
                 if enable_wandb:
                     wandb.log(dict(agg_evaluate_metrics), step=current_round)
                 self.write_agg_metric(agg_evaluate_metrics, current_round, 'evaluate')
-
 
         # Save the wall-clock time
         execution_time = time.time() - t_start

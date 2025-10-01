@@ -1,9 +1,11 @@
+import json
 import logging
 from pathlib import Path
+from typing import cast
 
 import paramiko
 import torch
-from flwr.common import Context, ArrayRecord
+from flwr.common import Context, ArrayRecord, MetricRecord, RecordDict
 from flwr.server import ServerApp, Grid
 from scp import SCPClient
 
@@ -17,6 +19,55 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+trial_individual_metrics = {}
+
+def metrics_agg_fn(records: list[RecordDict], weighting_metric_name: str, server_round: int, task_name: str):
+    """Perform weighted aggregation all MetricRecords using a specific key."""
+    # Retrieve weighting factor from MetricRecord
+    weights: list[float] = []
+    for record in records:
+        # Get the first (and only) MetricRecord in the record
+        metricrecord = next(iter(record.metric_records.values()))
+        # Because replies have been checked for consistency,
+        # we can safely cast the weighting factor to float
+        w = cast(float, metricrecord[weighting_metric_name])
+        weights.append(w)
+
+    # Average
+    total_weight = sum(weights)
+    weight_factors = [w / total_weight for w in weights]
+
+    aggregated_metrics = MetricRecord()
+
+    metrics = [dict(record.metric_records['metrics']) for record in records]
+    trial_individual_metrics.setdefault(server_round, {})[task_name] = metrics
+
+    for record, weight in zip(records, weight_factors):
+        for record_item in record.metric_records.values():
+            # aggregate in-place
+            for key, value in record_item.items():
+                if key == 'cid':
+                    continue
+                if key == weighting_metric_name:
+                    # We exclude the weighting key from the aggregated MetricRecord
+                    continue
+                if key not in aggregated_metrics:
+                    if isinstance(value, list):
+                        aggregated_metrics[key] = [v * weight for v in value]
+                    else:
+                        aggregated_metrics[key] = value * weight
+                else:
+                    if isinstance(value, list):
+                        current_list = cast(list[float], aggregated_metrics[key])
+                        aggregated_metrics[key] = [
+                            curr + val * weight
+                            for curr, val in zip(current_list, value)
+                        ]
+                    else:
+                        current_value = cast(float, aggregated_metrics[key])
+                        aggregated_metrics[key] = current_value + value * weight
+    return aggregated_metrics
 
 
 def create_ssh_client(server, port, user):
@@ -66,6 +117,7 @@ def transfer_latency_measurements(num_clients, save_path, run_id):
 
 app = ServerApp()
 
+
 @app.main()
 def main(grid: Grid, context: Context):
     """
@@ -86,27 +138,36 @@ def main(grid: Grid, context: Context):
 
     save_path.mkdir(parents=True, exist_ok=False)
 
-
     strategy = CellFedAvg(fraction_train=1,
                           fraction_evaluate=1,
                           min_train_nodes=min_num_clients,
                           min_evaluate_nodes=min_num_clients,
-                          min_available_nodes=min_num_clients)
+                          min_available_nodes=min_num_clients,
+                          train_metrics_aggr_fn=metrics_agg_fn,
+                          evaluate_metrics_aggr_fn=metrics_agg_fn
+                          )
 
     strategy.set_save_path(save_path)
-
 
     result = strategy.start(grid=grid,
                             initial_arrays=arrays,
                             num_rounds=rounds)
 
     # Save final model to disk
-    print("\nSaving final model to disk...")
+    logger.info('Saving final model to disk...')
     state_dict = result.arrays.to_torch_state_dict()
-    torch.save(state_dict, f"{save_path}/final_model.pt")
-    logger.info(f"Final model saved to {save_path}")
+    torch.save(state_dict, f'{save_path}/final_model.pt')
+    logger.info(f'Final model saved to {save_path}')
 
     # Grab the latency metrics from the clients (Calls helper script)
     logger.info(f'Grabbing latency metrics from clients...')
     if not context.run_config['debug']:
         transfer_latency_measurements(num_clients=min_num_clients, save_path=save_path, run_id=run_id)
+
+    # Save the individual metrics
+    logger.info(f'Saving individual metrics from clients...')
+    individual_metrics_save_path = save_path / f'individual_metrics.json'
+
+    print(trial_individual_metrics)
+    with open(individual_metrics_save_path, 'w') as f:
+       json.dump(dict(trial_individual_metrics), f)
