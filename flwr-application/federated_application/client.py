@@ -36,6 +36,7 @@ def train(msg: Message, context: Context):
 
     model_record = ArrayRecord(model.state_dict())
     metrics = {
+        'cid': cid,
         'train_loss': train_loss,
         'train_time': train_time,
         'num-examples': len(trainloader.dataset)
@@ -61,6 +62,7 @@ def evaluate(msg: Message, context: Context):
     eval_loss, eval_acc, eval_time = test_fn(model, valloader, device)
 
     metrics = {
+        'cid': cid,
         'eval_loss': eval_loss,
         'eval_acc': eval_acc,
         'eval_time': eval_time,
