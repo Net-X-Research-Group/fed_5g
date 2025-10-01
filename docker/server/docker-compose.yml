@@ -24,7 +24,9 @@ services:
         RUN sed -i '/"flwr",/d' pyproject.toml \
           && python -m pip install -U --no-cache-dir .
         
-        RUN apt install net-tools -y
+        RUN apt update && apt install -y \
+            net-tools
+        
         
         ENTRYPOINT ["flower-superexec"]
     command:
