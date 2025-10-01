@@ -57,7 +57,7 @@ def transfer_latency_measurements(num_clients, save_path, run_id):
                     ssh.close()
                     continue
                 local_path = save_path / f"{run_id}_CID{cid}.csv"
-                scp.get(f'latency_{run_id}', str(local_path))
+                scp.get(f'latency_{run_id}.csv', str(local_path))
 
         except Exception as e:
             logger.error(f"Failed to connect to {login} ({ip}): {e}")
