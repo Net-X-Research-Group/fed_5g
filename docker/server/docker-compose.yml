@@ -41,13 +41,16 @@ services:
 
   # Test container
   network_tools:
-    image: ubuntu:latest
+    build:
+      dockerfile_inline: |
+          FROM ubuntu:22.04
+          RUN apt-get update && apt-get install -y net-tools
+          ENTRYPOINT [ "/bin/bash", "-c", "sleep infinity" ]
     volumes:
       - ${HOME}/.ssh:/home/.ssh:ro
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.6
-    entrypoint: [ "/bin/bash", "-c", "apt-get update && apt-get install -y net-tools && sleep infinity" ]
 
 networks:
     cellular_lan:
