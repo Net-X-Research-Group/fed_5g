@@ -11,7 +11,6 @@ services:
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.4
-      fl_bridge: {}
 
   superexec-serverapp:
     build:
@@ -35,13 +34,9 @@ services:
         - superlink
     volumes:
       - ${HOME}/flwr_output/:/app/flwr_output
-    ports:
-      - "22:22"
-      - "2222:2222"
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.5
-      fl_bridge: {}
 
 networks:
     cellular_lan:
@@ -51,5 +46,4 @@ networks:
       ipam:
         config:
           - subnet: 192.168.10.0/24
-    fl_bridge:
-      driver: bridge
+            gateway: 192.168.10.3
