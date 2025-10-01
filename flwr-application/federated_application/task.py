@@ -71,6 +71,7 @@ def test_fn(net, testloader, device) -> tuple[float, float, float]:
             _, predicted = torch.max(outputs.data, 1)
             correct += (predicted == labels).sum().item()
     end = time.time()
+    test_time = end - start
     accuracy = correct / len(testloader.dataset)
     loss = loss / len(testloader)
-    return loss, accuracy, end - start
+    return loss, accuracy, test_time

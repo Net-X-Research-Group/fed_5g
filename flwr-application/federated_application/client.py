@@ -38,6 +38,7 @@ def train(msg: Message, context: Context):
     metrics = {
         'train_loss': train_loss,
         'train_time': train_time,
+        'num-examples': len(trainloader.dataset)
     }
 
     metric_record = MetricRecord(metrics)
@@ -63,6 +64,7 @@ def evaluate(msg: Message, context: Context):
         'eval_loss': eval_loss,
         'eval_acc': eval_acc,
         'eval_time': eval_time,
+        'num-examples': len(valloader.dataset)
     }
 
     metric_record = MetricRecord(metrics)
