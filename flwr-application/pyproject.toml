@@ -31,6 +31,7 @@ clientapp = "federated_application.client:app"
 [tool.flwr.app.config]
 rounds = 1
 fraction_evaluate = 0
+train_eval = true
 epochs = 1
 learning_rate = 0.001
 batch_size = 128
