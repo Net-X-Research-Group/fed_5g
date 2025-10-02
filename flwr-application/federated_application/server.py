@@ -129,6 +129,11 @@ def main(grid: Grid, context: Context):
     model_name = context.run_config['model']
     run_id = context.run_id
 
+    if context.run_config['train_eval']:
+        fraction_eval = 0
+    else:
+        fraction_eval = context.run_config['fraction_evaluate']
+
     # Load the model
     global_model = ModelWrapper.create_model(model_name, num_classes=10)
     arrays = ArrayRecord(global_model.state_dict())
@@ -139,9 +144,9 @@ def main(grid: Grid, context: Context):
     save_path.mkdir(parents=True, exist_ok=False)
 
     strategy = CellFedAvg(fraction_train=1,
-                          fraction_evaluate=1,
+                          fraction_evaluate=fraction_eval,
                           min_train_nodes=min_num_clients,
-                          min_evaluate_nodes=0,
+                          min_evaluate_nodes=min_num_clients,
                           min_available_nodes=min_num_clients,
                           train_metrics_aggr_fn=metrics_agg_fn,
                           evaluate_metrics_aggr_fn=metrics_agg_fn

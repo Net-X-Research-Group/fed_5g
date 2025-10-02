@@ -48,7 +48,7 @@ def train(msg: Message, context: Context):
         'eval_loss': eval_loss,
         'eval_acc': eval_acc,
         'eval_time': eval_time,
-        'num-examples': len(trainloader.dataset)
+        'num-examples': len(trainloader.dataset),
         'num-eval-examples': len(valloader.dataset)
     }
 
