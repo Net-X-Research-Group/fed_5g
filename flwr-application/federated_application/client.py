@@ -18,11 +18,17 @@ def train(msg: Message, context: Context):
     model.to(device)
 
     # Load the data
+    train_eval: bool = context.run_config['train_eval']
     cid: str = context.node_config['cid']
     batch_size: int = context.run_config['batch_size']
     dataset_path: str = path.expanduser(f"{context.node_config['dataset']}_part_{cid}")
-    trainloader, _ = load_dataset(dataset_path, batch_size)
+    trainloader, valloader = load_dataset(dataset_path, batch_size)
 
+    eval_loss, eval_acc, eval_time, train_loss, train_time = -1
+    if train_eval:
+        eval_loss, eval_acc, eval_time = test_fn(net=model,
+                                                 valloader=valloader,
+                                                 device=device)
     # Call the training function
     train_loss, train_time = train_fn(
         net=model,
@@ -39,7 +45,11 @@ def train(msg: Message, context: Context):
         'cid': cid,
         'train_loss': train_loss,
         'train_time': train_time,
+        'eval_loss': eval_loss,
+        'eval_acc': eval_acc,
+        'eval_time': eval_time,
         'num-examples': len(trainloader.dataset)
+        'num-eval-examples': len(valloader.dataset)
     }
 
     metric_record = MetricRecord(metrics)

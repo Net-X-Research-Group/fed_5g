@@ -141,7 +141,7 @@ def main(grid: Grid, context: Context):
     strategy = CellFedAvg(fraction_train=1,
                           fraction_evaluate=1,
                           min_train_nodes=min_num_clients,
-                          min_evaluate_nodes=min_num_clients,
+                          min_evaluate_nodes=0,
                           min_available_nodes=min_num_clients,
                           train_metrics_aggr_fn=metrics_agg_fn,
                           evaluate_metrics_aggr_fn=metrics_agg_fn
