@@ -8,8 +8,6 @@ services:
     ports:
       - 9092:9092
       - 9093:9093
-    volumes:
-      - ${HOME}/flwr_output/:/app/flwr_output
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.4
@@ -23,7 +21,7 @@ services:
         WORKDIR /app
         COPY --chown=app:app pyproject.toml .
         RUN sed -i '/"flwr",/d' pyproject.toml \
-          && python -m pip install -U --no-cache-dir .
+          && python -m pip install -U --no-cache-dir .     
         
         ENTRYPOINT ["flower-superexec"]
     command:
@@ -34,9 +32,25 @@ services:
       - superlink:9091
     depends_on:
         - superlink
+    volumes:
+      - ${HOME}/flwr_output/:/app/flwr_output
+      - ${HOME}/shared_ssh:/app/.ssh
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.5
+
+  # Test container
+  network_tools:
+    build:
+      dockerfile_inline: |
+          FROM ubuntu:22.04
+          RUN apt-get update && apt-get install -y net-tools iputils-ping openssh-server
+          ENTRYPOINT [ "/bin/bash", "-c", "sleep infinity" ]
+    volumes:
+      - ${HOME}/shared_ssh:/home/.ssh
+    networks:
+      cellular_lan:
+        ipv4_address: 192.168.10.6
 
 networks:
     cellular_lan:
@@ -46,3 +60,4 @@ networks:
       ipam:
         config:
           - subnet: 192.168.10.0/24
+            gateway: 192.168.10.3

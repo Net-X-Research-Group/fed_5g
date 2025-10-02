@@ -8,7 +8,7 @@ from torchvision.models.quantization import mobilenet_v3_large as mobilenet_v3_l
 
 
 class BasicCNN(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, num_classes: int = 10) -> None:
         super(BasicCNN, self).__init__()
         self.conv1 = nn.Conv2d(3, 6, 3, 1, 1)
         self.bn1 = nn.BatchNorm2d(6)
@@ -32,7 +32,7 @@ class BasicCNN(nn.Module):
 
 
 class CNN3(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, num_classes=10) -> None:
         super(CNN3, self).__init__()
         self.conv1 = nn.Conv2d(3, 32, 5)
         self.conv2 = nn.Conv2d(32, 64, 5)
@@ -54,7 +54,7 @@ class CNN3v2(nn.Module):
     Link: https://nvsyashwanth.github.io/machinelearningmaster/cifar-10/
     """
 
-    def __init__(self):
+    def __init__(self, num_classes: int = 10) -> None:
         super(CNN3v2, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)
         self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
@@ -82,16 +82,16 @@ class CNN3v2(nn.Module):
 
 class ModelWrapper:
     @staticmethod
-    def create_model(model: str, num_classes: int = 10) -> nn.Module:
+    def create_model(model: str, num_classes: int = 10):
         match model:
             case 'squeezenet1_1':
                 return squeezenet1_1(num_classes=num_classes)
             case 'basic_cnn':
-                return BasicCNN()
+                return BasicCNN(num_classes=num_classes)
             case 'cnn3v2':
-                return CNN3v2()
+                return CNN3v2(num_classes=num_classes)
             case 'cnn3':
-                return CNN3()
+                return CNN3(num_classes=num_classes)
             case 'mobilenet_v3_small':
                 return mobilenet_v3_small(num_classes=num_classes)
             case 'mobilenet_v3_large_quantized':

@@ -1,14 +1,16 @@
+import json
 import logging
-import time
-from typing import List, Tuple
+from pathlib import Path
+from typing import cast
 
+import paramiko
 import torch
-from flwr.common import Context, Metrics, ndarrays_to_parameters
-from flwr.server import ServerApp, ServerConfig, ServerAppComponents
+from flwr.common import Context, ArrayRecord, MetricRecord, RecordDict
+from flwr.server import ServerApp, Grid
+from scp import SCPClient
 
 from federated_application.models import ModelWrapper
-from federated_application.strategy import MetricsFedAvg
-from federated_application.task import get_weights
+from federated_application.strategy import CellFedAvg
 
 torch.manual_seed(42)
 
@@ -18,111 +20,154 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+trial_individual_metrics = {}
 
-def fit_metrics(metrics: List[Tuple[int, Metrics]]) -> dict:
+def metrics_agg_fn(records: list[RecordDict], weighting_metric_name: str, server_round: int, task_name: str):
+    """Perform weighted aggregation all MetricRecords using a specific key."""
+    # Retrieve weighting factor from MetricRecord
+    weights: list[float] = []
+    for record in records:
+        # Get the first (and only) MetricRecord in the record
+        metricrecord = next(iter(record.metric_records.values()))
+        # Because replies have been checked for consistency,
+        # we can safely cast the weighting factor to float
+        w = cast(float, metricrecord[weighting_metric_name])
+        weights.append(w)
+
+    # Average
+    total_weight = sum(weights)
+    weight_factors = [w / total_weight for w in weights]
+
+    aggregated_metrics = MetricRecord()
+
+    metrics = [dict(record.metric_records['metrics']) for record in records]
+    trial_individual_metrics.setdefault(server_round, {})[task_name] = metrics
+
+    for record, weight in zip(records, weight_factors):
+        for record_item in record.metric_records.values():
+            # aggregate in-place
+            for key, value in record_item.items():
+                if key == 'cid':
+                    continue
+                if key == weighting_metric_name:
+                    # We exclude the weighting key from the aggregated MetricRecord
+                    continue
+                if key not in aggregated_metrics:
+                    if isinstance(value, list):
+                        aggregated_metrics[key] = [v * weight for v in value]
+                    else:
+                        aggregated_metrics[key] = value * weight
+                else:
+                    if isinstance(value, list):
+                        current_list = cast(list[float], aggregated_metrics[key])
+                        aggregated_metrics[key] = [
+                            curr + val * weight
+                            for curr, val in zip(current_list, value)
+                        ]
+                    else:
+                        current_value = cast(float, aggregated_metrics[key])
+                        aggregated_metrics[key] = current_value + value * weight
+    return aggregated_metrics
+
+
+def create_ssh_client(server, port, user):
     """
-    Combine all metrics from clients into a single object. Contains both aggregated metrics and individual metrics.
-
-    Aggregated metrics: train_acc, val_acc, train_loss, val_loss, training_time, uplink_time, downlink_time, train_test_time, val_test_time
-    Individual metrics: uplink_time, downlink_time, uplink_latency, downlink_latency, train_acc, val_acc, train_loss, val_loss, train_test_time, val_test_time, training_time, train_start_time, train_end_time
-
-    Parameters:
-        metrics (List[Tuple[int, Metrics]]): A list of tuples containing the number of examples and the metrics of each client
-
-    Returns:
-        results (dict): A dictionary containing the aggregated metrics and individual metrics of each client
+    Helper Function to create an SSH client connection
     """
-    recv_time = time.time()  # Time when the server receives the metrics (Rough)
-
-    # Weighted average by number of examples per client
-    examples = [num_examples for num_examples, _ in metrics]
-
-    train_accuracies = [num_examples * m["train_acc"] for num_examples, m in metrics]
-    val_accuracies = [num_examples * m["val_acc"] for num_examples, m in metrics]
-    train_losses = [num_examples * m["train_loss"] for num_examples, m in metrics]
-    val_losses = [num_examples * m["val_loss"] for num_examples, m in metrics]
-
-    uplink_times = [recv_time - m['uplink_time'] for _, m in metrics]
-    downlink_times = [m['downlink_time'] for _, m in metrics]
-    train_test_times = [m["train_test_time"] for _, m in metrics]
-    val_test_times = [m["val_test_time"] for _, m in metrics]
-    training_times = [m["training_time"] for _, m in metrics]
-
-    rsrps = [m['rsrp'] for _, m in metrics]
-    rssis = [m['rssi'] for _, m in metrics]
-    rsrqs = [m['rsrq'] for _, m in metrics]
-
-    individual_metrics = {m['cid']: {
-        'uplink_time': recv_time - m['uplink_time'],
-        'downlink_time': m['downlink_time'],
-        'train_acc': m['train_acc'],
-        'val_acc': m['val_acc'],
-        'train_loss': m['train_loss'],
-        'val_loss': m['val_loss'],
-        'train_test_time': m['train_test_time'],
-        'val_test_time': m['val_test_time'],
-        'training_time': m['training_time'],
-        'train_start_time': m['train_start'],
-        'train_end_time': m['train_start'],
-        'avg_trainloss': m['avg_train_loss'],
-        'rsrp': m['rsrp'],
-        'rssi': m['rssi'],
-        'rsrq': m['rsrq']} for _, m in metrics}
-
-    results = {
-        "train_acc": sum(train_accuracies) / sum(examples),
-        "val_acc": sum(val_accuracies) / sum(examples),
-        "train_loss": sum(train_losses) / sum(examples),
-        "val_loss": sum(val_losses) / sum(examples),
-        "training_time": sum(training_times) / len(training_times),
-        "uplink_time": sum(uplink_times) / len(uplink_times),
-        "downlink_time": sum(downlink_times) / len(downlink_times),
-        'train_test_time': sum(train_test_times) / len(train_test_times),
-        'val_test_time': sum(val_test_times) / len(val_test_times),
-        'rsrp': sum(rsrps) / len(rsrps),
-        'rssi': sum(rssis) / len(rssis),
-        'rsrq': sum(rsrqs) / len(rsrqs),
-        'individual_metrics': individual_metrics
-    }
-    return results
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(server, port, user, allow_agent=True, look_for_keys=True, key_filename='/app/.ssh/id_ed25519')
+    return client
 
 
-def server_fn(context: Context):
+def transfer_latency_measurements(num_clients, save_path, run_id):
     """
-    Define the server-side logic for the federated learning process.
-
-    Parameters:
-        context (Context): The context object contains the configuration and the run_id of the server
-
-    Returns:
-        ServerAppComponents: A class that contains the strategy and configuration for the server run
+    Helper Function
+    -----------------
+    Uses scp to transfer the latency measurements from each client to the server output directory.
     """
+    DEVICE_NAME_PREFIX = "commnetpi0"
+    IP_PREFIX = "129.105.6."
+    IP_SUFFIXES = [17, 18, 19, 20, 21, 22]
+
+    for cid in range(1, num_clients + 1):
+        login = f"{DEVICE_NAME_PREFIX}{cid}"
+        ip = f"{IP_PREFIX}{IP_SUFFIXES[cid - 1]}"
+        hostname = ip
+        username = login
+
+        logger.info(f"Transferring latency measurements from {login} ({ip})...")
+        try:
+            ssh = create_ssh_client(hostname, 22, username)
+            with SCPClient(ssh.get_transport()) as scp:
+                stdin, stdout, stderr = ssh.exec_command("ls latency_*.csv")
+                file_name = stdout.read().decode().strip()
+                if not file_name:
+                    print(f"No latency file found on {hostname}")
+                    ssh.close()
+                    continue
+                local_path = save_path / f"{run_id}_CID{cid}.csv"
+                scp.get(f'latency_{run_id}.csv', str(local_path))
+
+        except Exception as e:
+            logger.error(f"Failed to connect to {login} ({ip}): {e}")
+            continue
+
+
+app = ServerApp()
+
+
+@app.main()
+def main(grid: Grid, context: Context):
+    """
+    Main function to start the federated learning server using Flower's ServerApp.
+    """
+    # Read run config
     min_num_clients = context.run_config['min_num_clients']
     rounds = context.run_config['rounds']
     model_name = context.run_config['model']
+    run_id = context.run_id
 
-    net = ModelWrapper.create_model(model_name, num_classes=10)
+    # Load the model
+    global_model = ModelWrapper.create_model(model_name, num_classes=10)
+    arrays = ArrayRecord(global_model.state_dict())
 
-    ndarrays = get_weights(net)
-    parameters = ndarrays_to_parameters(ndarrays)
+    # Save path is based on the current directory
+    save_path = Path.home() / 'flwr_output' / str(run_id)
 
-    # Call instance of the metrics strategy
-    strategy = MetricsFedAvg(
-        run_config=context.run_config,
-        enable_wandb=context.run_config['enable_server_wandb'],
-        fraction_fit=1,  # Use all nodes
-        fraction_evaluate=0,  # Disable Final Evaluation
-        min_fit_clients=min_num_clients,
-        min_available_clients=min_num_clients,
-        min_evaluate_clients=min_num_clients,
-        fit_metrics_aggregation_fn=fit_metrics,
-        initial_parameters=parameters,
-        run_id=context.run_id,
-    )
+    save_path.mkdir(parents=True, exist_ok=False)
 
-    config = ServerConfig(num_rounds=rounds)
+    strategy = CellFedAvg(fraction_train=1,
+                          fraction_evaluate=1,
+                          min_train_nodes=min_num_clients,
+                          min_evaluate_nodes=min_num_clients,
+                          min_available_nodes=min_num_clients,
+                          train_metrics_aggr_fn=metrics_agg_fn,
+                          evaluate_metrics_aggr_fn=metrics_agg_fn
+                          )
 
-    return ServerAppComponents(strategy=strategy, config=config)
+    strategy.set_save_path(save_path)
 
+    result = strategy.start(grid=grid,
+                            initial_arrays=arrays,
+                            num_rounds=rounds)
 
-app = ServerApp(server_fn=server_fn)  # Create an instance of the server application
+    # Save final model to disk
+    logger.info('Saving final model to disk...')
+    state_dict = result.arrays.to_torch_state_dict()
+    torch.save(state_dict, f'{save_path}/final_model.pt')
+    logger.info(f'Final model saved to {save_path}')
+
+    # Grab the latency metrics from the clients (Calls helper script)
+    logger.info(f'Grabbing latency metrics from clients...')
+    if not context.run_config['debug']:
+        transfer_latency_measurements(num_clients=min_num_clients, save_path=save_path, run_id=run_id)
+
+    # Save the individual metrics
+    logger.info(f'Saving individual metrics from clients...')
+    individual_metrics_save_path = save_path / f'individual_metrics.json'
+
+    print(trial_individual_metrics)
+    with open(individual_metrics_save_path, 'w') as f:
+       json.dump(dict(trial_individual_metrics), f)

@@ -13,7 +13,9 @@ dependencies = [
     "torch",
     "torchvision",
     "wandb",
-    "pyserial"
+    "pyserial",
+    "paramiko",
+    "scp"
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -27,9 +29,9 @@ serverapp = "federated_application.server:app"
 clientapp = "federated_application.client:app"
 
 [tool.flwr.app.config]
-rounds = 100
+rounds = 1
 fraction_evaluate = 0
-local_epochs = 1
+epochs = 1
 learning_rate = 0.001
 batch_size = 128
 momentum = 0.9
@@ -42,6 +44,7 @@ distribution = 'iid'
 wandb_api_key = ''
 enable_server_wandb = false
 enable_client_wandb = false
+debug = false
 
 [tool.flwr.federations.lan-deployment]
 address = "129.105.6.252:9093"
@@ -53,4 +56,8 @@ insecure = true
 
 [tool.flwr.federations.wwan-deployment]
 address = "192.168.10.4:9093"
+insecure = true
+
+[tool.flwr.federations.local-deployment]
+address = "127.0.0.1:9093"
 insecure = true

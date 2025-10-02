@@ -35,16 +35,12 @@ services:
     volumes:
       - ${HOME}/node_datasets:/app/node_datasets
       - ${HOME}:/app/host_home
-      - /dev/ttyUSB2:/dev/ttyUSB2
     command:
       - --insecure
       - --plugin-type
       - clientapp
       - --appio-api-address
       - supernode:9094
-    devices:
-      - /dev/ttyUSB2:/dev/ttyUSB2
-    privileged: true
     stop_signal: SIGINT
     depends_on:
       - supernode
