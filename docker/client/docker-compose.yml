@@ -1,5 +1,6 @@
 services:
   supernode:
+    restart: always     
     env_file: ".env"
     image: ghcr.io/net-x-research-group/fed_5g/fl-client:latest
     volumes:
@@ -42,5 +43,6 @@ services:
       - --appio-api-address
       - supernode:9094
     stop_signal: SIGINT
+    restart: always     
     depends_on:
       - supernode
