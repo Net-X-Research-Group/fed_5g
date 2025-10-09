@@ -24,10 +24,10 @@ def train(msg: Message, context: Context):
     dataset_path: str = path.expanduser(f"{context.node_config['dataset']}_part_{cid}")
     trainloader, valloader = load_dataset(dataset_path, batch_size)
 
-    eval_loss, eval_acc, eval_time, train_loss, train_time = -1
+    eval_loss = eval_acc = eval_time = train_loss = train_time = -1
     if train_eval:
         eval_loss, eval_acc, eval_time = test_fn(net=model,
-                                                 valloader=valloader,
+                                                 testloader=valloader,
                                                  device=device)
     # Call the training function
     train_loss, train_time = train_fn(
