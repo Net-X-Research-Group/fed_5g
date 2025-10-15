@@ -52,6 +52,8 @@ def metrics_agg_fn(records: list[RecordDict], weighting_metric_name: str, server
                 if key == weighting_metric_name:
                     # We exclude the weighting key from the aggregated MetricRecord
                     continue
+                if key == 'num-eval-examples':
+                    continue
                 if key not in aggregated_metrics:
                     if isinstance(value, list):
                         aggregated_metrics[key] = [v * weight for v in value]
