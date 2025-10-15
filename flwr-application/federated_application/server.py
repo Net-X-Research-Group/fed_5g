@@ -109,7 +109,7 @@ def transfer_latency_measurements(num_clients, save_path, run_id):
                     print(f"No latency file found on {hostname}")
                     ssh.close()
                     continue
-                local_path = save_path / f"{run_id}_CID{cid}.csv"
+                local_path = save_path / f"latency_{run_id}_CID{cid}.csv"
                 scp.get(f'latency_{run_id}.csv', str(local_path))
 
         except Exception as e:
