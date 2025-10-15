@@ -1,3 +1,4 @@
+import time
 from os import path
 
 import torch
@@ -11,6 +12,7 @@ app = ClientApp()
 
 @app.train()
 def train(msg: Message, context: Context):
+    train_timestamp = time.time()
     # Load the model and initialize it with the received weights
     model = ModelWrapper.create_model(model=context.run_config['model'], num_classes=10)
     model.load_state_dict(msg.content['arrays'].to_torch_state_dict())
@@ -43,6 +45,7 @@ def train(msg: Message, context: Context):
     model_record = ArrayRecord(model.state_dict())
     metrics = {
         'cid': cid,
+        'timestamp': train_timestamp,
         'train_loss': train_loss,
         'train_time': train_time,
         'eval_loss': eval_loss,
