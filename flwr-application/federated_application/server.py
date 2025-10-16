@@ -52,6 +52,8 @@ def metrics_agg_fn(records: list[RecordDict], weighting_metric_name: str, server
                 if key == weighting_metric_name:
                     # We exclude the weighting key from the aggregated MetricRecord
                     continue
+                if key == 'num-eval-examples':
+                    continue
                 if key not in aggregated_metrics:
                     if isinstance(value, list):
                         aggregated_metrics[key] = [v * weight for v in value]
@@ -107,7 +109,7 @@ def transfer_latency_measurements(num_clients, save_path, run_id):
                     print(f"No latency file found on {hostname}")
                     ssh.close()
                     continue
-                local_path = save_path / f"{run_id}_CID{cid}.csv"
+                local_path = save_path / f"latency_{run_id}_CID{cid}.csv"
                 scp.get(f'latency_{run_id}.csv', str(local_path))
 
         except Exception as e:

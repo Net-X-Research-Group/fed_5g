@@ -205,6 +205,11 @@ class CellFedAvg(FedAvg):
         with open(execution_time_path, 'w') as f:
             f.write(f"{execution_time:.2f}s\n")
 
+        # save start time
+        start_time_path = self.save_path / 'start_time.txt'
+        with open(start_time_path, 'w') as f:
+            f.write(f"{t_start:.2f}s\n")
+
         log(INFO, "")
         log(INFO, "Strategy execution finished in %.2fs", execution_time)
         log(INFO, "")
