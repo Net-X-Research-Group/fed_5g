@@ -37,7 +37,7 @@ def func():
         TDD = parts[3]
     
         #file import csv
-        tam = pd.read_csv(folder_path + '%s/train_agg_metrics.csv' % i)
+        tam = pd.read_csv(folder_path + '/%s/train_agg_metrics.csv' % i)
 
         #putting agg metrics into big agg dataframe
         new_rows_agg = pd.DataFrame(columns=agg.columns)
@@ -48,7 +48,7 @@ def func():
         agg = pd.concat([agg, new_rows_agg], ignore_index=True)
         
         #file import json
-        data = pd.read_json(folder_path + '%s/individual_metrics.json' % i)
+        data = pd.read_json(folder_path + '/%s/individual_metrics.json' % i)
         temp = pd.DataFrame()
         for j in data:
             lm = json_normalize(data[j])
