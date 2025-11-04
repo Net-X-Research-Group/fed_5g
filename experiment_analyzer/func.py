@@ -6,10 +6,6 @@ import pandas as pd
 from pandas import json_normalize
 import re
 
-# I really wasn’t able to make the analyzer/visualizer as robust as I had wanted. I ended up 
-#being a lot more busy with classes during my time working on it than anticipated. Here’s what 
-#it can do right now, which is hopefully helpful as a start at least.
-
 # If you give it a file path to an experimental dataset folder like “flwr_output_10-23-25” 
 #it can put all of the aggregated data into one pandas dataframe with information about the 
 #experiment parameters including frequency, number of nodes, and TDD (D/U). I didn’t implement
@@ -20,12 +16,9 @@ import re
 #always server round. The indexing issue from last week is fixed so the graphs should have 
 #accurate titles now. I was manually switching which experimental parameters were compared.
 
-#Again, I know this is a lot less robust than expected, and I want to apologize for that.
-
-
 def func():
     #file setup
-    folder_path = '/Users/eesawyer/Desktop/fed_5g datasets/flwr_output_10-23-25/'
+    folder_path = input("Enter the file path: ")
     files = [f for f in os.listdir(folder_path) if f != ".DS_Store"]
 
     #big agg dataframe setup
