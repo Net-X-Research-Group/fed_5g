@@ -134,7 +134,7 @@ def plot_agg_metric(agg_metrics):
             for exp in agg_metrics:
                 df = exp['metrics']
                 label = f"TDD {exp['tdd']}"
-                sns.histplot(df[metric], bins=500, kde=False, label=label, alpha=0.5, ax=ax)
+                sns.kdeplot(df[metric], label=label, alpha=0.5, ax=ax)
 
             ax.set_xlabel(display_name, fontsize=12)
             ax.set_ylabel('Frequency', fontsize=12)
@@ -237,90 +237,162 @@ def plot_individual(metrics: list):
         'train_time': 'Training Time (s)',
         'eval_loss': 'Evaluation Loss',
         'eval_acc': 'Evaluation Accuracy',
-        'eval_time': 'Evaluation Time (s)'
+        'eval_time': 'Evaluation Time (s)',
+        'round_duration': 'Round Duration (s)',
     }
 
     # Clean and flatten
-    metrics_dict = metrics[0]['metrics']
-    rows = []
-    for server_round, clients in metrics_dict.items():
-        for client in clients:
-            row = {'server_round': int(server_round), **client}
-            rows.append(row)
+    for idx, metric in enumerate(metrics):
+        metrics_dict = metrics[idx]['metrics']
+        rows = []
+        for server_round, clients in metrics_dict.items():
+            for client in clients:
+                row = {'server_round': int(server_round), **client}
+                rows.append(row)
 
-    df = pd.DataFrame(rows)
-    df = df.sort_values(['server_round', 'cid'])
+        df = pd.DataFrame(rows)
+        df = df.sort_values(['server_round', 'cid'])
+        metrics[idx]['metrics'] = df
 
-    sns.set_style("whitegrid")
+    sweep_param = metrics[0]['sweep']
 
-    # Line plots: eval_acc, eval_loss, train_loss
-    line_metrics = ['eval_acc', 'eval_loss', 'train_loss']
+    all_metrics = []
+    for exp in metrics:
+        df = exp['metrics'].copy()
+        df = df.sort_values(['cid', 'server_round'])
+        df['round_duration'] = df.groupby('cid')['timestamp'].diff()
+        df[sweep_param] = exp[sweep_param]
+        all_metrics.append(df)
 
-    for metric in line_metrics:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.lineplot(data=df, x='server_round', y=metric, hue='cid',
-                     ax=ax, legend='full', palette='tab10',
-                     linewidth=2, markersize=8)
-        ax.set_xlabel('Server Round', fontsize=12)
+    combined_df = pd.concat(all_metrics, ignore_index=True)
+
+    rd = combined_df['round_duration'].dropna()
+    print(f"Min: {rd.min():.2f}, Max: {rd.max():.2f}, Median: {rd.median():.2f}")
+    print(f"Mean: {rd.mean():.2f}, Std: {rd.std():.2f}")
+    print(f"Negative values: {(rd < 0).sum()}")
+    print(f"99th percentile: {rd.quantile(0.99):.2f}")
+
+    # Check per-client
+    print(combined_df.groupby('cid')['round_duration'].describe())
+
+
+    # Box plot for each CID for round duration
+    time_metrics = ['train_time', 'eval_time']
+
+    for metric in time_metrics:
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        sweep_values = sorted(combined_df[sweep_param].unique())
+        n_sweeps = len(sweep_values)
+        cids = sorted(combined_df['cid'].unique())
+
+        # Define colors and markers
+        colors = sns.color_palette("Set2", n_colors=n_sweeps)
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h'][:n_sweeps]
+
+        # Manual boxplot with custom styling
+        width = 0.8 / n_sweeps  # Box width per sweep config
+
+        for i, sweep_val in enumerate(sweep_values):
+            subset = combined_df[combined_df[sweep_param] == sweep_val]
+
+            # Positions offset per sweep config
+            positions = np.arange(len(cids)) + (i - n_sweeps / 2 + 0.5) * width
+
+            # Data grouped by CID
+            data_to_plot = [subset[subset['cid'] == cid][metric].dropna().values
+                            for cid in cids]
+
+            bp = ax.boxplot(
+                data_to_plot,
+                positions=positions,
+                widths=width * 0.8,
+                patch_artist=True,
+                showfliers=True,
+                flierprops=dict(
+                    marker=markers[i],
+                    markersize=6,
+                    markerfacecolor=colors[i],
+                    markeredgecolor=colors[i],
+                    alpha=0.6
+                ),
+                boxprops=dict(facecolor=colors[i], alpha=0.7),
+                medianprops=dict(color='black', linewidth=1.5),
+                whiskerprops=dict(color=colors[i]),
+                capprops=dict(color=colors[i]),
+            )
+
+        # Y-limits (per metric)
+        lower = combined_df[metric].quantile(0.05)
+        upper = combined_df[metric].quantile(0.95)
+        margin = (upper - lower) * 0.1
+        ax.set_ylim(lower - margin, upper + margin)
+
+        # Formatting
+        ax.set_xticks(np.arange(len(cids)))
+        ax.set_xticklabels(cids)
+        ax.set_xlabel('Client ID', fontsize=12)
         ax.set_ylabel(column_name_map[metric], fontsize=12)
-        ax.set_title(f'{column_name_map[metric]} by Client', fontsize=14)
-        ax.legend(title='Client ID', ncol=3, fontsize=10)
-        ax.grid(True, alpha=0.3)
+        ax.set_title(f'{column_name_map[metric]} Distribution by Client', fontsize=14)
+        ax.grid(True, alpha=0.3, axis='y')
+
+        # Custom legend
+        from matplotlib.patches import Patch
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker=markers[i], color='w',
+                   markerfacecolor=colors[i], markersize=8, label=f'{sweep_param.upper()} = {val}')
+            for i, val in enumerate(sweep_values)
+        ]
+        ax.legend(handles=legend_elements, loc='upper right', title=sweep_param.upper())
 
         plt.tight_layout()
         plt.show()
-        plt.close()
 
-    # Histograms: eval_time, train_time
-    hist_metrics = ['eval_time', 'train_time']
+    for metric in ['round_duration']:
+        fig, ax = plt.subplots(figsize=(12, 6))
 
-    for metric in hist_metrics:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.histplot(data=df, x=metric, hue='cid', kde=False, ax=ax,
-                     palette='tab10', bins=500, alpha=0.5, stat='density', legend=True)
+        plot_df = combined_df[combined_df[metric] > 0].copy()
+
+        sweep_values = sorted(plot_df[sweep_param].unique())
+        colors = sns.color_palette("Set2", n_colors=len(sweep_values))
+
+        for i, sweep_val in enumerate(sweep_values):
+            subset = plot_df[plot_df[sweep_param] == sweep_val][metric]
+
+            sns.kdeplot(
+                data=subset,
+                ax=ax,
+                label=f'{sweep_param}={sweep_val}',
+                color=colors[i],
+                linewidth=2.5,
+                alpha=1,
+                fill=False,
+                common_norm=False  # Each curve normalized independently
+            )
+
         ax.set_xlabel(column_name_map[metric], fontsize=12)
         ax.set_ylabel('Density', fontsize=12)
         ax.set_title(f'{column_name_map[metric]} Distribution', fontsize=14)
+        ax.legend(title=sweep_param.upper(), loc='best')
+        ax.grid(True, alpha=0.3, axis='y')
 
+        # Optional: Add vertical lines for medians
+        for i, sweep_val in enumerate(sweep_values):
+            subset = plot_df[plot_df[sweep_param] == sweep_val][metric]
+            median_val = subset.median()
+            ax.axvline(median_val, color=colors[i], linestyle='--',
+                       linewidth=1.5, alpha=0.8)
 
         plt.tight_layout()
         plt.show()
-        plt.close()
 
 
-def plot_latency(latency_metrics: list):
-    """Plot downlink/uplink latency evolution for each TDD config."""
-    import matplotlib.pyplot as plt
-    import pandas as pd
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-    for exp in latency_metrics:
-        # Parse metrics into DataFrame
-        df = pd.DataFrame(exp['metrics'][1:], columns=exp['metrics'][0])
-        label = f"TDD {exp['tdd']} ({exp['nodes']}, {exp['bandwidth']})"
 
-        # Plot
-        ax1.plot(df['server_round'], df['downlink_latency'], marker='o', label=label)
-        ax2.plot(df['server_round'], df['uplink_latency'], marker='s', label=label)
 
-    # Formatting
-    ax1.set_xlabel('Server Round', fontsize=12)
-    ax1.set_ylabel('Downlink Latency (s)', fontsize=12)
-    ax1.set_title('Downlink Latency by TDD Config', fontsize=14)
-    ax1.legend()
-    ax1.grid(alpha=0.3)
-
-    ax2.set_xlabel('Server Round', fontsize=12)
-    ax2.set_ylabel('Uplink Latency (s)', fontsize=12)
-    ax2.set_title('Uplink Latency by TDD Config', fontsize=14)
-    ax2.legend()
-    ax2.grid(alpha=0.3)
-
-    plt.tight_layout()
-    plt.show()
-
-def filter_metrics(experiment_paths: list, filters: dict):
+def filter_metrics(experiment_paths: list, filters: dict, sweep: str):
     filtered = [exp for exp in experiment_paths
                 if all(exp.get(k) == v for k, v in filters.items())]
 
@@ -331,23 +403,35 @@ def filter_metrics(experiment_paths: list, filters: dict):
     for exp in filtered:
         metrics = load(exp)
         agg_metrics.append({**exp, 'metrics': metrics['server_agg_metric'], 'execution_time': metrics['execution_time'],
-                            'start_time': metrics['start_time']})
+                            'start_time': metrics['start_time'], 'sweep': sweep})
         individual_metrics.append(
             {**exp, 'metrics': metrics['individual_metrics'], 'execution_time': metrics['execution_time'],
-             'start_time': metrics['start_time']})
+             'start_time': metrics['start_time'], 'sweep': sweep})
         latency_metrics.append(
             {**exp, 'metrics': metrics['latency'], 'execution_time': metrics['execution_time'],
-             'start_time': metrics['start_time']})
+             'start_time': metrics['start_time'], 'sweep': sweep})
 
     # Plot agg metrics
-    #plot_agg_metric(agg_metrics)
-    #plot_agg_metric_vs_time(agg_metrics)
+    plot_agg_metric(agg_metrics)
+    plot_agg_metric_vs_time(agg_metrics)
 
     # Plot individual metrics
-    #plot_individual(individual_metrics)
+    plot_individual(individual_metrics)
 
     # Plot latency metrics
-    plot_latency(latency_metrics)
+    #plot_latency_heatmap(latency_metrics)
+
+def plot_bw_by_tdd(experiments):
+    """
+    Filter by number of nodes and MIMO, outputting heatmap of execution time
+    Args:
+        experiments:
+
+    Returns:
+    """
+    print('stop')
+
+
 
 
 
@@ -361,4 +445,4 @@ if __name__ == '__main__':
         params = parse_experiment_name(exp.name)
         all_experiments.append({'path': exp, **params})
 
-    filter_metrics(all_experiments, {'bandwidth': '40MHz', 'nodes': '6N', 'rank': '2x2'})
+    filter_metrics(all_experiments, {'bandwidth': '100MHz', 'nodes': '6N', 'rank': '2x2'}, sweep='tdd')
