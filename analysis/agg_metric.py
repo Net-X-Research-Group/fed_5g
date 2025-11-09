@@ -388,10 +388,6 @@ def plot_individual(metrics: list):
         plt.show()
 
 
-
-
-
-
 def filter_metrics(experiment_paths: list, filters: dict, sweep: str):
     filtered = [exp for exp in experiment_paths
                 if all(exp.get(k) == v for k, v in filters.items())]
