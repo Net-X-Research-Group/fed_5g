@@ -1,15 +1,18 @@
-import csv
-from itertools import islice
-
 import pandas as pd
 import re
 from pathlib import Path
 import json
-import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from matplotlib.gridspec import GridSpec
+
+# Configure matplotlib for LaTeX fonts
+plt.rcParams.update({
+    'font.family': 'serif',
+    'text.usetex': True,
+    'text.latex.preamble': r'\usepackage{amsmath}'
+})
 
 
 def parse_experiment_name(name):
@@ -17,7 +20,10 @@ def parse_experiment_name(name):
         'bandwidth': None,
         'tdd': None,
         'nodes': None,
-        'rank': '1x1',
+        'rank': '1x1', # Default
+        'distribution': 'dirichlet',  # default
+        'congestion': False,
+        'network': 'wwan' # Default
     }
 
     parts = name.split('_')
@@ -26,13 +32,27 @@ def parse_experiment_name(name):
         if re.search(r"\d+MHz", part, re.IGNORECASE):
             match = re.match(r"(\d+)(MHz)", part, re.IGNORECASE)
             if match:
-                params['bandwidth'] = match.group(1) + 'MHz'
+                params['bandwidth'] = match.group(1) + ' MHz'
         elif re.match(r"\d+N$", part):
             params['nodes'] = part
         elif re.match(r"\d+-\d+$", part):
             params['tdd'] = part
         elif re.search(r"MIMO", part, re.IGNORECASE):
             params['rank'] = '2x2'
+        elif re.search(r"SISO", part, re.IGNORECASE):
+            params['rank'] = '1x1'
+        elif re.search(r"Dirichlet", part, re.IGNORECASE):
+            params['distribution'] = 'dirichlet'
+        elif re.search(r"IID", part, re.IGNORECASE):
+            params['distribution'] = 'iid'
+        elif re.search('Congestion', part, re.IGNORECASE):
+            params['congestion'] = True
+        elif re.search(r"wlan", part, re.IGNORECASE):
+            params['network'] = 'wlan'
+        elif re.search(r"wwan", part, re.IGNORECASE):
+            params['network'] = 'wwan'
+        elif re.search(r"lan", part, re.IGNORECASE):
+            params['network'] = 'lan'
 
     return params
 
@@ -94,14 +114,16 @@ def load(experiment_path: Path) -> dict:
     return metrics
 
 
-def plot_agg_metric(agg_metrics):
+def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
     """
     Create one figure per metric, with a line for each experiment.
     Time metrics get frequency plots instead.
 
     Args:
         agg_metrics: List of dicts with params and 'metrics' (DataFrame)
-        column_name_map: Dict mapping column names to display names
+        output_dir: Path to save figures
+        filter_str: String representation of filters for filename
+        sweep_param: Parameter being swept
 
     Returns:
         dict: {metric_name: figure} for each metric plotted
@@ -115,7 +137,22 @@ def plot_agg_metric(agg_metrics):
         'eval_time': 'Evaluation Time (s)'
     }
 
+    # Network type mapping
+    network_map = {
+        'wwan': '5G',
+        'wlan': 'Wifi',
+        'lan': 'Ethernet'
+    }
+
     sns.set_style("whitegrid")
+
+    # Sort experiments by sweep parameter
+    if sweep_param == 'bandwidth':
+        agg_metrics = sorted(agg_metrics, key=lambda x: int(x['bandwidth'].replace(' MHz', '')))
+    elif sweep_param == 'tdd':
+        agg_metrics = sorted(agg_metrics, key=lambda x: tuple(map(int, x['tdd'].split('-'))))
+    else:
+        agg_metrics = sorted(agg_metrics, key=lambda x: x[sweep_param])
 
     # Get metric columns (exclude server_round, timestamp)
     metric_cols = [col for col in agg_metrics[0]['metrics'].columns
@@ -133,31 +170,50 @@ def plot_agg_metric(agg_metrics):
             # Frequency plot for time metrics
             for exp in agg_metrics:
                 df = exp['metrics']
-                label = f"TDD {exp['tdd']}"
+                sweep_value = exp[sweep_param]
+                if sweep_param == 'network':
+                    label = network_map.get(sweep_value, sweep_value)
+                elif sweep_param == 'tdd':
+                    label = sweep_value.replace('-', ':')
+                elif sweep_param == 'bandwidth':
+                    label = sweep_value  # Already has space
+                else:
+                    label = f"{sweep_param.title()} {sweep_value}"
                 sns.kdeplot(df[metric], label=label, alpha=0.5, ax=ax)
 
             ax.set_xlabel(display_name, fontsize=12)
-            ax.set_ylabel('Frequency', fontsize=12)
-            ax.set_title(f'{display_name} Distribution', fontsize=14)
+            ax.set_ylabel('Density', fontsize=12)
         else:
             # Line plot for other metrics
             for exp in agg_metrics:
                 df = exp['metrics']
-                label = f"TDD {exp['tdd']}"
+                sweep_value = exp[sweep_param]
+                if sweep_param == 'network':
+                    label = network_map.get(sweep_value, sweep_value)
+                elif sweep_param == 'tdd':
+                    label = sweep_value.replace('-', ':')
+                elif sweep_param == 'bandwidth':
+                    label = sweep_value  # Already has space
+                else:
+                    label = f"{sweep_param.title()} {sweep_value}"
                 sns.lineplot(x=df['server_round'], y=df[metric],
                              label=label, linewidth=2, ax=ax)
 
             ax.set_xlabel('Server Round', fontsize=12)
             ax.set_ylabel(display_name, fontsize=12)
-            ax.set_title(f'{display_name} vs Server Round', fontsize=14)
 
-        ax.legend(title='Configuration')
+        ax.legend()
+
+        # Save figure
+        filename = f"{metric}_{sweep_param}_sweep.png" if filter_str == "" else f"{metric}_{filter_str}.png"
+        fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
         figs[metric] = fig
 
-    plt.tight_layout()
     return figs
 
-def plot_agg_metric_vs_time(agg_metrics):
+def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
     # Default mapping
     column_name_map = {
         'train_loss': 'Training Loss',
@@ -167,7 +223,22 @@ def plot_agg_metric_vs_time(agg_metrics):
         'eval_time': 'Evaluation Time (s)'
     }
 
+    # Network type mapping
+    network_map = {
+        'wwan': '5G',
+        'wlan': 'Wifi',
+        'lan': 'Ethernet'
+    }
+
     sns.set_style("whitegrid")
+
+    # Sort experiments by sweep parameter
+    if sweep_param == 'bandwidth':
+        agg_metrics = sorted(agg_metrics, key=lambda x: int(x['bandwidth'].replace(' MHz', '')))
+    elif sweep_param == 'tdd':
+        agg_metrics = sorted(agg_metrics, key=lambda x: tuple(map(int, x['tdd'].split('-'))))
+    else:
+        agg_metrics = sorted(agg_metrics, key=lambda x: x[sweep_param])
 
     # Get metric columns (exclude server_round, timestamp)
     metric_cols = [col for col in agg_metrics[0]['metrics'].columns
@@ -195,7 +266,15 @@ def plot_agg_metric_vs_time(agg_metrics):
             # Normalize timestamp to elapsed time
             df['elapsed_time'] = df['timestamp'] - df['timestamp'].iloc[0]
 
-            label = f"TDD {exp['tdd']}"
+            sweep_value = exp[sweep_param]
+            if sweep_param == 'network':
+                label = network_map.get(sweep_value, sweep_value)
+            elif sweep_param == 'tdd':
+                label = sweep_value.replace('-', ':')
+            elif sweep_param == 'bandwidth':
+                label = sweep_value  # Already has space
+            else:
+                label = f"{sweep_param.title()} {sweep_value}"
             sns.lineplot(x=df['elapsed_time'], y=df[metric],
                          label=label, linewidth=2, ax=ax_main)
 
@@ -204,34 +283,40 @@ def plot_agg_metric_vs_time(agg_metrics):
             df = exp['metrics'].copy()
             df['round_duration'] = df['timestamp'].diff()
 
-            label = f"TDD {exp['tdd']}"
-            # Skip first round (NaN duration)
-            #sns.histplot(df['round_duration'].dropna(), kde=True,
-            #             label=label, alpha=0.6, bins=50, ax=ax_dist,
-            #             stat='frequency', element='step')
+            sweep_value = exp[sweep_param]
+            if sweep_param == 'network':
+                label = network_map.get(sweep_value, sweep_value)
+            elif sweep_param == 'tdd':
+                label = sweep_value.replace('-', ':')
+            elif sweep_param == 'bandwidth':
+                label = sweep_value  # Already has space
+            else:
+                label = f"{sweep_param.title()} {sweep_value}"
 
             sns.kdeplot(df['round_duration'].dropna(),
                         label=label, linewidth=2, ax=ax_dist)
 
         ax_main.set_xlabel('')  # Remove x-label from main plot
         ax_main.set_ylabel(display_name, fontsize=12)
-        ax_main.set_title(f'{display_name} vs Elapsed Time', fontsize=14)
-        ax_main.legend(title='Configuration', loc='best')
+        ax_main.legend(title='Bandwidth' if sweep_param == 'bandwidth' else sweep_param.title(), loc='best')
         ax_main.grid(True, alpha=0.3)
 
         ax_dist.set_xlabel('Round Duration (s)', fontsize=10)
-        ax_dist.set_ylabel('Frequency', fontsize=10)
+        ax_dist.set_ylabel('Density', fontsize=10)
         ax_dist.tick_params(labelsize=9)
         ax_dist.grid(True, alpha=0.3, axis='y')
 
+        # Save figure
+        filename = f"{metric}_vs_time_{sweep_param}_sweep.png" if filter_str == "" else f"{metric}_vs_time_{filter_str}.png"
+        fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
         figs[metric] = fig
 
-    plt.tight_layout()
-    plt.show()
     return figs
 
 
-def plot_individual(metrics: list):
+def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_param: str):
     column_name_map = {
         'train_loss': 'Training Loss',
         'train_time': 'Training Time (s)',
@@ -239,6 +324,13 @@ def plot_individual(metrics: list):
         'eval_acc': 'Evaluation Accuracy',
         'eval_time': 'Evaluation Time (s)',
         'round_duration': 'Round Duration (s)',
+    }
+
+    # Network type mapping
+    network_map = {
+        'wwan': '5G',
+        'wlan': 'Wifi',
+        'lan': 'Ethernet'
     }
 
     # Clean and flatten
@@ -254,8 +346,6 @@ def plot_individual(metrics: list):
         df = df.sort_values(['server_round', 'cid'])
         metrics[idx]['metrics'] = df
 
-    sweep_param = metrics[0]['sweep']
-
     all_metrics = []
     for exp in metrics:
         df = exp['metrics'].copy()
@@ -265,6 +355,15 @@ def plot_individual(metrics: list):
         all_metrics.append(df)
 
     combined_df = pd.concat(all_metrics, ignore_index=True)
+
+    # Sort sweep values properly
+    sweep_values = combined_df[sweep_param].unique()
+    if sweep_param == 'bandwidth':
+        sweep_values = sorted(sweep_values, key=lambda x: int(x.replace(' MHz', '')))
+    elif sweep_param == 'tdd':
+        sweep_values = sorted(sweep_values, key=lambda x: tuple(map(int, x.split('-'))))
+    else:
+        sweep_values = sorted(sweep_values)
 
     rd = combined_df['round_duration'].dropna()
     print(f"Min: {rd.min():.2f}, Max: {rd.max():.2f}, Median: {rd.median():.2f}")
@@ -282,7 +381,6 @@ def plot_individual(metrics: list):
     for metric in time_metrics:
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        sweep_values = sorted(combined_df[sweep_param].unique())
         n_sweeps = len(sweep_values)
         cids = sorted(combined_df['cid'].unique())
 
@@ -333,37 +431,49 @@ def plot_individual(metrics: list):
         ax.set_xticklabels(cids)
         ax.set_xlabel('Client ID', fontsize=12)
         ax.set_ylabel(column_name_map[metric], fontsize=12)
-        ax.set_title(f'{column_name_map[metric]} Distribution by Client', fontsize=14)
         ax.grid(True, alpha=0.3, axis='y')
 
         # Custom legend
-        from matplotlib.patches import Patch
         from matplotlib.lines import Line2D
         legend_elements = [
             Line2D([0], [0], marker=markers[i], color='w',
-                   markerfacecolor=colors[i], markersize=8, label=f'{sweep_param.upper()} = {val}')
+                   markerfacecolor=colors[i], markersize=8,
+                   label=network_map.get(val, f'{sweep_param.title()} = {val}') if sweep_param == 'network'
+                   else val.replace('-', ':') if sweep_param == 'tdd'
+                   else val if sweep_param == 'bandwidth'
+                   else f'{sweep_param.title()} = {val}')
             for i, val in enumerate(sweep_values)
         ]
-        ax.legend(handles=legend_elements, loc='upper right', title=sweep_param.upper())
+        ax.legend(handles=legend_elements, loc='upper right')
 
-        plt.tight_layout()
-        plt.show()
+        # Save figure
+        filename = f"{metric}_by_client_{sweep_param}_sweep.png" if filter_str == "" else f"{metric}_by_client_{filter_str}.png"
+        fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+        plt.close(fig)
 
     for metric in ['round_duration']:
         fig, ax = plt.subplots(figsize=(12, 6))
 
         plot_df = combined_df[combined_df[metric] > 0].copy()
 
-        sweep_values = sorted(plot_df[sweep_param].unique())
         colors = sns.color_palette("Set2", n_colors=len(sweep_values))
 
         for i, sweep_val in enumerate(sweep_values):
             subset = plot_df[plot_df[sweep_param] == sweep_val][metric]
 
+            if sweep_param == 'network':
+                label = network_map.get(sweep_val, sweep_val)
+            elif sweep_param == 'tdd':
+                label = sweep_val.replace('-', ':')
+            elif sweep_param == 'bandwidth':
+                label = sweep_val  # Already has space
+            else:
+                label = f'{sweep_param}={sweep_val}'
+
             sns.kdeplot(
                 data=subset,
                 ax=ax,
-                label=f'{sweep_param}={sweep_val}',
+                label=label,
                 color=colors[i],
                 linewidth=2.5,
                 alpha=1,
@@ -373,8 +483,7 @@ def plot_individual(metrics: list):
 
         ax.set_xlabel(column_name_map[metric], fontsize=12)
         ax.set_ylabel('Density', fontsize=12)
-        ax.set_title(f'{column_name_map[metric]} Distribution', fontsize=14)
-        ax.legend(title=sweep_param.upper(), loc='best')
+        ax.legend(loc='best')
         ax.grid(True, alpha=0.3, axis='y')
 
         # Optional: Add vertical lines for medians
@@ -384,13 +493,22 @@ def plot_individual(metrics: list):
             ax.axvline(median_val, color=colors[i], linestyle='--',
                        linewidth=1.5, alpha=0.8)
 
-        plt.tight_layout()
-        plt.show()
+        # Save figure
+        filename = f"{metric}_distribution_{sweep_param}_sweep.png" if filter_str == "" else f"{metric}_distribution_{filter_str}.png"
+        fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+        plt.close(fig)
 
-
-def filter_metrics(experiment_paths: list, filters: dict, sweep: str):
+def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, output_dir: Path):
     filtered = [exp for exp in experiment_paths
                 if all(exp.get(k) == v for k, v in filters.items())]
+
+    # Create subdirectory path based on filters
+    filter_parts = [f"{k}_{str(v).replace('/', '_').replace(' ', '_')}" for k, v in filters.items()]
+    filter_dir = "_".join(filter_parts)
+
+    # Create nested subdirectory structure: output_dir / filter_dir / sweep
+    sweep_output_dir = output_dir / filter_dir / sweep
+    sweep_output_dir.mkdir(exist_ok=True, parents=True)
 
     agg_metrics = []
     individual_metrics = []
@@ -407,33 +525,20 @@ def filter_metrics(experiment_paths: list, filters: dict, sweep: str):
             {**exp, 'metrics': metrics['latency'], 'execution_time': metrics['execution_time'],
              'start_time': metrics['start_time'], 'sweep': sweep})
 
-    # Plot agg metrics
-    plot_agg_metric(agg_metrics)
-    plot_agg_metric_vs_time(agg_metrics)
+
+    # Plot agg metrics (original)
+    plot_agg_metric(agg_metrics, sweep_output_dir, "", sweep)
+    plot_agg_metric_vs_time(agg_metrics, sweep_output_dir, "", sweep)
+
 
     # Plot individual metrics
-    plot_individual(individual_metrics)
-
-    # Plot latency metrics
-    #plot_latency_heatmap(latency_metrics)
-
-def plot_bw_by_tdd(experiments):
-    """
-    Filter by number of nodes and MIMO, outputting heatmap of execution time
-    Args:
-        experiments:
-
-    Returns:
-    """
-    print('stop')
-
-
-
-
-
+    plot_individual(individual_metrics, sweep_output_dir, "", sweep)
 
 if __name__ == '__main__':
     directory = Path("/Users/roberthayek/Documents/git_repos/fed_5g/IMC")
+    output_dir = Path.cwd()
+    print(output_dir)
+    output_dir.mkdir(exist_ok=True, parents=True)
     all_experiments = []
     for exp in directory.iterdir():
         if not exp.is_dir():
@@ -441,4 +546,5 @@ if __name__ == '__main__':
         params = parse_experiment_name(exp.name)
         all_experiments.append({'path': exp, **params})
 
-    filter_metrics(all_experiments, {'bandwidth': '100MHz', 'nodes': '6N', 'rank': '2x2'}, sweep='tdd')
+
+    plot_cellular_sweep(all_experiments, {'tdd': '7-2', 'bandwidth': '100 MHz', 'rank': '2x2', 'distribution': 'dirichlet', 'congestion': False}, sweep='nodes', output_dir=output_dir)
