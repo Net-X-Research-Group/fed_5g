@@ -110,6 +110,11 @@ def prepare_individual_metrics(metrics, sweep_param):
         df = pd.DataFrame(rows)
         df = df.sort_values(['cid', 'server_round'])
         df['round_duration'] = df.groupby('cid')['timestamp'].diff()
+        median_duration = df['round_duration'].median()
+        df['round_duration'] = df['round_duration'].apply(
+            lambda x: median_duration if (pd.notna(x) and x > 200) else x
+        )
+
         df[sweep_param] = exp[sweep_param]
         processed.append(df)
 

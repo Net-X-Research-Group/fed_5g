@@ -47,7 +47,7 @@ def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
             # Frequency plot for time metrics
             for exp in agg_metrics:
                 label = format_sweep_label(sweep_param, exp[sweep_param])
-                sns.kdeplot(exp['metrics'][metric], label=label, alpha=0.5, ax=ax)
+                sns.kdeplot(exp['metrics'][metric], label=label, ax=ax)
             ax.set_xlabel(display_name, fontsize=12)
             ax.set_ylabel('Density', fontsize=12)
         else:
@@ -86,10 +86,19 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
 
         display_name = column_name_map.get(metric, metric.replace('_', ' ').title())
 
-        # Main plot: Line plot vs elapsed time
         for exp in agg_metrics:
             df = exp['metrics'].copy()
-            df['elapsed_time'] = df['timestamp'] - df['timestamp'].iloc[0]
+            df['round_duration'] = df['timestamp'].diff()
+
+            # Replace outliers with median for time calculation
+            median_duration = df['round_duration'].median()
+            df['round_duration_cleaned'] = df['round_duration'].apply(
+                lambda x: median_duration if (pd.isna(x) or x > 200) else x
+            )
+
+            # Compute elapsed_time as cumulative sum of cleaned durations
+            df['elapsed_time'] = df['round_duration_cleaned'].cumsum()
+
             label = format_sweep_label(sweep_param, exp[sweep_param])
             sns.lineplot(x=df['elapsed_time'], y=df[metric],
                          label=label, linewidth=2, ax=ax_main)
@@ -98,6 +107,13 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
         for exp in agg_metrics:
             df = exp['metrics'].copy()
             df['round_duration'] = df['timestamp'].diff()
+
+            # Filter based on impossible
+            median_duration = df['round_duration'].median()
+            df['round_duration'] = df['round_duration'].apply(
+                lambda x: median_duration if (pd.notna(x) and x > 200) else x
+            )
+
             label = format_sweep_label(sweep_param, exp[sweep_param])
             sns.kdeplot(df['round_duration'].dropna(),
                         label=label, linewidth=2, ax=ax_dist)
@@ -209,7 +225,6 @@ def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_para
                 label=label,
                 color=colors[i],
                 linewidth=2.5,
-                alpha=1,
                 fill=False,
                 common_norm=False
             )
@@ -244,36 +259,19 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
 
     combined_df = pd.concat(combined_latency, ignore_index=True)
 
-    # Apply outlier filtering using IQR method + reasonable upper bounds
     def filter_outliers(data, column_name):
-        """Filter extreme outliers using IQR method with additional sanity checks"""
-        Q1 = data[column_name].quantile(0.25)
-        Q3 = data[column_name].quantile(0.75)
-        IQR = Q3 - Q1
 
-        # IQR-based bounds (1.5 * IQR is standard, but we'll be more conservative)
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-
-        # Additional sanity bounds for latency (in seconds)
-        # Normal cellular latency should be < 10 seconds for most cases
-        sanity_upper_bound = 10.0  # 10 seconds max - anything higher is likely an error
-        sanity_lower_bound = 0.0001  # 0.1ms min
-
-        # Use the more restrictive of IQR or sanity bounds
-        final_upper_bound = min(upper_bound, sanity_upper_bound)
-        final_lower_bound = max(lower_bound, sanity_lower_bound)
 
         # Filter data
         filtered_data = data[
-            (data[column_name] >= final_lower_bound) &
-            (data[column_name] <= final_upper_bound)
+            (data[column_name] >= 0) &
+            (data[column_name] <= 50)
         ]
 
         outliers_removed = len(data) - len(filtered_data)
         if outliers_removed > 0:
             print(f"Filtered {outliers_removed} outliers from {column_name} "
-                  f"(bounds: {final_lower_bound:.3f}-{final_upper_bound:.1f}s)")
+                  f"(bounds: {0:.3f}-{50:.1f}s)")
 
         return filtered_data
 
@@ -423,159 +421,6 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
     fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
     plt.close(fig)
 
-def plot_round_time_distribution(individual_metrics: list, latency_metrics: list, output_dir: Path, filter_str: str, sweep_param: str):
-    """Calculate round time from individual and latency metrics and plot distribution with outlier filtering"""
-
-    # Combine individual metrics data
-    combined_individual = []
-    for exp in individual_metrics:
-        rows = []
-        for server_round, clients in exp['metrics'].items():
-            for client in clients:
-                row = {'server_round': int(server_round), **client}
-                rows.append(row)
-
-        df = pd.DataFrame(rows)
-        df = df.sort_values(['cid', 'server_round'])
-        df[sweep_param] = exp[sweep_param]
-        combined_individual.append(df)
-
-    individual_df = pd.concat(combined_individual, ignore_index=True)
-
-    # Combine latency metrics data
-    combined_latency = []
-    for exp in latency_metrics:
-        df = exp['metrics'].copy()
-        df[sweep_param] = exp[sweep_param]
-        combined_latency.append(df)
-
-    latency_df = pd.concat(combined_latency, ignore_index=True)
-
-    # Calculate round time by merging individual and latency data
-    # Round time = training time + evaluation time + network latency (uplink + downlink)
-    merged_df = pd.merge(
-        individual_df,
-        latency_df,
-        on=['cid', 'server_round', sweep_param],
-        how='inner'
-    )
-
-    # Calculate total round time
-    merged_df['round_time'] = (
-        merged_df['train_time'] +
-        merged_df['eval_time'] +
-        merged_df['uplink_latency'] +
-        merged_df['downlink_latency']
-    )
-
-    # Filter outliers using IQR method with sanity bounds
-    def filter_round_time_outliers(data):
-        """Filter extreme outliers for round time using IQR method"""
-        Q1 = data['round_time'].quantile(0.25)
-        Q3 = data['round_time'].quantile(0.75)
-        IQR = Q3 - Q1
-
-        # IQR-based bounds
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-
-        # Sanity bounds for round time (in seconds)
-        # Normal federated learning round should be reasonable
-        sanity_upper_bound = 300.0  # 5 minutes max
-        sanity_lower_bound = 0.1   # 100ms min
-
-        # Use the more restrictive bounds
-        final_upper_bound = min(upper_bound, sanity_upper_bound)
-        final_lower_bound = max(lower_bound, sanity_lower_bound)
-
-        # Filter data
-        filtered_data = data[
-            (data['round_time'] >= final_lower_bound) &
-            (data['round_time'] <= final_upper_bound)
-        ]
-
-        outliers_removed = len(data) - len(filtered_data)
-        if outliers_removed > 0:
-            print(f"Filtered {outliers_removed} round time outliers "
-                  f"(bounds: {final_lower_bound:.2f}-{final_upper_bound:.1f}s)")
-
-        return filtered_data
-
-    # Apply outlier filtering
-    print("Applying round time outlier filtering...")
-    original_size = len(merged_df)
-    merged_df = filter_round_time_outliers(merged_df)
-    print(f"Original data points: {original_size}, After filtering: {len(merged_df)}")
-
-    # Sort sweep values
-    sweep_values = merged_df[sweep_param].unique()
-    if sweep_param == 'bandwidth':
-        sweep_values = sorted(sweep_values, key=lambda x: int(x.replace(' MHz', '')))
-    elif sweep_param == 'tdd':
-        sweep_values = sorted(sweep_values, key=lambda x: tuple(map(int, x.split('-'))))
-    else:
-        sweep_values = sorted(sweep_values)
-
-    # Generate statistics CSV
-    stats_data = []
-    for sweep_val in sweep_values:
-        subset = merged_df[merged_df[sweep_param] == sweep_val]
-        if len(subset) > 0:
-            stats = subset['round_time'].describe()
-            stats_data.append({
-                sweep_param: sweep_val,
-                'count': stats['count'],
-                'mean': stats['mean'],
-                'std': stats['std'],
-                'min': stats['min'],
-                '25%': stats['25%'],
-                '50%': stats['50%'],
-                '75%': stats['75%'],
-                'max': stats['max']
-            })
-
-    stats_df = pd.DataFrame(stats_data)
-    stats_csv_path = output_dir / 'round_time_statistics.csv'
-    stats_df.to_csv(stats_csv_path, index=False)
-    print(f"Saved round time statistics to {stats_csv_path}")
-
-    # Plot distribution
-    colors, _ = get_sweep_colors_markers(sweep_values)
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-
-    box_data = []
-    box_labels = []
-    for sweep_val in sweep_values:
-        subset = merged_df[merged_df[sweep_param] == sweep_val]['round_time']
-        if len(subset) > 0:
-            box_data.append(subset.values)
-            box_labels.append(format_sweep_label(sweep_param, sweep_val))
-
-    bp = ax.boxplot(box_data, tick_labels=box_labels, patch_artist=True, medianprops=dict(color='black', linewidth=1.5))
-
-    # Color the boxes
-    for i, patch in enumerate(bp['boxes']):
-        if i < len(colors):
-            patch.set_facecolor(colors[i])
-            patch.set_alpha(0.7)
-
-    ax.set_xlabel(sweep_param.title(), fontsize=12)
-    ax.set_ylabel('Round Time (s)', fontsize=12)
-    ax.set_title(f'Round Time Distribution by {sweep_param.title()}', fontsize=14)
-    ax.grid(True, alpha=0.3, axis='y')
-
-    save_and_close_figure(fig, output_dir, 'round_time', sweep_param, filter_str, suffix="_boxplot")
-
-    # Print summary statistics
-    print("\nRound Time Statistics Summary:")
-    for sweep_val in sweep_values:
-        subset = merged_df[merged_df[sweep_param] == sweep_val]['round_time']
-        if len(subset) > 0:
-            print(f"{format_sweep_label(sweep_param, sweep_val)}: "
-                  f"Mean={subset.mean():.2f}s, Median={subset.median():.2f}s, "
-                  f"Std={subset.std():.2f}s, Count={len(subset)}")
-
 def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, output_dir: Path):
     filtered = [exp for exp in experiment_paths
                 if all(exp.get(k) == v for k, v in filters.items())]
@@ -601,8 +446,6 @@ def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, outpu
     plot_agg_metric_vs_time(agg_metrics, sweep_output_dir, "", sweep)
     plot_individual(individual_metrics, sweep_output_dir, "", sweep)
     plot_latency_metrics(latency_metrics, sweep_output_dir, "", sweep)
-    plot_round_time_distribution(individual_metrics, latency_metrics, sweep_output_dir, "", sweep)
-
 
 if __name__ == '__main__':
     directory = Path("/Users/roberthayek/Documents/git_repos/fed_5g/IMC")
@@ -616,6 +459,6 @@ if __name__ == '__main__':
         params = parse_experiment_name(exp.name)
         all_experiments.append({'path': exp, **params})
 
-    plot_cellular_sweep(all_experiments, {'bandwidth': '80 MHz', 'rank': '2x2',
-                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '2-7'},
+    plot_cellular_sweep(all_experiments, {'bandwidth': '100 MHz', 'rank': '2x2',
+                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2'},
                         sweep='nodes', output_dir=output_dir)
