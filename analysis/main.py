@@ -28,6 +28,65 @@ column_name_map = {
 
 TIME_METRICS = ['train_time', 'eval_time']
 
+# Global list to track all filtering operations
+FILTER_LOG = []
+
+def record_filtering(metric_name, filter_description, original_count, filtered_count, additional_info="",
+                    filter_min=None, filter_max=None, median_replacement=None):
+    """Record filtering operations for later CSV export - percentages calculated at the end"""
+    removed_count = original_count - filtered_count
+
+    # Extract sweep_param and experiment from additional_info
+    sweep_param = ""
+    experiment = ""
+    if "sweep_param=" in additional_info:
+        parts = additional_info.split(", ")
+        for part in parts:
+            if part.startswith("sweep_param="):
+                sweep_param = part.replace("sweep_param=", "")
+            elif part.startswith("experiment="):
+                experiment = part.replace("experiment=", "")
+
+    # Use "TOTAL" for null/empty experiment values
+    if not experiment or experiment.strip() == "":
+        experiment = "TOTAL"
+
+    FILTER_LOG.append({
+        'sweep_param': sweep_param,
+        'experiment': experiment,
+        'total_count': original_count,
+        'filtered_count': filtered_count,
+        'removed_count': removed_count,
+        'metric_name': metric_name,
+        'filter_threshold_min': filter_min,
+        'filter_threshold_max': filter_max,
+        'median_value_replacement': median_replacement,
+        'filter_description': filter_description
+    })
+
+def save_filter_log(output_dir):
+    """Save the filter log to a CSV file with final percentage calculations"""
+    if FILTER_LOG:
+        # Calculate percentages only when saving
+        for entry in FILTER_LOG:
+            if entry['total_count'] > 0:
+                entry['percent_removed'] = (entry['removed_count'] / entry['total_count'] * 100)
+            else:
+                entry['percent_removed'] = 0
+
+        filter_df = pd.DataFrame(FILTER_LOG)
+        # Reorder columns as requested
+        column_order = ['sweep_param', 'experiment', 'percent_removed', 'total_count',
+                       'filtered_count', 'removed_count', 'metric_name',
+                       'filter_threshold_min', 'filter_threshold_max', 'median_value_replacement']
+        filter_df = filter_df[column_order]
+
+        csv_path = output_dir / 'filtering_operations_log.csv'
+        filter_df.to_csv(csv_path, index=False)
+        print(f"Saved filtering operations log to {csv_path}")
+        return csv_path
+    return None
+
 
 
 def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
@@ -91,10 +150,27 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
             df['round_duration'] = df['timestamp'].diff()
 
             # Replace outliers with median for time calculation
+            original_count = len(df['round_duration'].dropna())
+            outliers_mask = (df['round_duration'] > 200) | (pd.isna(df['round_duration']))
+            outliers_count = outliers_mask.sum()
+
             median_duration = df['round_duration'].median()
             df['round_duration_cleaned'] = df['round_duration'].apply(
                 lambda x: median_duration if (pd.isna(x) or x > 200) else x
             )
+
+            # Record filtering operation
+            if outliers_count.any():
+                record_filtering(
+                    'round_duration_time_calc',
+                    'Replace outliers >200s or NaN with median',
+                    original_count,
+                    original_count - outliers_count.sum(),
+                    f"sweep_param={sweep_param}, experiment={format_sweep_label(sweep_param, exp[sweep_param])}",
+                    filter_min=0,
+                    filter_max=200,
+                    median_replacement=median_duration
+                )
 
             # Compute elapsed_time as cumulative sum of cleaned durations
             df['elapsed_time'] = df['round_duration_cleaned'].cumsum()
@@ -108,11 +184,28 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
             df = exp['metrics'].copy()
             df['round_duration'] = df['timestamp'].diff()
 
-            # Filter based on impossible
+            # Filter based on impossible values
+            original_count = len(df['round_duration'].dropna())
+            outliers_mask = (df['round_duration'] > 200) & pd.notna(df['round_duration'])
+            outliers_count = outliers_mask.sum()
+
             median_duration = df['round_duration'].median()
             df['round_duration'] = df['round_duration'].apply(
                 lambda x: median_duration if (pd.notna(x) and x > 200) else x
             )
+
+            # Record filtering operation
+            if outliers_count.any():
+                record_filtering(
+                    'round_duration_distribution',
+                    'Replace outliers >200s with median for distribution plot',
+                    original_count,
+                    original_count - outliers_count.sum(),
+                    f"sweep_param={sweep_param}, experiment={format_sweep_label(sweep_param, exp[sweep_param])}",
+                    filter_min=0,
+                    filter_max=200,
+                    median_replacement=median_duration
+                )
 
             label = format_sweep_label(sweep_param, exp[sweep_param])
             sns.kdeplot(df['round_duration'].dropna(),
@@ -212,7 +305,23 @@ def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_para
     # Round duration distribution
     for metric in ['round_duration']:
         fig, ax = plt.subplots(figsize=(12, 6))
+
+        # Filter for positive values and record the filtering
+        original_count = len(combined_df[metric])
         plot_df = combined_df[combined_df[metric] > 0].copy()
+        filtered_count = len(plot_df)
+
+        if original_count != filtered_count:
+            record_filtering(
+                metric,
+                'Filter for positive values only',
+                original_count,
+                filtered_count,
+                f"sweep_param={sweep_param}",
+                filter_min=0,
+                filter_max=None
+            )
+
         colors, _ = get_sweep_colors_markers(sweep_values)
 
         for i, sweep_val in enumerate(sweep_values):
@@ -260,7 +369,7 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
     combined_df = pd.concat(combined_latency, ignore_index=True)
 
     def filter_outliers(data, column_name):
-
+        original_count = len(data)
 
         # Filter data
         filtered_data = data[
@@ -290,6 +399,18 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
     ]
 
     print(f"Original data points: {original_size}, After filtering: {len(combined_filtered)}")
+
+    # Record the overall filtering operation after all filtering is complete
+    if len(combined_filtered) != original_size:
+        record_filtering(
+            'latency_combined',
+            'Combined downlink and uplink latency filtering (0-50s range, intersection)',
+            original_size,
+            len(combined_filtered),
+            f"sweep_param={sweep_param}",
+            filter_min=0,
+            filter_max=50
+        )
 
     combined_df = combined_filtered
 
@@ -422,6 +543,10 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
     plt.close(fig)
 
 def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, output_dir: Path):
+    # Clear filter log for this sweep
+    global FILTER_LOG
+    FILTER_LOG = []
+
     filtered = [exp for exp in experiment_paths
                 if all(exp.get(k) == v for k, v in filters.items())]
 
@@ -446,6 +571,9 @@ def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, outpu
     plot_agg_metric_vs_time(agg_metrics, sweep_output_dir, "", sweep)
     plot_individual(individual_metrics, sweep_output_dir, "", sweep)
     plot_latency_metrics(latency_metrics, sweep_output_dir, "", sweep)
+
+    # Save filtering operations log
+    save_filter_log(sweep_output_dir)
 
 if __name__ == '__main__':
     directory = Path("/Users/roberthayek/Documents/git_repos/fed_5g/IMC")
