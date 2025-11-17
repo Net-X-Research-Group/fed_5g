@@ -1,14 +1,12 @@
 import pandas as pd
 from pathlib import Path
-import json
-import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 from matplotlib.gridspec import GridSpec
-
+from scipy import stats
+import itertools
 from data_loading import *
 from helpers import *
-
+import pingouin as pg
 
 # Configure matplotlib for LaTeX fonts
 plt.rcParams.update({
@@ -26,7 +24,7 @@ column_name_map = {
     'round_duration': 'Round Duration (s)',
 }
 
-TIME_METRICS = ['train_time', 'eval_time']
+TIME_METRICS = ['train_time', 'eval_time', 'round_duration']
 
 # Global list to track all filtering operations
 FILTER_LOG = []
@@ -97,6 +95,9 @@ def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
     metric_cols = [col for col in agg_metrics[0]['metrics'].columns
                    if col not in ['server_round', 'timestamp']]
 
+    metric_cols = ['eval_time', 'train_time', 'eval_acc', 'eval_loss', 'train_loss', 'round_duration']
+
+
     figs = {}
     for metric in metric_cols:
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -105,8 +106,36 @@ def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
         if metric in TIME_METRICS:
             # Frequency plot for time metrics
             for exp in agg_metrics:
+                if 'round_duration' not in exp['metrics'].columns:
+                    df = exp['metrics'].copy()
+                    if 'round_duration' not in df.columns:
+                        df['round_duration'] = df['timestamp'].diff()
+
+                    # Replace outliers with median for time calculation
+                    original_count = len(df['round_duration'].dropna())
+                    outliers_mask = (df['round_duration'] > 200) | (pd.isna(df['round_duration']))
+                    outliers_count = outliers_mask.sum()
+
+                    median_duration = df['round_duration'].median()
+                    df['round_duration_cleaned'] = df['round_duration'].apply(
+                        lambda x: median_duration if (pd.isna(x) or x > 200) else x
+                    )
+
+                    # Record filtering operation
+                    if outliers_count.any():
+                        record_filtering(
+                            'round_duration_time_calc',
+                            'Replace outliers >200s or NaN with median',
+                            original_count,
+                            original_count - outliers_count.sum(),
+                            f"sweep_param={sweep_param}, experiment={format_sweep_label(sweep_param, exp[sweep_param])}",
+                            filter_min=0,
+                            filter_max=200,
+                            median_replacement=median_duration
+                        )
+                    exp['metrics'] = df
                 label = format_sweep_label(sweep_param, exp[sweep_param])
-                sns.kdeplot(exp['metrics'][metric], label=label, ax=ax)
+                sns.histplot(exp['metrics'][metric], label=label, ax=ax)
             ax.set_xlabel(display_name, fontsize=12)
             ax.set_ylabel('Density', fontsize=12)
         else:
@@ -147,7 +176,8 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
 
         for exp in agg_metrics:
             df = exp['metrics'].copy()
-            df['round_duration'] = df['timestamp'].diff()
+            if 'round_duration' not in df.columns:
+                df['round_duration'] = df['timestamp'].diff()
 
             # Replace outliers with median for time calculation
             original_count = len(df['round_duration'].dropna())
@@ -182,7 +212,8 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
         # Distribution subplot: histogram of round durations
         for exp in agg_metrics:
             df = exp['metrics'].copy()
-            df['round_duration'] = df['timestamp'].diff()
+            if 'round_duration' not in df.columns:
+                df['round_duration'] = df['timestamp'].diff()
 
             # Filter based on impossible values
             original_count = len(df['round_duration'].dropna())
@@ -223,6 +254,7 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
 
         save_and_close_figure(fig, output_dir, metric, sweep_param, filter_str, suffix="_vs_time")
         figs[metric] = fig
+
 
     return figs
 
@@ -468,7 +500,7 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
             patch.set_alpha(0.7)
         ax1.set_xlabel('Client ID')
         ax1.set_ylabel('Downlink Latency (s)')
-        ax1.set_title(f'Downlink Latency - {format_sweep_label(sweep_param, sweep_val)}')
+        #ax1.set_title(f'Downlink Latency - {format_sweep_label(sweep_param, sweep_val)}')
         ax1.grid(True, alpha=0.3)
 
         # Uplink latency by CID
@@ -479,13 +511,13 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
             patch.set_alpha(0.7)
         ax2.set_xlabel('Client ID')
         ax2.set_ylabel('Uplink Latency (s)')
-        ax2.set_title(f'Uplink Latency - {format_sweep_label(sweep_param, sweep_val)}')
+        #ax2.set_title(f'Uplink Latency - {format_sweep_label(sweep_param, sweep_val)}')
         ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
         safe_sweep_val = str(sweep_val).replace('/', '_').replace(' ', '_')
-        filename = f"latency_by_cid_{sweep_param}_{safe_sweep_val}.png"
-        fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+        filename = f"latency_by_cid_{sweep_param}_{safe_sweep_val}.svg"
+        fig.savefig(output_dir / filename, format='svg', bbox_inches='tight')
         plt.close(fig)
 
     # Figure 2: Box plots for all sweep values showing UL/DL distributions side by side
@@ -516,7 +548,7 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
             pos += 1.5  # Space between different sweep values
 
     # Create box plot
-    bp = ax.boxplot(all_data, positions=positions, patch_artist=True, widths=0.4, medianprops=dict(color='black', linewidth=1.5))
+    bp = ax.boxplot(all_data, positions=positions, patch_artist=True, widths=0.4, medianprops=dict(color='black', linewidth=1.5), showfliers=False)
 
     # Color the boxes
     for i, patch in enumerate(bp['boxes']):
@@ -526,7 +558,7 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
     ax.set_xticks(positions)
     ax.set_xticklabels(all_labels, fontsize=10)
     ax.set_ylabel('Latency (s)')
-    ax.set_title(f'Latency Distribution by {sweep_param.title()} (Outliers Filtered)')
+    #ax.set_title(f'Latency Distribution by {sweep_param.title()}')
     ax.grid(True, alpha=0.3, axis='y')
 
     # Add legend
@@ -538,8 +570,8 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
 
     plt.tight_layout()
 
-    filename = f"latency_boxplot_{sweep_param}_sweep.png"
-    fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+    filename = f"latency_boxplot_{sweep_param}_sweep.svg"
+    fig.savefig(output_dir / filename, format='svg', bbox_inches='tight')
     plt.close(fig)
 
 def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, output_dir: Path):
@@ -548,7 +580,7 @@ def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, outpu
     FILTER_LOG = []
 
     filtered = [exp for exp in experiment_paths
-                if all(exp.get(k) == v for k, v in filters.items())]
+                if all(exp.get(k) in (v, None) for k, v in filters.items())]
 
     filter_parts = [f"{k}_{str(v).replace('/', '_').replace(' ', '_')}" for k, v in filters.items()]
     filter_dir = "_".join(filter_parts)
@@ -561,19 +593,190 @@ def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, outpu
 
     for exp in filtered:
         metrics = load(exp)
-        common_data = {**exp, 'execution_time': metrics['execution_time'],
-                       'start_time': metrics['start_time'], 'sweep': sweep}
+        common_data = {**exp, 'execution_time': metrics.get('execution_time', None),
+                       'start_time': metrics.get('start_time', None), 'sweep': sweep}
         agg_metrics.append({**common_data, 'metrics': metrics['server_agg_metric']})
-        individual_metrics.append({**common_data, 'metrics': metrics['individual_metrics']})
+        if sweep != 'network':
+            individual_metrics.append({**common_data, 'metrics': metrics['individual_metrics']})
         latency_metrics.append({**common_data, 'metrics': metrics['latency']})
 
-    plot_agg_metric(agg_metrics, sweep_output_dir, "", sweep)
-    plot_agg_metric_vs_time(agg_metrics, sweep_output_dir, "", sweep)
-    plot_individual(individual_metrics, sweep_output_dir, "", sweep)
-    plot_latency_metrics(latency_metrics, sweep_output_dir, "", sweep)
+    if sweep != 'network':
+        plot_agg_metric(agg_metrics, sweep_output_dir, "", sweep)
+        plot_agg_metric_vs_time(agg_metrics, sweep_output_dir, "", sweep)
+        plot_individual(individual_metrics, sweep_output_dir, "", sweep)
+        plot_latency_metrics(latency_metrics, sweep_output_dir, "", sweep)
+        tost_test(individual_metrics, sweep, sweep_output_dir)
+    else:
+        convergence_analysis(agg_metrics, sweep_output_dir, "", sweep)
+        plot_latency_metrics(latency_metrics, sweep_output_dir, "", sweep)
 
-    # Save filtering operations log
-    save_filter_log(sweep_output_dir)
+
+
+    # Calculate individual metric statistics and save to CSV
+    #sweep_anova(individual_metrics, sweep, sweep_output_dir)
+
+
+def sweep_anova(metrics, sweep_param, output_dir):
+    """Perform ANOVA on individual metrics across different sweep values"""
+
+    df = prepare_individual_metrics(metrics, sweep_param)
+
+    anova_results = []
+
+    for metric in TIME_METRICS:
+        for cid in sorted(df['cid'].unique()):
+            cid_data = df[df['cid'] == cid]
+
+            groups = {name: group[metric].dropna().values
+                      for name, group in cid_data.groupby(sweep_param)}
+
+            if len(groups) < 2:
+                continue
+
+            group_items = list(groups.values())
+            group_names = list(groups.keys())
+
+            f_stat, p_val = stats.f_oneway(*group_items)
+
+            anova_results.append({'cid': cid,
+                                  'metric': metric,
+                                  'sweep_param': sweep_param,
+                                  'f_statistic': f_stat,
+                                  'p_value': p_val,
+                                  'num_groups': len(groups)})
+
+            """# Plot each distribution for visual inspection
+            plt.figure(figsize=(8, 4))
+            for name, data in groups.items():
+                sns.kdeplot(data, label=f"{sweep_param}={name}", fill=True)
+            plt.title(f'Distribution of {metric} for CID {cid}\nANOVA p={p_val:.9f}')
+            plt.xlabel(column_name_map.get(metric, metric))
+            plt.ylabel('Density')
+            plt.legend()
+            plt.tight_layout()
+            plt.show()"""
+
+
+            # Pairwise t-tests if p < 0.005
+            if p_val < 0.005:
+                combs = list(set(itertools.combinations(group_names, 2)))
+                for i, j in combs:
+                    g1 = groups.get(i)
+                    g2 = groups.get(j)
+
+                    t_stat, pair_p_val = stats.ttest_ind(g1, g2)
+
+                    """# Plot each distribution for visual inspection
+                    plt.figure(figsize=(8, 4))
+                    sns.kdeplot(g1, label=f"{sweep_param}={i}", fill=True)
+                    sns.kdeplot(g2, label=f"{sweep_param}={j}", fill=True)
+                    plt.title(f'Distribution of {metric} for CID {cid}\n{sweep_param}={i} vs {sweep_param}={j} | p={pair_p_val:.9f}')
+                    plt.xlabel(column_name_map.get(metric, metric))
+                    plt.ylabel('Density')
+                    plt.legend()
+                    plt.tight_layout()
+                    plt.show()"""
+
+                    print('Pairwise t-test:', cid, metric, i, j, pair_p_val)
+
+
+    pd.DataFrame(anova_results).to_csv(
+        output_dir / f'anova_{sweep_param}.csv', index=False)
+
+
+    return anova_results
+
+def tost_test(metrics, sweep_param, output_dir):
+    df = prepare_individual_metrics(metrics, sweep_param)
+    results = []
+    for metric in TIME_METRICS:
+        client_means = df.groupby('cid')[metric].mean()
+        cv_between_clients = client_means.std() / client_means.mean()
+        print(f'CV between clients for {metric}: {cv_between_clients}')
+        print(f'Metric {metric} range across clients: {client_means.min()} - {client_means.max()}')
+
+        for cid in df['cid'].unique():
+            cid_data = df[df['cid'] == cid]
+            cid_mean = cid_data[metric].mean()
+
+
+
+            delta = 0.05 * cid_mean
+
+            tdd_groups = {name: group[metric].dropna().values
+                      for name, group in cid_data.groupby(sweep_param)}
+
+            n_pairs = 0
+            n_equiv = 0
+
+            for tdd1, tdd2 in itertools.combinations(tdd_groups.keys(), 2):
+                tost_result = pg.tost(
+                    tdd_groups[tdd1], tdd_groups[tdd2], delta
+                )
+                p_val = tost_result['pval'].values[0]
+                equiv = p_val < 0.05
+
+
+                n_pairs += 1
+                if equiv:
+                    n_equiv += 1
+
+            results.append({
+                'metric': metric,
+                'CID': cid,
+                'mean_metric': cid_mean,
+                'bound_5pct': delta,
+                'equiv_pairs': n_equiv,
+                'pct_equiv': 100 * n_equiv / n_pairs if n_pairs > 0 else 0,
+
+            })
+
+    equiv_df = pd.DataFrame(results)
+    equiv_df.to_csv(
+        output_dir / f'tost_equivalence_{sweep_param}.csv', index=False)
+
+def convergence_analysis(agg_metrics, output_dir, filter_str, sweep_param):
+    """Accuracy and loss convergence analysis across experiments
+        When loss has no improvement if eval_loss does not decrease for 10 rounds, return number of rounds
+        Plot eval_acc vs time, eval_loss vs time using this round number.
+        Only perform analysis if it is a network sweep
+    """
+    print('stop')
+
+    # Calcualte convergence time on wwan experiment (inplace)
+    wwan_exp = next((exp for exp in agg_metrics if exp['network'] == 'wwan'), None)
+    if wwan_exp is None:
+        print("No wwan experiment found for convergence analysis")
+        return
+
+    wwan_df = wwan_exp['metrics']
+
+    # Determine convergence round based on eval_loss
+    patience = 20
+    tolerance = 0.01
+    best_loss = float('inf')
+    count = 0
+    early_stopping_round = None
+    for i, loss in enumerate(wwan_df['eval_loss']):
+        if loss < best_loss - tolerance:
+            best_loss = loss
+            count = 0
+        else:
+            count += 1
+            if count >= patience:
+                early_stopping_round = i + 1
+                break
+    print(f'Stopping triggered at round: {early_stopping_round}')
+
+    # Truncate the df
+    if early_stopping_round is not None:
+        wwan_df = wwan_df.iloc[:early_stopping_round]
+
+    # Plot eval_acc vs time and eval_loss vs time for all experiments
+    wwan_exp['metrics'] = wwan_df
+
+    plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param)
+    plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param)
 
 if __name__ == '__main__':
     directory = Path("/Users/roberthayek/Documents/git_repos/fed_5g/IMC")
@@ -587,6 +790,15 @@ if __name__ == '__main__':
         params = parse_experiment_name(exp.name)
         all_experiments.append({'path': exp, **params})
 
-    plot_cellular_sweep(all_experiments, {'bandwidth': '100 MHz', 'rank': '2x2',
-                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2'},
+    """plot_cellular_sweep(all_experiments, {'bandwidth': '100 MHz', 'rank': '2x2',
+                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2', 'network': 'wwan'},
                         sweep='nodes', output_dir=output_dir)
+    """
+
+    # NETWORK COMPARISON: 7-2 TDD, 40 MHz, 2x2, iid, no congestion
+    plot_cellular_sweep(all_experiments, {'bandwidth': '40 MHz', 'rank': '2x2',
+                                          'distribution': 'iid', 'congestion': False, 'tdd': '7-2', 'nodes': '6N'},
+                        sweep='network', output_dir=output_dir)
+
+
+

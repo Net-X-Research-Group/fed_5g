@@ -38,10 +38,18 @@ def parse_experiment_name(name):
             params['congestion'] = True
         elif re.search(r"wlan", part, re.IGNORECASE):
             params['network'] = 'wlan'
+            params['rank'] = None
+            params['tdd'] = None
+            params['congestion'] = None
+            params['bandwidth'] = None
         elif re.search(r"wwan", part, re.IGNORECASE):
             params['network'] = 'wwan'
         elif re.search(r"lan", part, re.IGNORECASE):
             params['network'] = 'lan'
+            params['rank'] = None
+            params['tdd'] = None
+            params['congestion'] = None
+            params['bandwidth'] = None
 
     return params
 
@@ -75,7 +83,7 @@ def load(experiment_path: dict) -> dict:
     if individual_file.exists():
         with open(individual_file, 'r') as f:
             individual_metrics = json.load(f)
-            individual_metrics = {k: v['train'] for k, v in individual_metrics.items()}
+            individual_metrics = {k: v.get('train', None) for k, v in individual_metrics.items()}
             metrics['individual_metrics'] = individual_metrics
 
     # Load the exec time

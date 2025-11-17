@@ -32,10 +32,10 @@ def format_sweep_label(sweep_param, sweep_value):
 def save_and_close_figure(fig, output_dir, metric, sweep_param, filter_str, suffix=""):
     """Save figure with consistent naming and close it"""
     if filter_str == "":
-        filename = f"{metric}{suffix}_{sweep_param}_sweep.png"
+        filename = f"{metric}{suffix}_{sweep_param}_sweep.svg"
     else:
-        filename = f"{metric}{suffix}_{filter_str}.png"
-    fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+        filename = f"{metric}{suffix}_{filter_str}.svg"
+    fig.savefig(output_dir / filename, format='svg', dpi=300, bbox_inches='tight')
     plt.close(fig)
 
 
