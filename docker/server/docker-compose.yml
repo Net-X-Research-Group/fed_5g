@@ -8,56 +8,106 @@ services:
     ports:
       - 9092:9092
       - 9093:9093
+    profiles:
+      - 5G
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.4
+
+  superlink-lan:
+    image: flwr/superlink:1.22.0
+    command:
+      - --insecure
+      - --isolation
+      - process
+    network_mode: host
+    profiles:
+      - lan
 
   superexec-serverapp:
     build:
       context: ../../flwr-application
       dockerfile_inline: |
         FROM flwr/superexec:1.22.0
-
         WORKDIR /app
         COPY --chown=app:app pyproject.toml .
         RUN sed -i '/"flwr",/d' pyproject.toml \
           && python -m pip install -U --no-cache-dir .     
-        
         ENTRYPOINT ["flower-superexec"]
     command:
       - --insecure
       - --plugin-type
       - serverapp
       - --appio-api-address
-      - superlink:9091
+      - 192.168.10.4:9091
     depends_on:
-        - superlink
+      - superlink
     volumes:
       - ${HOME}/flwr_output/:/app/flwr_output
       - ${HOME}/shared_ssh:/app/.ssh
+    profiles:
+      - 5G
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.5
 
-  # Test container
+  superexec-serverapp-lan:
+    build:
+      context: ../../flwr-application
+      dockerfile_inline: |
+        FROM flwr/superexec:1.22.0
+        WORKDIR /app
+        COPY --chown=app:app pyproject.toml .
+        RUN sed -i '/"flwr",/d' pyproject.toml \
+          && python -m pip install -U --no-cache-dir .     
+        ENTRYPOINT ["flower-superexec"]
+    command:
+      - --insecure
+      - --plugin-type
+      - serverapp
+      - --appio-api-address
+      - 129.105.6.252:9091
+    depends_on:
+      - superlink-lan
+    volumes:
+      - ${HOME}/flwr_output/:/app/flwr_output
+      - ${HOME}/shared_ssh:/app/.ssh
+    network_mode: host
+    profiles:
+      - lan
+
   network_tools:
     build:
       dockerfile_inline: |
-          FROM ubuntu:22.04
-          RUN apt-get update && apt-get install -y net-tools iputils-ping openssh-server
-          ENTRYPOINT [ "/bin/bash", "-c", "sleep infinity" ]
+        FROM ubuntu:22.04
+        RUN apt-get update && apt-get install -y net-tools iputils-ping openssh-server
+        ENTRYPOINT [ "/bin/bash", "-c", "sleep infinity" ]
     volumes:
       - ${HOME}/shared_ssh:/home/.ssh
+    profiles:
+      - 5G
     networks:
       cellular_lan:
         ipv4_address: 192.168.10.6
 
+  network_tools-lan:
+    build:
+      dockerfile_inline: |
+        FROM ubuntu:22.04
+        RUN apt-get update && apt-get install -y net-tools iputils-ping openssh-server
+        ENTRYPOINT [ "/bin/bash", "-c", "sleep infinity" ]
+    volumes:
+      - ${HOME}/shared_ssh:/home/.ssh
+    network_mode: host
+    profiles:
+      - lan
+
 networks:
-    cellular_lan:
-      driver: macvlan
-      driver_opts:
-        parent: enp1s0
-      ipam:
-        config:
-          - subnet: 192.168.10.0/24
-            gateway: 192.168.10.3
+  cellular_lan:
+    driver: macvlan
+    driver_opts:
+      parent: enp1s0
+    ipam:
+      config:
+        - subnet: 192.168.10.0/24
+          gateway: 192.168.10.3
