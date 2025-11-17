@@ -2,7 +2,7 @@ import json
 import re
 
 import pandas as pd
-
+import numpy as np
 
 def parse_experiment_name(name):
     params = {
@@ -119,9 +119,14 @@ def prepare_individual_metrics(metrics, sweep_param):
         df = df.sort_values(['cid', 'server_round'])
         df['round_duration'] = df.groupby('cid')['timestamp'].diff()
         median_duration = df['round_duration'].median()
-        df['round_duration'] = df['round_duration'].apply(
-            lambda x: median_duration if (pd.notna(x) and x > 200) else x
-        )
+
+        mask = (df['round_duration'] > 100) & df['round_duration'].notna()
+        num_replaced = mask.sum()
+        df['round_duration'] = np.where(mask, median_duration, df['round_duration'])
+        print(f'{exp[sweep_param]} individual round_duration: Replaced {num_replaced} outliers with median value {median_duration} ({num_replaced/len(df)}%)')
+
+        # Replace the NaN values in round_duration (first round) with the median
+        df['round_duration'] = df['round_duration'].fillna(median_duration)
 
         df[sweep_param] = exp[sweep_param]
         processed.append(df)

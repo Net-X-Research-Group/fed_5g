@@ -7,6 +7,8 @@ import itertools
 from data_loading import *
 from helpers import *
 import pingouin as pg
+from matplotlib.patches import Patch
+from scipy.stats import spearmanr
 
 # Configure matplotlib for LaTeX fonts
 plt.rcParams.update({
@@ -26,74 +28,11 @@ column_name_map = {
 
 TIME_METRICS = ['train_time', 'eval_time', 'round_duration']
 
-# Global list to track all filtering operations
-FILTER_LOG = []
-
-def record_filtering(metric_name, filter_description, original_count, filtered_count, additional_info="",
-                    filter_min=None, filter_max=None, median_replacement=None):
-    """Record filtering operations for later CSV export - percentages calculated at the end"""
-    removed_count = original_count - filtered_count
-
-    # Extract sweep_param and experiment from additional_info
-    sweep_param = ""
-    experiment = ""
-    if "sweep_param=" in additional_info:
-        parts = additional_info.split(", ")
-        for part in parts:
-            if part.startswith("sweep_param="):
-                sweep_param = part.replace("sweep_param=", "")
-            elif part.startswith("experiment="):
-                experiment = part.replace("experiment=", "")
-
-    # Use "TOTAL" for null/empty experiment values
-    if not experiment or experiment.strip() == "":
-        experiment = "TOTAL"
-
-    FILTER_LOG.append({
-        'sweep_param': sweep_param,
-        'experiment': experiment,
-        'total_count': original_count,
-        'filtered_count': filtered_count,
-        'removed_count': removed_count,
-        'metric_name': metric_name,
-        'filter_threshold_min': filter_min,
-        'filter_threshold_max': filter_max,
-        'median_value_replacement': median_replacement,
-        'filter_description': filter_description
-    })
-
-def save_filter_log(output_dir):
-    """Save the filter log to a CSV file with final percentage calculations"""
-    if FILTER_LOG:
-        # Calculate percentages only when saving
-        for entry in FILTER_LOG:
-            if entry['total_count'] > 0:
-                entry['percent_removed'] = (entry['removed_count'] / entry['total_count'] * 100)
-            else:
-                entry['percent_removed'] = 0
-
-        filter_df = pd.DataFrame(FILTER_LOG)
-        # Reorder columns as requested
-        column_order = ['sweep_param', 'experiment', 'percent_removed', 'total_count',
-                       'filtered_count', 'removed_count', 'metric_name',
-                       'filter_threshold_min', 'filter_threshold_max', 'median_value_replacement']
-        filter_df = filter_df[column_order]
-
-        csv_path = output_dir / 'filtering_operations_log.csv'
-        filter_df.to_csv(csv_path, index=False)
-        print(f"Saved filtering operations log to {csv_path}")
-        return csv_path
-    return None
-
-
 
 def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
     """Create one figure per metric, with a line for each experiment"""
     sns.set_style("whitegrid")
     agg_metrics = sort_experiments_by_sweep(agg_metrics, sweep_param)
-
-    metric_cols = [col for col in agg_metrics[0]['metrics'].columns
-                   if col not in ['server_round', 'timestamp']]
 
     metric_cols = ['eval_time', 'train_time', 'eval_acc', 'eval_loss', 'train_loss', 'round_duration']
 
@@ -106,38 +45,10 @@ def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
         if metric in TIME_METRICS:
             # Frequency plot for time metrics
             for exp in agg_metrics:
-                if 'round_duration' not in exp['metrics'].columns:
-                    df = exp['metrics'].copy()
-                    if 'round_duration' not in df.columns:
-                        df['round_duration'] = df['timestamp'].diff()
-
-                    # Replace outliers with median for time calculation
-                    original_count = len(df['round_duration'].dropna())
-                    outliers_mask = (df['round_duration'] > 200) | (pd.isna(df['round_duration']))
-                    outliers_count = outliers_mask.sum()
-
-                    median_duration = df['round_duration'].median()
-                    df['round_duration_cleaned'] = df['round_duration'].apply(
-                        lambda x: median_duration if (pd.isna(x) or x > 200) else x
-                    )
-
-                    # Record filtering operation
-                    if outliers_count.any():
-                        record_filtering(
-                            'round_duration_time_calc',
-                            'Replace outliers >200s or NaN with median',
-                            original_count,
-                            original_count - outliers_count.sum(),
-                            f"sweep_param={sweep_param}, experiment={format_sweep_label(sweep_param, exp[sweep_param])}",
-                            filter_min=0,
-                            filter_max=200,
-                            median_replacement=median_duration
-                        )
-                    exp['metrics'] = df
                 label = format_sweep_label(sweep_param, exp[sweep_param])
                 sns.histplot(exp['metrics'][metric], label=label, ax=ax)
             ax.set_xlabel(display_name, fontsize=12)
-            ax.set_ylabel('Density', fontsize=12)
+            ax.set_ylabel('Frequency', fontsize=12)
         else:
             # Line plot for other metrics
             for exp in agg_metrics:
@@ -176,34 +87,9 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
 
         for exp in agg_metrics:
             df = exp['metrics'].copy()
-            if 'round_duration' not in df.columns:
-                df['round_duration'] = df['timestamp'].diff()
-
-            # Replace outliers with median for time calculation
-            original_count = len(df['round_duration'].dropna())
-            outliers_mask = (df['round_duration'] > 200) | (pd.isna(df['round_duration']))
-            outliers_count = outliers_mask.sum()
-
-            median_duration = df['round_duration'].median()
-            df['round_duration_cleaned'] = df['round_duration'].apply(
-                lambda x: median_duration if (pd.isna(x) or x > 200) else x
-            )
-
-            # Record filtering operation
-            if outliers_count.any():
-                record_filtering(
-                    'round_duration_time_calc',
-                    'Replace outliers >200s or NaN with median',
-                    original_count,
-                    original_count - outliers_count.sum(),
-                    f"sweep_param={sweep_param}, experiment={format_sweep_label(sweep_param, exp[sweep_param])}",
-                    filter_min=0,
-                    filter_max=200,
-                    median_replacement=median_duration
-                )
 
             # Compute elapsed_time as cumulative sum of cleaned durations
-            df['elapsed_time'] = df['round_duration_cleaned'].cumsum()
+            df['elapsed_time'] = df['round_duration'].cumsum()
 
             label = format_sweep_label(sweep_param, exp[sweep_param])
             sns.lineplot(x=df['elapsed_time'], y=df[metric],
@@ -212,31 +98,6 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
         # Distribution subplot: histogram of round durations
         for exp in agg_metrics:
             df = exp['metrics'].copy()
-            if 'round_duration' not in df.columns:
-                df['round_duration'] = df['timestamp'].diff()
-
-            # Filter based on impossible values
-            original_count = len(df['round_duration'].dropna())
-            outliers_mask = (df['round_duration'] > 200) & pd.notna(df['round_duration'])
-            outliers_count = outliers_mask.sum()
-
-            median_duration = df['round_duration'].median()
-            df['round_duration'] = df['round_duration'].apply(
-                lambda x: median_duration if (pd.notna(x) and x > 200) else x
-            )
-
-            # Record filtering operation
-            if outliers_count.any():
-                record_filtering(
-                    'round_duration_distribution',
-                    'Replace outliers >200s with median for distribution plot',
-                    original_count,
-                    original_count - outliers_count.sum(),
-                    f"sweep_param={sweep_param}, experiment={format_sweep_label(sweep_param, exp[sweep_param])}",
-                    filter_min=0,
-                    filter_max=200,
-                    median_replacement=median_duration
-                )
 
             label = format_sweep_label(sweep_param, exp[sweep_param])
             sns.kdeplot(df['round_duration'].dropna(),
@@ -344,15 +205,7 @@ def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_para
         filtered_count = len(plot_df)
 
         if original_count != filtered_count:
-            record_filtering(
-                metric,
-                'Filter for positive values only',
-                original_count,
-                filtered_count,
-                f"sweep_param={sweep_param}",
-                filter_min=0,
-                filter_max=None
-            )
+            print(f'Filtered {original_count - filtered_count} negative values from {metric} distribution plot')
 
         colors, _ = get_sweep_colors_markers(sweep_values)
 
@@ -384,70 +237,11 @@ def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_para
 
         save_and_close_figure(fig, output_dir, metric, sweep_param, filter_str, suffix="_distribution")
 
-def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: str, sweep_param: str):
+def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter_str: str, sweep_param: str):
     """Plot latency metrics with CSV stats and figures for UL/DL latencies"""
-
-    # Combine all latency data
-    combined_latency = []
-    for exp in latency_metrics:
-        df = exp['metrics'].copy()
-        df[sweep_param] = exp[sweep_param]
-        combined_latency.append(df)
-
-    if not combined_latency:
-        print("No latency data found")
-        return
-
-    combined_df = pd.concat(combined_latency, ignore_index=True)
-
-    def filter_outliers(data, column_name):
-        original_count = len(data)
-
-        # Filter data
-        filtered_data = data[
-            (data[column_name] >= 0) &
-            (data[column_name] <= 50)
-        ]
-
-        outliers_removed = len(data) - len(filtered_data)
-        if outliers_removed > 0:
-            print(f"Filtered {outliers_removed} outliers from {column_name} "
-                  f"(bounds: {0:.3f}-{50:.1f}s)")
-
-        return filtered_data
-
-    # Apply filtering to each metric separately
-    print("Applying outlier filtering...")
-    original_size = len(combined_df)
-
-    # Filter each latency type separately to preserve data
-    dl_filtered = filter_outliers(combined_df, 'downlink_latency')
-    ul_filtered = filter_outliers(combined_df, 'uplink_latency')
-
-    # For statistics, use the intersection of both filtered datasets
-    combined_filtered = combined_df[
-        combined_df.index.isin(dl_filtered.index) &
-        combined_df.index.isin(ul_filtered.index)
-    ]
-
-    print(f"Original data points: {original_size}, After filtering: {len(combined_filtered)}")
-
-    # Record the overall filtering operation after all filtering is complete
-    if len(combined_filtered) != original_size:
-        record_filtering(
-            'latency_combined',
-            'Combined downlink and uplink latency filtering (0-50s range, intersection)',
-            original_size,
-            len(combined_filtered),
-            f"sweep_param={sweep_param}",
-            filter_min=0,
-            filter_max=50
-        )
-
-    combined_df = combined_filtered
-
+    latency_metrics = latency_metrics.dropna()
     # Sort sweep values
-    sweep_values = combined_df[sweep_param].unique()
+    sweep_values = latency_metrics[sweep_param].unique()
     if sweep_param == 'bandwidth':
         sweep_values = sorted(sweep_values, key=lambda x: int(x.replace(' MHz', '')))
     elif sweep_param == 'tdd':
@@ -455,36 +249,11 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
     else:
         sweep_values = sorted(sweep_values)
 
-    # Generate CSV with statistics
-    stats_data = []
-    for sweep_val in sweep_values:
-        subset = combined_df[combined_df[sweep_param] == sweep_val]
-        for metric in ['downlink_latency', 'uplink_latency']:
-            if len(subset) > 0:
-                stats = subset[metric].describe()
-                stats_data.append({
-                    sweep_param: sweep_val,
-                    'metric': metric,
-                    'count': stats['count'],
-                    'mean': stats['mean'],
-                    'std': stats['std'],
-                    'min': stats['min'],
-                    '25%': stats['25%'],
-                    '50%': stats['50%'],
-                    '75%': stats['75%'],
-                    'max': stats['max']
-                })
-
-    stats_df = pd.DataFrame(stats_data)
-    stats_csv_path = output_dir / 'latency_statistics_filtered.csv'
-    stats_df.to_csv(stats_csv_path, index=False)
-    print(f"Saved filtered latency statistics to {stats_csv_path}")
-
     colors, markers = get_sweep_colors_markers(sweep_values)
 
     # Figure 1: Individual figures for each sweep value showing UL/DL for each CID
     for i, sweep_val in enumerate(sweep_values):
-        subset = combined_df[combined_df[sweep_param] == sweep_val]
+        subset = latency_metrics[latency_metrics[sweep_param] == sweep_val]
         cids = sorted(subset['cid'].unique())
 
         if len(subset) == 0:
@@ -531,7 +300,7 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
 
     pos = 1
     for i, sweep_val in enumerate(sweep_values):
-        subset = combined_df[combined_df[sweep_param] == sweep_val]
+        subset = latency_metrics[latency_metrics[sweep_param] == sweep_val]
         if len(subset) > 0:
             # Add downlink data
             all_data.append(subset['downlink_latency'].values)
@@ -548,7 +317,10 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
             pos += 1.5  # Space between different sweep values
 
     # Create box plot
-    bp = ax.boxplot(all_data, positions=positions, patch_artist=True, widths=0.4, medianprops=dict(color='black', linewidth=1.5), showfliers=False)
+    bp = ax.boxplot(all_data, positions=positions,
+                    patch_artist=True, widths=0.4,
+                    medianprops=dict(color='black', linewidth=1.5),
+                    showfliers=False)
 
     # Color the boxes
     for i, patch in enumerate(bp['boxes']):
@@ -561,8 +333,6 @@ def plot_latency_metrics(latency_metrics: list, output_dir: Path, filter_str: st
     #ax.set_title(f'Latency Distribution by {sweep_param.title()}')
     ax.grid(True, alpha=0.3, axis='y')
 
-    # Add legend
-    from matplotlib.patches import Patch
     legend_elements = [Patch(facecolor=colors[i], alpha=0.7,
                             label=format_sweep_label(sweep_param, val))
                       for i, val in enumerate(sweep_values)]
@@ -596,24 +366,106 @@ def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, outpu
         common_data = {**exp, 'execution_time': metrics.get('execution_time', None),
                        'start_time': metrics.get('start_time', None), 'sweep': sweep}
         agg_metrics.append({**common_data, 'metrics': metrics['server_agg_metric']})
-        if sweep != 'network':
-            individual_metrics.append({**common_data, 'metrics': metrics['individual_metrics']})
+        individual_metrics.append({**common_data, 'metrics': metrics['individual_metrics']})
         latency_metrics.append({**common_data, 'metrics': metrics['latency']})
 
-    if sweep != 'network':
-        plot_agg_metric(agg_metrics, sweep_output_dir, "", sweep)
-        plot_agg_metric_vs_time(agg_metrics, sweep_output_dir, "", sweep)
-        plot_individual(individual_metrics, sweep_output_dir, "", sweep)
-        plot_latency_metrics(latency_metrics, sweep_output_dir, "", sweep)
-        tost_test(individual_metrics, sweep, sweep_output_dir)
-    else:
-        convergence_analysis(agg_metrics, sweep_output_dir, "", sweep)
-        plot_latency_metrics(latency_metrics, sweep_output_dir, "", sweep)
+    # Filtering agg_metrics and create round_duration before plotting
+    for exp in agg_metrics:
+        if 'round_duration' not in exp['metrics'].columns:
+            df = exp['metrics'].copy()
+            if 'round_duration' not in df.columns:
+                df['round_duration'] = df['timestamp'].diff()
+
+            # Replace outliers with median for time calculation
+            original_count = len(df['round_duration'].dropna())
+            outliers_mask = (df['round_duration'] > 200) | (pd.isna(df['round_duration']))
+            outliers_count = outliers_mask.sum()
+
+            median_duration = df['round_duration'].median()
+            df['round_duration'] = df['round_duration'].apply(
+                lambda x: median_duration if (pd.isna(x) or x > 200) else x
+            )
+
+            # Record filtering operation
+            if outliers_count.any():
+                print(f'Percent removed {outliers_count} out of {original_count} outliers from round_duration, replaced with median={median_duration} experiment={format_sweep_label(sweep, exp[sweep])}')
+            exp['metrics'] = df
+
+
+    # Combine all latency data and filter all outliers before plotting
+    combined_latency = []
+    for exp in latency_metrics:
+        df = exp['metrics'].copy()
+        df[sweep] = exp[sweep]
+        combined_latency.append(df)
+
+    if not combined_latency:
+        print("No latency data found")
+        return
+
+    latency_metrics = pd.concat(combined_latency, ignore_index=True)
+    mask = (latency_metrics['downlink_latency'] > 100) & latency_metrics['downlink_latency'].notna()
+    num_replaced = mask.sum()
+    latency_metrics['downlink_latency'] = np.where(mask, np.nan, latency_metrics['downlink_latency'])
+    print(f"Replaced {num_replaced} outliers in downlink_latency with NaN ({num_replaced/len(latency_metrics['downlink_latency'])})%")
+
+
+    mask = (latency_metrics['uplink_latency'] > 100) & latency_metrics['uplink_latency'].notna()
+    num_replaced = mask.sum()
+    latency_metrics['uplink_latency'] = np.where(mask, np.nan, latency_metrics['uplink_latency'])
+    print(f"Replaced {num_replaced} outliers in uplink_latency with NaN ({num_replaced/len(latency_metrics['uplink_latency'])})%")
+
+
+    plot_agg_metric(agg_metrics, sweep_output_dir, "", sweep)
+    plot_agg_metric_vs_time(agg_metrics, sweep_output_dir, "", sweep)
+    plot_individual(individual_metrics, sweep_output_dir, "", sweep)
+    plot_latency_metrics(latency_metrics, sweep_output_dir, "", sweep)
+
+    tost_test(individual_metrics, sweep, sweep_output_dir)
+    uplink_statistics(latency_metrics, individual_metrics, sweep_output_dir, sweep)
+
+
+def uplink_statistics(latency_metrics, individual_metrics, output_dir, sweep_param):
+    """Compute uplink latency statistics and determine correlation with round duration"""
+    individual_metrics = prepare_individual_metrics(individual_metrics, sweep_param)
+    merged = pd.merge(latency_metrics, individual_metrics,
+                      on=['cid', 'server_round', sweep_param],
+                      suffixes=('_latency', '_individual'))
+
+    # Aggregate to round level
+    round_agg = merged.groupby([sweep_param, 'server_round']).agg({
+        'uplink_latency': 'max',    # Slowest uplink in round
+        'downlink_latency': 'max',  # Slowest uplink in round
+        'round_duration': 'first'  # Round duration (same for all clients)
+    }).reset_index()
+
+    # Correlation per node count
+    for nodes, grp in round_agg.groupby(sweep_param):
+        rho, p = spearmanr(grp['downlink_latency'], grp['round_duration'])
+        print(f"\n{nodes}: ρ={rho:.3f}, p={p:.4f}, n={len(grp)}")
+
+    # Does uplink latency significant effect round duration between sweeps?
+    groups = [grp['round_duration'].values for _, grp in round_agg.groupby(sweep_param)]
+
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.width', 0)
+    pd.set_option('display.max_colwidth', None)
+
+    round_duration_by_config = merged.groupby(sweep_param)[['uplink_latency', 'downlink_latency', 'round_duration']].agg(['mean', 'std'])
+    print(round_duration_by_config)
+
+    # Percent latency of round duration
+    merged['uplink_pct_round'] = 100 * merged['uplink_latency'] / merged['round_duration']
+    merged['downlink_pct_round'] = 100 * merged['downlink_latency'] / merged['round_duration']
+    pct_stats = merged.groupby(sweep_param)[['uplink_pct_round', 'downlink_pct_round']].agg(['mean', 'std'])
+    print(pct_stats)
 
 
 
-    # Calculate individual metric statistics and save to CSV
-    #sweep_anova(individual_metrics, sweep, sweep_output_dir)
+
+
+
 
 
 def sweep_anova(metrics, sweep_param, output_dir):
@@ -735,48 +587,6 @@ def tost_test(metrics, sweep_param, output_dir):
     equiv_df.to_csv(
         output_dir / f'tost_equivalence_{sweep_param}.csv', index=False)
 
-def convergence_analysis(agg_metrics, output_dir, filter_str, sweep_param):
-    """Accuracy and loss convergence analysis across experiments
-        When loss has no improvement if eval_loss does not decrease for 10 rounds, return number of rounds
-        Plot eval_acc vs time, eval_loss vs time using this round number.
-        Only perform analysis if it is a network sweep
-    """
-    print('stop')
-
-    # Calcualte convergence time on wwan experiment (inplace)
-    wwan_exp = next((exp for exp in agg_metrics if exp['network'] == 'wwan'), None)
-    if wwan_exp is None:
-        print("No wwan experiment found for convergence analysis")
-        return
-
-    wwan_df = wwan_exp['metrics']
-
-    # Determine convergence round based on eval_loss
-    patience = 20
-    tolerance = 0.01
-    best_loss = float('inf')
-    count = 0
-    early_stopping_round = None
-    for i, loss in enumerate(wwan_df['eval_loss']):
-        if loss < best_loss - tolerance:
-            best_loss = loss
-            count = 0
-        else:
-            count += 1
-            if count >= patience:
-                early_stopping_round = i + 1
-                break
-    print(f'Stopping triggered at round: {early_stopping_round}')
-
-    # Truncate the df
-    if early_stopping_round is not None:
-        wwan_df = wwan_df.iloc[:early_stopping_round]
-
-    # Plot eval_acc vs time and eval_loss vs time for all experiments
-    wwan_exp['metrics'] = wwan_df
-
-    plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param)
-    plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param)
 
 if __name__ == '__main__':
     directory = Path("/Users/roberthayek/Documents/git_repos/fed_5g/IMC")
@@ -790,14 +600,14 @@ if __name__ == '__main__':
         params = parse_experiment_name(exp.name)
         all_experiments.append({'path': exp, **params})
 
-    """plot_cellular_sweep(all_experiments, {'bandwidth': '100 MHz', 'rank': '2x2',
-                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2', 'network': 'wwan'},
-                        sweep='nodes', output_dir=output_dir)
-    """
+    """plot_cellular_sweep(all_experiments, {'bandwidth': '40 MHz', 'rank': '2x2',
+                                          'distribution': 'dirichlet', 'congestion': False, 'network': 'wwan', 'nodes': '6N'},
+                        sweep='tdd', output_dir=output_dir)"""
+
 
     # NETWORK COMPARISON: 7-2 TDD, 40 MHz, 2x2, iid, no congestion
     plot_cellular_sweep(all_experiments, {'bandwidth': '40 MHz', 'rank': '2x2',
-                                          'distribution': 'iid', 'congestion': False, 'tdd': '7-2', 'nodes': '6N'},
+                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2', 'nodes': '6N'},
                         sweep='network', output_dir=output_dir)
 
 
