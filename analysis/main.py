@@ -112,6 +112,7 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
         ax_dist.set_ylabel('Density', fontsize=10)
         ax_dist.tick_params(labelsize=9)
         ax_dist.grid(True, alpha=0.3, axis='y')
+        ax_dist.legend()
 
         save_and_close_figure(fig, output_dir, metric, sweep_param, filter_str, suffix="_vs_time")
         figs[metric] = fig
@@ -123,9 +124,17 @@ def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_para
     combined_df = prepare_individual_metrics(metrics, sweep_param)
     sweep_values = combined_df[sweep_param].unique()
     colors, markers = get_sweep_colors_markers(sweep_values)
-    sweep_values = sorted(sweep_values)
+
+    if sweep_param == 'bandwidth':
+        sweep_values = sorted(sweep_values, key=lambda x: int(x.replace(' MHz', '')))
+    elif sweep_param == 'tdd':
+        sweep_values = sorted(sweep_values, key=lambda x: tuple(map(int, x.split('-'))))
+    else:
+        sweep_values = sorted(sweep_values)
+
 
     cids = sorted(combined_df['cid'].unique())
+
 
     # Boxplots for time metrics
     for metric in TIME_METRICS:
@@ -135,13 +144,18 @@ def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_para
             subset = combined_df[combined_df[sweep_param] == sweep_val]
             data = [subset[subset['cid']==c][metric].dropna() for c in cids]
             pos = np.arange(len(cids)) + i * 0.25  # Space groups by 0.25 units
-            #label = subset['display_label'].iloc[0]
+            label=format_sweep_label(sweep_param, sweep_val)
             ax.boxplot(data, positions=pos, widths=0.2, patch_artist=True,
                        flierprops=dict(marker=markers[i], markerfacecolor=colors[i],
                                        markeredgecolor=colors[i], markersize=6, alpha=0.6),
-                        boxprops = dict(facecolor=colors[i], alpha=0.7, label=sweep_val),
+                        boxprops = dict(facecolor=colors[i], alpha=0.7),
                         medianprops = dict(color='black', linewidth=1.5))
 
+        # Create manual legend
+        legend_elements = [Patch(facecolor=colors[i], alpha=0.7,
+                                label=format_sweep_label(sweep_param, val))
+                          for i, val in enumerate(sweep_values)]
+        ax.legend(handles=legend_elements)
         ax.set(xticks=np.arange(len(cids)), xticklabels=cids,
                xlabel='Client ID', ylabel=column_name_map[metric])
         save_and_close_figure(fig, output_dir, metric, sweep_param, filter_str, suffix="_by_client")
@@ -151,8 +165,8 @@ def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_para
         for i, sweep_val in enumerate(sweep_values):
             subset = combined_df[(combined_df[sweep_param] == sweep_val) & (combined_df['round_duration'] > 0)][
                 'round_duration']
-            #label = subset['display_label'].iloc[0]
-            sns.kdeplot(data=subset, ax=ax, color=colors[i], label=sweep_val)
+            label=format_sweep_label(sweep_param, sweep_val)
+            sns.kdeplot(data=subset, ax=ax, color=colors[i], label=label)
             ax.axvline(subset.median(), color=colors[i], linestyle='--', alpha=0.5)
 
         ax.set(xlabel=column_name_map['round_duration'], ylabel='Density')
@@ -191,7 +205,7 @@ def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter
             patch.set_alpha(0.7)
         ax1.set_xlabel('Client ID')
         ax1.set_ylabel('Downlink Latency (s)')
-        #ax1.set_title(f'Downlink Latency - {format_sweep_label(sweep_param, sweep_val)}')
+        ax1.set_title(f'Downlink Latency - {format_sweep_label(sweep_param, sweep_val)}')
         ax1.grid(True, alpha=0.3)
 
         # Uplink latency by CID
@@ -202,7 +216,7 @@ def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter
             patch.set_alpha(0.7)
         ax2.set_xlabel('Client ID')
         ax2.set_ylabel('Uplink Latency (s)')
-        #ax2.set_title(f'Uplink Latency - {format_sweep_label(sweep_param, sweep_val)}')
+        ax2.set_title(f'Uplink Latency - {format_sweep_label(sweep_param, sweep_val)}')
         ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
@@ -252,7 +266,7 @@ def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter
     ax.set_xticks(positions)
     ax.set_xticklabels(all_labels, fontsize=10)
     ax.set_ylabel('Latency (s)')
-    #ax.set_title(f'Latency Distribution by {sweep_param.title()}')
+    ax.set_title(f'Latency Distribution by {sweep_param.title()}')
     ax.grid(True, alpha=0.3, axis='y')
 
     legend_elements = [Patch(facecolor=colors[i], alpha=0.7,
@@ -515,9 +529,9 @@ if __name__ == '__main__':
         params = parse_experiment_name(exp.name)
         all_experiments.append({'path': exp, **params})
 
-    plot_cellular_sweep(all_experiments, {'bandwidth': ['40 MHz', '100 MHz'], 'rank': '2x2',
-                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2', 'nodes': '6N'},
-                        sweep='network', output_dir=output_dir)
+    plot_cellular_sweep(all_experiments, {'tdd': '7-2', 'rank': '2x2',
+                                          'distribution': 'dirichlet', 'congestion': False, 'network': 'wwan', 'nodes': '6N'},
+                        sweep='bandwidth', output_dir=output_dir)
 
 
     # NETWORK COMPARISON: 7-2 TDD, 40 MHz, 2x2, iid, no congestion

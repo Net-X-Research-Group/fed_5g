@@ -30,13 +30,9 @@ def format_sweep_label(sweep_param, sweep_value, exp=None):
                     config_parts.append(str(exp[param]))
             if config_parts:
                 return f'{base_label} - ({", ".join(config_parts)})'
-
+            return base_label
         else:
             return network_map.get(sweep_value, sweep_value)
-
-
-
-        return base_label
     elif sweep_param == 'tdd':
         return sweep_value.replace('-', ':')
     elif sweep_param == 'bandwidth':
