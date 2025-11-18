@@ -45,7 +45,7 @@ def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
         if metric in TIME_METRICS:
             # Frequency plot for time metrics
             for exp in agg_metrics:
-                label = format_sweep_label(sweep_param, exp[sweep_param])
+                label = format_sweep_label(sweep_param, exp[sweep_param], exp)
                 sns.histplot(exp['metrics'][metric], label=label, ax=ax)
             ax.set_xlabel(display_name, fontsize=12)
             ax.set_ylabel('Frequency', fontsize=12)
@@ -53,7 +53,7 @@ def plot_agg_metric(agg_metrics, output_dir, filter_str, sweep_param):
             # Line plot for other metrics
             for exp in agg_metrics:
                 df = exp['metrics']
-                label = format_sweep_label(sweep_param, exp[sweep_param])
+                label = format_sweep_label(sweep_param, exp[sweep_param], exp)
                 sns.lineplot(x=df['server_round'], y=df[metric],
                              label=label, linewidth=2, ax=ax)
             ax.set_xlabel('Server Round', fontsize=12)
@@ -91,7 +91,7 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
             # Compute elapsed_time as cumulative sum of cleaned durations
             df['elapsed_time'] = df['round_duration'].cumsum()
 
-            label = format_sweep_label(sweep_param, exp[sweep_param])
+            label = format_sweep_label(sweep_param, exp[sweep_param], exp)
             sns.lineplot(x=df['elapsed_time'], y=df[metric],
                          label=label, linewidth=2, ax=ax_main)
 
@@ -99,7 +99,7 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
         for exp in agg_metrics:
             df = exp['metrics'].copy()
 
-            label = format_sweep_label(sweep_param, exp[sweep_param])
+            label = format_sweep_label(sweep_param, exp[sweep_param], exp)
             sns.kdeplot(df['round_duration'].dropna(),
                         label=label, linewidth=2, ax=ax_dist)
 
@@ -121,121 +121,43 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
 
 def plot_individual(metrics: list, output_dir: Path, filter_str: str, sweep_param: str):
     combined_df = prepare_individual_metrics(metrics, sweep_param)
-
     sweep_values = combined_df[sweep_param].unique()
-    if sweep_param == 'bandwidth':
-        sweep_values = sorted(sweep_values, key=lambda x: int(x.replace(' MHz', '')))
-    elif sweep_param == 'tdd':
-        sweep_values = sorted(sweep_values, key=lambda x: tuple(map(int, x.split('-'))))
-    else:
-        sweep_values = sorted(sweep_values)
+    colors, markers = get_sweep_colors_markers(sweep_values)
+    sweep_values = sorted(sweep_values)
 
-    rd = combined_df['round_duration'].dropna()
-    print('Round Duration Statistics:')
-    print(f"Min: {rd.min():.2f}, Max: {rd.max():.2f}, Median: {rd.median():.2f}")
-    print(f"Mean: {rd.mean():.2f}, Std: {rd.std():.2f}")
-    print(f"Negative values: {(rd < 0).sum()}")
-    print(f"99th percentile: {rd.quantile(0.99):.2f}")
-    print(combined_df.groupby('cid')['round_duration'].describe())
+    cids = sorted(combined_df['cid'].unique())
 
-    # Box plot for each CID for time metrics
+    # Boxplots for time metrics
     for metric in TIME_METRICS:
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        n_sweeps = len(sweep_values)
-        cids = sorted(combined_df['cid'].unique())
-        colors, markers = get_sweep_colors_markers(sweep_values)
-
-        width = 0.8 / n_sweeps
-
         for i, sweep_val in enumerate(sweep_values):
             subset = combined_df[combined_df[sweep_param] == sweep_val]
-            positions = np.arange(len(cids)) + (i - n_sweeps / 2 + 0.5) * width
-            data_to_plot = [subset[subset['cid'] == cid][metric].dropna().values
-                            for cid in cids]
+            data = [subset[subset['cid']==c][metric].dropna() for c in cids]
+            pos = np.arange(len(cids)) + i * 0.25  # Space groups by 0.25 units
+            #label = subset['display_label'].iloc[0]
+            ax.boxplot(data, positions=pos, widths=0.2, patch_artist=True,
+                       flierprops=dict(marker=markers[i], markerfacecolor=colors[i],
+                                       markeredgecolor=colors[i], markersize=6, alpha=0.6),
+                        boxprops = dict(facecolor=colors[i], alpha=0.7, label=sweep_val),
+                        medianprops = dict(color='black', linewidth=1.5))
 
-            bp = ax.boxplot(
-                data_to_plot,
-                positions=positions,
-                widths=width * 0.8,
-                patch_artist=True,
-                showfliers=True,
-                flierprops=dict(
-                    marker=markers[i],
-                    markersize=6,
-                    markerfacecolor=colors[i],
-                    markeredgecolor=colors[i],
-                    alpha=0.6
-                ),
-                boxprops=dict(facecolor=colors[i], alpha=0.7),
-                medianprops=dict(color='black', linewidth=1.5),
-                whiskerprops=dict(color=colors[i]),
-                capprops=dict(color=colors[i]),
-            )
-
-        lower = combined_df[metric].quantile(0.05)
-        upper = combined_df[metric].quantile(0.95)
-        margin = (upper - lower) * 0.1
-        ax.set_ylim(lower - margin, upper + margin)
-
-        ax.set_xticks(np.arange(len(cids)))
-        ax.set_xticklabels(cids)
-        ax.set_xlabel('Client ID', fontsize=12)
-        ax.set_ylabel(column_name_map[metric], fontsize=12)
-        ax.grid(True, alpha=0.3, axis='y')
-
-        from matplotlib.lines import Line2D
-        legend_elements = [
-            Line2D([0], [0], marker=markers[i], color='w',
-                   markerfacecolor=colors[i], markersize=8,
-                   label=format_sweep_label(sweep_param, val))
-            for i, val in enumerate(sweep_values)
-        ]
-        ax.legend(handles=legend_elements, loc='upper right')
-
+        ax.set(xticks=np.arange(len(cids)), xticklabels=cids,
+               xlabel='Client ID', ylabel=column_name_map[metric])
         save_and_close_figure(fig, output_dir, metric, sweep_param, filter_str, suffix="_by_client")
 
-    # Round duration distribution
-    for metric in ['round_duration']:
+        # KDE for round_duration
         fig, ax = plt.subplots(figsize=(12, 6))
-
-        # Filter for positive values and record the filtering
-        original_count = len(combined_df[metric])
-        plot_df = combined_df[combined_df[metric] > 0].copy()
-        filtered_count = len(plot_df)
-
-        if original_count != filtered_count:
-            print(f'Filtered {original_count - filtered_count} negative values from {metric} distribution plot')
-
-        colors, _ = get_sweep_colors_markers(sweep_values)
-
         for i, sweep_val in enumerate(sweep_values):
-            subset = plot_df[plot_df[sweep_param] == sweep_val][metric]
-            label = format_sweep_label(sweep_param, sweep_val)
+            subset = combined_df[(combined_df[sweep_param] == sweep_val) & (combined_df['round_duration'] > 0)][
+                'round_duration']
+            #label = subset['display_label'].iloc[0]
+            sns.kdeplot(data=subset, ax=ax, color=colors[i], label=sweep_val)
+            ax.axvline(subset.median(), color=colors[i], linestyle='--', alpha=0.5)
 
-            sns.kdeplot(
-                data=subset,
-                ax=ax,
-                label=label,
-                color=colors[i],
-                linewidth=2.5,
-                fill=False,
-                common_norm=False
-            )
-
-        ax.set_xlabel(column_name_map[metric], fontsize=12)
-        ax.set_ylabel('Density', fontsize=12)
-        ax.legend(loc='best')
-        ax.grid(True, alpha=0.3, axis='y')
-
-        # Add vertical lines for medians
-        for i, sweep_val in enumerate(sweep_values):
-            subset = plot_df[plot_df[sweep_param] == sweep_val][metric]
-            median_val = subset.median()
-            ax.axvline(median_val, color=colors[i], linestyle='--',
-                       linewidth=1.5, alpha=0.8)
-
-        save_and_close_figure(fig, output_dir, metric, sweep_param, filter_str, suffix="_distribution")
+        ax.set(xlabel=column_name_map['round_duration'], ylabel='Density')
+        ax.legend()
+        save_and_close_figure(fig, output_dir, 'round_duration', sweep_param, filter_str, suffix="_distribution")
 
 def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter_str: str, sweep_param: str):
     """Plot latency metrics with CSV stats and figures for UL/DL latencies"""
@@ -345,12 +267,9 @@ def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter
     plt.close(fig)
 
 def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, output_dir: Path):
-    # Clear filter log for this sweep
-    global FILTER_LOG
-    FILTER_LOG = []
-
     filtered = [exp for exp in experiment_paths
-                if all(exp.get(k) in (v, None) for k, v in filters.items())]
+                if all(exp.get(k) is None or (exp.get(k) in v if isinstance(v, list) else exp.get(k) == v)
+                    for k, v in filters.items())]
 
     filter_parts = [f"{k}_{str(v).replace('/', '_').replace(' ', '_')}" for k, v in filters.items()]
     filter_dir = "_".join(filter_parts)
@@ -388,7 +307,7 @@ def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, outpu
 
             # Record filtering operation
             if outliers_count.any():
-                print(f'Percent removed {outliers_count} out of {original_count} outliers from round_duration, replaced with median={median_duration} experiment={format_sweep_label(sweep, exp[sweep])}')
+                print(f'Percent removed {outliers_count} out of {original_count} outliers from round_duration, replaced with median={median_duration} experiment={format_sweep_label(sweep, exp[sweep], exp)}')
             exp['metrics'] = df
 
 
@@ -460,10 +379,6 @@ def uplink_statistics(latency_metrics, individual_metrics, output_dir, sweep_par
     merged['downlink_pct_round'] = 100 * merged['downlink_latency'] / merged['round_duration']
     pct_stats = merged.groupby(sweep_param)[['uplink_pct_round', 'downlink_pct_round']].agg(['mean', 'std'])
     print(pct_stats)
-
-
-
-
 
 
 
@@ -600,15 +515,15 @@ if __name__ == '__main__':
         params = parse_experiment_name(exp.name)
         all_experiments.append({'path': exp, **params})
 
-    """plot_cellular_sweep(all_experiments, {'bandwidth': '40 MHz', 'rank': '2x2',
-                                          'distribution': 'dirichlet', 'congestion': False, 'network': 'wwan', 'nodes': '6N'},
-                        sweep='tdd', output_dir=output_dir)"""
+    plot_cellular_sweep(all_experiments, {'bandwidth': ['40 MHz', '100 MHz'], 'rank': '2x2',
+                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2', 'nodes': '6N'},
+                        sweep='network', output_dir=output_dir)
 
 
     # NETWORK COMPARISON: 7-2 TDD, 40 MHz, 2x2, iid, no congestion
-    plot_cellular_sweep(all_experiments, {'bandwidth': '40 MHz', 'rank': '2x2',
+    """plot_cellular_sweep(all_experiments, {'bandwidth': '100 MHz', 'rank': '2x2',
                                           'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2', 'nodes': '6N'},
-                        sweep='network', output_dir=output_dir)
+                        sweep='network', output_dir=output_dir)"""
 
 
 

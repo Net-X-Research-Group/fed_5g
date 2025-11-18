@@ -3,6 +3,7 @@ import re
 
 import pandas as pd
 import numpy as np
+from helpers import *
 
 def parse_experiment_name(name):
     params = {
@@ -129,6 +130,9 @@ def prepare_individual_metrics(metrics, sweep_param):
         df['round_duration'] = df['round_duration'].fillna(median_duration)
 
         df[sweep_param] = exp[sweep_param]
+
+        df['network'] = format_sweep_label(sweep_param, exp[sweep_param], exp)
+
         processed.append(df)
 
     return pd.concat(processed, ignore_index=True)

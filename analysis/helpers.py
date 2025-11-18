@@ -11,16 +11,32 @@ def sort_experiments_by_sweep(experiments, sweep_param):
         return sorted(experiments, key=lambda x: x[sweep_param])
 
 
-def format_sweep_label(sweep_param, sweep_value):
+def format_sweep_label(sweep_param, sweep_value, exp=None):
     network_map = {
         'wwan': '5G',
-        'wlan': 'Wifi',
+        'wlan': 'WiFi',
         'lan': 'Ethernet'
     }
 
     """Generate display label for sweep parameter value"""
     if sweep_param == 'network':
-        return network_map.get(sweep_value, sweep_value)
+        if sweep_value == 'wwan' and exp:
+            base_label = network_map.get(sweep_value, sweep_value)
+            config_parts = []
+            for param in ['tdd', 'bandwidth', 'rank']:
+                if param == 'tdd':
+                    config_parts.append(exp[param].replace('-', ':'))
+                else:
+                    config_parts.append(str(exp[param]))
+            if config_parts:
+                return f'{base_label} - ({", ".join(config_parts)})'
+
+        else:
+            return network_map.get(sweep_value, sweep_value)
+
+
+
+        return base_label
     elif sweep_param == 'tdd':
         return sweep_value.replace('-', ':')
     elif sweep_param == 'bandwidth':
