@@ -94,6 +94,7 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
             label = format_sweep_label(sweep_param, exp[sweep_param], exp)
             sns.lineplot(x=df['elapsed_time'], y=df[metric],
                          label=label, linewidth=2, ax=ax_main)
+            print(f'Total elapsed time: {df["elapsed_time"].iloc[-1]} for {label}')
 
         # Distribution subplot: histogram of round durations
         for exp in agg_metrics:
@@ -112,7 +113,7 @@ def plot_agg_metric_vs_time(agg_metrics, output_dir, filter_str, sweep_param):
         ax_dist.set_ylabel('Density', fontsize=10)
         ax_dist.tick_params(labelsize=9)
         ax_dist.grid(True, alpha=0.3, axis='y')
-        ax_dist.legend()
+        #ax_dist.legend()
 
         save_and_close_figure(fig, output_dir, metric, sweep_param, filter_str, suffix="_vs_time")
         figs[metric] = fig
@@ -199,24 +200,27 @@ def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter
 
         # Downlink latency by CID
         dl_data = [subset[subset['cid'] == cid]['downlink_latency'].values for cid in cids]
-        bp1 = ax1.boxplot(dl_data, tick_labels=cids, patch_artist=True, medianprops=dict(color='black', linewidth=1.5))
-        for patch in bp1['boxes']:
-            patch.set_facecolor(colors[i])
-            patch.set_alpha(0.7)
-        ax1.set_xlabel('Client ID')
-        ax1.set_ylabel('Downlink Latency (s)')
-        ax1.set_title(f'Downlink Latency - {format_sweep_label(sweep_param, sweep_val)}')
+        #bp1 = ax1.boxplot(dl_data, tick_labels=cids, patch_artist=True, medianprops=dict(color='black', linewidth=1.5))
+        sns.kdeplot(data=dl_data, ax=ax1, fill=True, alpha=0.5)
+        #for patch in bp1['boxes']:
+        #    patch.set_facecolor(colors[i])
+        #    patch.set_alpha(0.7)
+        ax1.set_xlabel('Downlink Latency (s)')
+        ax1.set_ylabel('Density')
+        ax1.set_title(f'Downlink Latency - {subset["display_label"].iloc[0]}')
         ax1.grid(True, alpha=0.3)
 
         # Uplink latency by CID
         ul_data = [subset[subset['cid'] == cid]['uplink_latency'].values for cid in cids]
-        bp2 = ax2.boxplot(ul_data, tick_labels=cids, patch_artist=True, medianprops=dict(color='black', linewidth=1.5))
-        for patch in bp2['boxes']:
-            patch.set_facecolor(colors[i])
-            patch.set_alpha(0.7)
-        ax2.set_xlabel('Client ID')
-        ax2.set_ylabel('Uplink Latency (s)')
-        ax2.set_title(f'Uplink Latency - {format_sweep_label(sweep_param, sweep_val)}')
+        #bp2 = ax2.boxplot(ul_data, tick_labels=cids, patch_artist=True, medianprops=dict(color='black', linewidth=1.5))
+        sns.kdeplot(data=ul_data, ax=ax2, fill=True, alpha=0.5)
+        #for patch in bp2['boxes']:
+        #    patch.set_facecolor(colors[i])
+        #    patch.set_alpha(0.7)
+        #ax2.set_xlabel('Client ID')
+        ax2.set_xlabel(f'Uplink Latency (s)')
+        ax2.set_ylabel('Density')
+        ax2.set_title(f'Uplink Latency - {subset["display_label"].iloc[0]}')
         ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
@@ -240,13 +244,13 @@ def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter
         if len(subset) > 0:
             # Add downlink data
             all_data.append(subset['downlink_latency'].values)
-            all_labels.append(f"{format_sweep_label(sweep_param, sweep_val)}\nDL")
+            all_labels.append(f"DL")
             positions.append(pos)
             colors_list.append(colors[i])
 
             # Add uplink data
             all_data.append(subset['uplink_latency'].values)
-            all_labels.append(f"{format_sweep_label(sweep_param, sweep_val)}\nUL")
+            all_labels.append('UL')
             positions.append(pos + 0.5)
             colors_list.append(colors[i])
 
@@ -269,10 +273,11 @@ def plot_latency_metrics(latency_metrics: pd.DataFrame, output_dir: Path, filter
     ax.set_title(f'Latency Distribution by {sweep_param.title()}')
     ax.grid(True, alpha=0.3, axis='y')
 
+    # Get the display_label for sweep_values for legend
     legend_elements = [Patch(facecolor=colors[i], alpha=0.7,
-                            label=format_sweep_label(sweep_param, val))
+                            label=latency_metrics[latency_metrics[sweep_param] == val]['display_label'].iloc[0])
                       for i, val in enumerate(sweep_values)]
-    ax.legend(handles=legend_elements, loc='upper right')
+    ax.legend(handles=legend_elements, loc='best')
 
     plt.tight_layout()
 
@@ -329,7 +334,9 @@ def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, outpu
     combined_latency = []
     for exp in latency_metrics:
         df = exp['metrics'].copy()
+        display_label = format_sweep_label(sweep, exp[sweep], exp)
         df[sweep] = exp[sweep]
+        df['display_label'] = display_label
         combined_latency.append(df)
 
     if not combined_latency:
@@ -516,6 +523,95 @@ def tost_test(metrics, sweep_param, output_dir):
     equiv_df.to_csv(
         output_dir / f'tost_equivalence_{sweep_param}.csv', index=False)
 
+def grid_plot(experiments, output_dir):
+    # Only include rank=2x2, network=wwan, nodes=6
+    filters = {'rank': '2x2', 'network': 'wwan', 'nodes': '6N', 'congestion': False}
+    filtered = [exp for exp in experiments if all(exp.get(key) == val for key, val in filters.items())]
+
+    agg_metrics = []
+
+
+    for exp in filtered:
+        metrics = load(exp)
+        common_data = {**exp, 'execution_time': metrics.get('execution_time', None),
+                       'start_time': metrics.get('start_time', None)}
+        agg_metrics.append({**common_data, 'metrics': metrics['server_agg_metric']})
+
+
+    # Bandwidth across, TDD down, conbindation grid plot
+
+
+    # Filtering agg_metrics and create round_duration before plotting
+    for exp in agg_metrics:
+        if 'round_duration' not in exp['metrics'].columns:
+            df = exp['metrics'].copy()
+            if 'round_duration' not in df.columns:
+                df['round_duration'] = df['timestamp'].diff()
+
+            # Replace outliers with median for time calculation
+            original_count = len(df['round_duration'].dropna())
+            outliers_mask = (df['round_duration'] > 200) | (pd.isna(df['round_duration']))
+            outliers_count = outliers_mask.sum()
+
+            median_duration = df['round_duration'].median()
+            df['round_duration'] = df['round_duration'].apply(
+                lambda x: median_duration if (pd.isna(x) or x > 200) else x
+            )
+
+            # Record filtering operation
+            if outliers_count.any():
+                print(
+                    f'Percent removed {outliers_count} out of {original_count} outliers from round_duration, replaced with median={median_duration}')
+            exp['metrics'] = df
+
+    # ============ BUILD MAPPING ============ #
+    data_map = {}
+    for exp in agg_metrics:
+        exp['tdd'] = exp['tdd'].replace('-', ':')
+        key = (exp['tdd'], exp['bandwidth'])
+        data_map[key] = exp
+
+    keys = sorted(data_map.keys())
+    n_plots = len(keys)
+
+    n_cols = 5
+    n_rows = int(np.ceil(n_plots / n_cols))
+
+    print(f"Creating centered {n_rows}×{n_cols} grid for {n_plots} plots")
+
+    # ============ CREATE GRID WITH GRIDSPEC ============ #
+    fig = plt.figure(figsize=(5 * n_cols, 4 * n_rows))
+
+    # ============ PLOT WITH CENTER ALIGNMENT ============ #
+    idx = 0
+    for (tdd, bw), exp in data_map.items():
+        row = idx // n_cols
+        col = idx % n_cols
+
+        # Center align the last row if incomplete
+        plots_in_row = min(n_cols, n_plots - row * n_cols)
+        if plots_in_row < n_cols:
+            offset = (n_cols - plots_in_row) / 2.0
+            ax = plt.subplot2grid((n_rows, n_cols * 2), (row, int(col * 2 + offset * 2)), colspan=2)
+        else:
+            ax = plt.subplot2grid((n_rows, n_cols), (row, col))
+
+        df = exp['metrics']
+        sns.kdeplot(data=df['round_duration'].dropna(), ax=ax, fill=True, alpha=0.5)
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        ax.set_title(f'{tdd} Split at {bw}', fontsize=15)
+        ax.grid(True, alpha=0.3)
+
+        idx += 1
+
+    #fig.supxlabel('Round Duration (s)', fontsize=12)
+    #fig.supylabel('Density', fontsize=12)
+    #fig.suptitle('Round Duration Distribution by TDD × Bandwidth', fontsize=14)
+
+    plt.tight_layout()
+    plt.savefig(f'{output_dir}/round_duration_grid.svg', format='svg', bbox_inches='tight')
+    plt.close()
 
 if __name__ == '__main__':
     directory = Path("/Users/roberthayek/Documents/git_repos/fed_5g/IMC")
@@ -529,15 +625,18 @@ if __name__ == '__main__':
         params = parse_experiment_name(exp.name)
         all_experiments.append({'path': exp, **params})
 
-    plot_cellular_sweep(all_experiments, {'tdd': '7-2', 'rank': '2x2',
+    """plot_cellular_sweep(all_experiments, {'tdd': '7-2', 'rank': '2x2',
                                           'distribution': 'dirichlet', 'congestion': False, 'network': 'wwan', 'nodes': '6N'},
-                        sweep='bandwidth', output_dir=output_dir)
+                        sweep='bandwidth', output_dir=output_dir)"""
 
 
     # NETWORK COMPARISON: 7-2 TDD, 40 MHz, 2x2, iid, no congestion
-    """plot_cellular_sweep(all_experiments, {'bandwidth': '100 MHz', 'rank': '2x2',
+    plot_cellular_sweep(all_experiments, {'bandwidth': '40 MHz', 'rank': '2x2',
                                           'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2', 'nodes': '6N'},
-                        sweep='network', output_dir=output_dir)"""
+                        sweep='network', output_dir=output_dir)
+
+
+    #grid_plot(all_experiments, output_dir)
 
 
 

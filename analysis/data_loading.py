@@ -131,7 +131,7 @@ def prepare_individual_metrics(metrics, sweep_param):
 
         df[sweep_param] = exp[sweep_param]
 
-        df['network'] = format_sweep_label(sweep_param, exp[sweep_param], exp)
+        df['display_label'] = format_sweep_label(sweep_param, exp[sweep_param], exp)
 
         processed.append(df)
 
