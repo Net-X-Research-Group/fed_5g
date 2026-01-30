@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import polars as pl
 import seaborn as sns
 
-SAVE_LOCALLY = True # whether to save in working directory (lower stakes for debugging)
+SAVE_LOCALLY = False # whether to save in working directory (lower stakes for debugging)
 
 def parse_gnb_telemetry(trial_data, savepath):
     trial_data = trial_data.with_row_index('segment').drop('_id')
@@ -57,7 +57,7 @@ def filter_out_inactivity(agg_metrics_file, trial_data):
 def sort_telemetry_into_trials(runs, telemetry_df, runs_dir, parser, file):
     telemetry_df=telemetry_df.with_columns(timestamp=pl.from_epoch(telemetry_df['timestamp'], time_unit="ms").dt.replace_time_zone(time_zone="UTC"))
 
-    for col, trial in runs.iterrows():
+    for _, trial in runs.iterrows():
         try:
             telemetry_df = telemetry_df.filter(pl.col('timestamp') >= trial['Created At']) # we can always move forward since all datasets are sorted by datetime
         except TypeError as exception:
@@ -86,24 +86,17 @@ def sort_telemetry_into_trials(runs, telemetry_df, runs_dir, parser, file):
                 trial_data = filter_out_inactivity(f'{run_dir}/train_agg_metrics.csv', trial_data)
                 if SAVE_LOCALLY:
                     run_dir = run_dir.name
-            else:
-                print(f'Warning: Run dir not found for {trial["Run ID"]}; saving without filtering out inactivity')
-                if SAVE_LOCALLY:
-                    run_dir = trial['Run ID']
-            
-            # Always create a save path and save the trial telemetry (filtered if possible)
-            savepath = f"{run_dir}/phys_layer/"
-            Path(savepath).mkdir(parents=True, exist_ok=True)
 
-            parser(trial_data, savepath)
-    
-    return
+                # Create a save path and save the filtered telemetry
+                savepath = f"{run_dir}/phys_layer/"
+                Path(savepath).mkdir(parents=True, exist_ok=True)
+
+                parser(trial_data, savepath)
+            else:
+                print(f'Warning: Run dir not found for {trial["Run ID"]}; not saving telemetry')
 
 
 def read_data_from_csvs(main_fp, secondary_fp, columns):
-    # relative_time_deltas = [t - df['timestamp'][0] for t in df['timestamp']]
-    # relative_seconds = [td.total_seconds() for td in relative_time_deltas]
-    # df['timestamp'] = relative_seconds
     if secondary_fp:
         df = pl.read_csv(main_fp, columns=['timestamp'], try_parse_dates=True).with_row_index('segment')
 
@@ -191,57 +184,35 @@ def gather_metrics_by_rnti(savepath, metrics):
     return ue_dfs
 
 def get_runs_list(path):
-    # runs_brief = pl.DataFrame()
     runs_brief = pd.DataFrame()
     for file in Path(path).iterdir():
         filename = file.name
         if "Runs" in filename:
-            # runs = pl.read_csv(file, columns=['Run ID', 'Created At', 'Finished At'],schema_overrides={'Run ID': str})
             runs = pd.read_csv(file)#, columns=['Run ID', 'Created At', 'Finished At'])
             runs_brief = runs.loc[:, ['Run ID', 'Created At', 'Finished At']]
             runs_brief['Created At'] = pd.to_datetime(runs_brief['Created At'].str.strip())
             runs_brief['Finished At'] = pd.to_datetime(runs_brief['Finished At'].str.strip())
-
-            # runs_brief = pl.from_pandas(runs_brief)
-            # runs_brief.set_sorted('Created At')
-            # runs_brief.set_sorted('Finished At')
     
-    # if runs_brief.is_empty(): # pl dataframe
     if runs_brief.empty: # pd dataframe
-        raise FileNotFoundError(f'No file containing list of runs in directory {path}')
+        raise FileNotFoundError('No file containing list of runs in directory')
     
     return runs_brief
 
-def plot():
-    # metric = 'ulMcs'
-    # ue_df = gather_metrics_by_rnti(Path('/Users/kmcomer/oaibox/14390736804652317575'), metric)
-    # plot_rntis_by_time(ue_df, metric, metric_units='', run_id='14390736804652317575')    
+def plot(dir):
+    # metric = 'ulMcs' 
     agg_dfs = {}
     metrics = ['ulMcs', 'dlMcs', 'rssi', 'rsrp', 'rsrq', 'dlBler', 'ulQm', 'dlQm', 'ulBler', 'phr', 'pcmax', 'sinr', 'pucchSnr', 'cqi', 'puschSnr']
     pts_to_plot = 250
     avgs = {metric: {} for metric in metrics}
     stds = {metric: {} for metric in metrics}
-    trial_path = '/Users/kmcomer/oaibox/'
-    trial_list = ['16750964501509998627_5N_40MHz_2-7_MIMO2x2_Dirichlet', '5476892444773139869']
-    # for trial in trial_list:
-    #     path = Path(trial_path + trial)
-    for path in Path().iterdir(): #[Path('/Users/kmcomer/oaibox/14390736804652317575')]: #
+    for path in Path(dir).iterdir():
         if path.is_dir():
-            # for metric in metrics:
             ue_dfs = gather_metrics_by_rnti(path, metrics)
 
             if ue_dfs:
                 for metric in metrics:
-
-                    # agg_dfs[path.name] = df_agg
                     plot_rntis_by_time(ue_dfs, metric, metric_units='', run_id=path.name, pts_to_plot=pts_to_plot)
                     plot_rntis_distribution(ue_dfs, metric, metric_units='', run_id=path.name)
-                    # plot_agg_rntis_by_time(df_agg, metric, metric_units='', pts_to_plot=pts_to_plot)
-                    # plot_agg_distribution(df_agg, metric, metric_units='')
-
-            #         avgs[metric][path.name] = df_agg[metric].mean()
-            #         stds[metric][path.name] = df_agg[metric].std()
-                # print(avgs[metric][path.name])
     
     for metric in avgs:
         print(f'trial, \t\t\t mean \t\t\t std \t\t\t (metric: {metric})')
@@ -249,15 +220,10 @@ def plot():
             print(f'{trial} \t {avgs[metric][trial]} \t {stds[metric][trial]}')
     # plot_over_trials(agg_dfs, metric, metric_units='')
 
-def parse():
-    runs_path = ''
-    runs = get_runs_list(runs_path)
+def parse(dir):
+    runs = get_runs_list(dir)
 
-    high_dir = '/Users/kmcomer/Documents/5G Experiment Data/' # TODO need a way to not parse all data already parsed
-    telemetry_dir = high_dir + 'oaibox-telemetry/unzipped/'
-    trial_data_dir = high_dir + 'FedAvg/'
-    
-    source = [file.name for file in Path(telemetry_dir).iterdir() if 'oaibox' in file.name]
+    source = [file.name for file in Path(dir).iterdir() if 'oaibox' in file.name]
     source.sort(key=lambda x: datetime.strptime(x, 'oaibox.telemetry_%m-%d-%y.json'))
 
     for file in source:
@@ -265,12 +231,12 @@ def parse():
         if re.search(r'oaibox\.ue-telemetry.*\.json', file):
             print('Not processing ue-telemetry at this time')
         elif re.search(r'oaibox\.telemetry.*\.json', file):
-            telemetry = pl.read_json(telemetry_dir + file, infer_schema_length=1000).set_sorted('timestamp')
-            sort_telemetry_into_trials(runs, telemetry, trial_data_dir, parse_gnb_telemetry, file)
+            telemetry = pl.read_json(dir + file, infer_schema_length=1000).set_sorted('timestamp')
+            sort_telemetry_into_trials(runs, telemetry, dir, parse_gnb_telemetry, file)
 
 def main():
-    #parse()
-    plot()
+    # parse('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/')
+    plot('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/') # TODO integrate with main.py for filtering based on trial params
 
 if __name__ == '__main__':
     main()
