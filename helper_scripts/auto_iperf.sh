@@ -13,6 +13,9 @@ DEVICE_NAME_PREFIX="commnetpi0"
 IP_PREFIX="129.105.6."
 IP_SUFFIXES=(17 18 19 20 21 22)
 
+# Create output directory for iperf results
+mkdir -p iperf
+
 for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     LOGIN=$DEVICE_NAME_PREFIX$CID@$IP_PREFIX${IP_SUFFIXES[$CID-1]}
     ssh "$LOGIN" sudo nmcli r wwan off
@@ -23,12 +26,15 @@ for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
     ssh "$LOGIN" sudo nmcli r wwan on
     ssh "$LOGIN" sudo nmcli connection up OAI
     ssh "$LOGIN" sudo route add -net 172.31.0.0/24 wwan0
-    wwan=ip addr | grep wwan0 | grep inet | grep 1.*/
-    # need user to start downlink test and then continue (ex. hit enter)
-    ssh "$LOGIN" iperf -s -i 1 -B $wwan -t 120 > iperf/$BW_$TDD_$LOGIN_DL.txt
-    # print summary stats (final line of iperf/$BW_$TDD_$LOGIN_DL.txt)
-    ssh "$LOGIN" iperf -t 120 -i 1 -fm -b 1000M -c 172.31.0.135 -B $wwan > iperf/$BW_$TDD_$LOGIN_UL.txt
-    # print summary stats (final line of iperf/$BW_$TDD_$LOGIN_UL.txt)
+    wwan=$(ssh "$LOGIN" ip addr show wwan0 | grep "inet " | awk '{print $2}' | cut -d'/' -f1)
+    echo ip address: ${wwan}
+    
+    read -p "Start downlink test on receiver. Set protocol to TCP, bandwidth to 100 Gbps, and modify destination IP. Press Enter once ready to begin..."
+    ssh "$LOGIN" iperf -s -i 1 -B "$wwan" -t 120 > "iperf/${BW}_${TDD}_pi0${CID}_DL.txt"
+    tail -1 "iperf/${BW}_${TDD}_${LOGIN}_DL.txt"
+    
+    ssh "$LOGIN" iperf -t 120 -i 1 -fm -b 1000M -c 172.31.0.135 -B "$wwan" > "iperf/${BW}_${TDD}_pi${CID}_UL.txt"
+    tail -1 "iperf/${BW}_${TDD}_${LOGIN}_UL.txt"
     ssh "$LOGIN" sudo nmcli r wwan off
 done
 
