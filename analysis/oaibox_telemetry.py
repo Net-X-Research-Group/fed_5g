@@ -96,22 +96,29 @@ def sort_telemetry_into_trials(runs, telemetry_df, runs_dir, parser, file):
                 print(f'Warning: Run dir not found for {trial["Run ID"]}; not saving telemetry')
 
 
-def read_data_from_csvs(main_fp, secondary_fp, columns):
+def read_data_from_csvs(main_fp, secondary_fp, columns=None):
     if secondary_fp:
         df = pl.read_csv(main_fp, columns=['timestamp'], try_parse_dates=True).with_row_index('segment')
 
-        secondary_df = pl.read_csv(secondary_fp, columns=['segment']+columns)
-        df = df.join(secondary_df, on='segment', how='left')
+        if columns is not None:
+            secondary_df = pl.read_csv(secondary_fp, columns=['segment']+columns)
+        else:
+            secondary_df = pl.read_csv(secondary_fp)
+        df = df.join(secondary_df, on='segment', how='right') # here
     else:
-        df = pl.read_csv(main_fp, columns=['timestamp']+columns, try_parse_dates=True)
+        if columns is not None:
+            df = pl.read_csv(main_fp, columns=['timestamp']+columns, try_parse_dates=True)
+        else:
+            df = pl.read_csv(main_fp, try_parse_dates=True)
 
     return df
 
 def plot_rntis_by_time(ue_dfs, metric, metric_units, run_id, pts_to_plot):
     plt.figure(figsize=(10, 6))
     for rnti, ue_df in ue_dfs.items():
-        interval = min(pts_to_plot, len(ue_df))
-        plt.scatter(ue_df['timestamp'][:interval], ue_df[metric][:interval], marker='.', label=rnti)
+        if ue_df['segment'][0] <= pts_to_plot:
+            interval = min(pts_to_plot, len(ue_df))
+            plt.scatter(ue_df['timestamp'][:interval], ue_df[metric][:interval], marker='.', label=rnti)
     
     plt.xlabel('Time (s)')
     plt.ylabel(metric + metric_units)
@@ -167,7 +174,7 @@ def plot_over_trials(agg_dfs, metric, metric_units):
     plt.grid(True)
     plt.show()
 
-def gather_metrics_by_rnti(savepath, metrics):
+def gather_metrics_by_rnti(savepath, metrics=None):
     try:
         phys_layer = savepath.joinpath('phys_layer')
     except FileNotFoundError as exception:
@@ -182,6 +189,21 @@ def gather_metrics_by_rnti(savepath, metrics):
             ue_dfs[rnti] = read_data_from_csvs(str(phys_layer)+'/common.csv', str(file), metrics)
     
     return ue_dfs
+
+def combine_rntis(savepath):
+    ue_dfs = gather_metrics_by_rnti(savepath)
+    order = sorted(ue_dfs, key=lambda rnti: ue_dfs[rnti]['segment'][-1]) # sort by last element of segment
+    for rnti in order:
+        # print(f'{df, ue_dfs[df]['segment'][0], ue_dfs[df]['segment'][-1]}')
+        first_pt = ue_dfs[rnti]['segment'][0]
+        if first_pt != 0:
+            possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][-1] <= first_pt]
+            if len(possible_pairs) == 1:
+                pair = possible_pairs[0]
+                ue_dfs[pair+'_'+rnti] = pl.concat([ue_dfs[pair],ue_dfs[rnti]])
+                del ue_dfs[pair]
+                del ue_dfs[rnti]
+            # print(f'{rnti} possible pairs: {possible_pairs}')
 
 def get_runs_list(path):
     runs_brief = pd.DataFrame()
@@ -201,8 +223,9 @@ def get_runs_list(path):
 def plot(dir):
     # metric = 'ulMcs' 
     agg_dfs = {}
-    metrics = ['ulMcs', 'dlMcs', 'rssi', 'rsrp', 'rsrq', 'dlBler', 'ulQm', 'dlQm', 'ulBler', 'phr', 'pcmax', 'sinr', 'pucchSnr', 'cqi', 'puschSnr']
-    pts_to_plot = 250
+    # metrics = ['ulMcs', 'dlMcs', 'rssi', 'rsrp', 'rsrq', 'dlBler', 'ulQm', 'dlQm', 'ulBler', 'phr', 'pcmax', 'sinr', 'pucchSnr', 'cqi', 'puschSnr']
+    metrics = ['rsrp']
+    pts_to_plot = 500
     avgs = {metric: {} for metric in metrics}
     stds = {metric: {} for metric in metrics}
     for path in Path(dir).iterdir():
@@ -212,7 +235,7 @@ def plot(dir):
             if ue_dfs:
                 for metric in metrics:
                     plot_rntis_by_time(ue_dfs, metric, metric_units='', run_id=path.name, pts_to_plot=pts_to_plot)
-                    plot_rntis_distribution(ue_dfs, metric, metric_units='', run_id=path.name)
+                    # plot_rntis_distribution(ue_dfs, metric, metric_units='', run_id=path.name)
     
     for metric in avgs:
         print(f'trial, \t\t\t mean \t\t\t std \t\t\t (metric: {metric})')
@@ -236,7 +259,10 @@ def parse(dir):
 
 def main():
     # parse('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/')
-    plot('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/') # TODO integrate with main.py for filtering based on trial params
+    for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/').iterdir():
+        if path.is_dir():
+            combine_rntis(path)
+    # plot('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/') # TODO integrate with main.py for filtering based on trial params
 
 if __name__ == '__main__':
     main()
