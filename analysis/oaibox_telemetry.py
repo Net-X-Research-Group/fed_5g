@@ -7,6 +7,7 @@ from scipy import stats
 from datetime import datetime, timedelta
 import polars as pl
 import seaborn as sns
+import os
 
 SAVE_LOCALLY = False # whether to save in working directory (lower stakes for debugging)
 
@@ -191,19 +192,49 @@ def gather_metrics_by_rnti(savepath, metrics=None):
     return ue_dfs
 
 def combine_rntis(savepath):
-    ue_dfs = gather_metrics_by_rnti(savepath)
-    order = sorted(ue_dfs, key=lambda rnti: ue_dfs[rnti]['segment'][-1]) # sort by last element of segment
-    for rnti in order:
-        # print(f'{df, ue_dfs[df]['segment'][0], ue_dfs[df]['segment'][-1]}')
-        first_pt = ue_dfs[rnti]['segment'][0]
-        if first_pt != 0:
-            possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][-1] <= first_pt]
-            if len(possible_pairs) == 1:
-                pair = possible_pairs[0]
-                ue_dfs[pair+'_'+rnti] = pl.concat([ue_dfs[pair],ue_dfs[rnti]])
-                del ue_dfs[pair]
-                del ue_dfs[rnti]
-            # print(f'{rnti} possible pairs: {possible_pairs}')
+    try:
+        ue_dfs = gather_metrics_by_rnti(savepath)
+    except FileNotFoundError as exception:
+        print(f'phys_layer directory not found on savepath {savepath}. Exception: {exception}')
+        return
+    
+    update = True
+    while update:
+        update = False
+        order = sorted(ue_dfs, key=lambda rnti: ue_dfs[rnti]['segment'][-1]) # sort by last element of segment
+        last_overall = ue_dfs[order[-1]]['segment'][-1]
+        for rnti in order:
+            # print(f'{df, ue_dfs[df]['segment'][0], ue_dfs[df]['segment'][-1]}')
+            if rnti not in ue_dfs: # may have been merged and no longer exist
+                rnti = [name for name in ue_dfs if rnti in name][0] # there should only be one match
+            first_pt = ue_dfs[rnti]['segment'][0]
+            if first_pt != 0:
+                possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][-1] <= first_pt]
+                if len(possible_pairs) == 1:
+                    update=True
+                    pair = possible_pairs[0]
+                    new_name = pair+'-'+rnti
+                    ue_dfs[new_name] = pl.concat([ue_dfs[pair],ue_dfs[rnti]], how="vertical_relaxed")
+                    ue_dfs[new_name].drop('timestamp').write_csv(f'{savepath}/phys_layer/ue_{new_name}.csv')
+                    os.remove(f'{savepath}/phys_layer/ue_{rnti}.csv')
+                    os.remove(f'{savepath}/phys_layer/ue_{pair}.csv')
+                    del ue_dfs[pair]
+                    del ue_dfs[rnti]
+                    rnti = new_name
+            last_pt = ue_dfs[rnti]['segment'][-1]
+            if last_pt != last_overall:
+                possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][0] >= last_pt] # TODO fix
+                if len(possible_pairs) == 1:
+                    update=True
+                    pair = possible_pairs[0]
+                    new_name = rnti+'-'+pair
+                    ue_dfs[new_name] = pl.concat([ue_dfs[rnti],ue_dfs[pair]], how="vertical_relaxed")
+                    ue_dfs[new_name].drop('timestamp').write_csv(f'{savepath}/phys_layer/ue_{new_name}.csv')
+                    os.remove(f'{savepath}/phys_layer/ue_{rnti}.csv')
+                    os.remove(f'{savepath}/phys_layer/ue_{pair}.csv')
+                    del ue_dfs[pair]
+                    del ue_dfs[rnti]
+                # print(f'{rnti} possible pairs: {possible_pairs}')
 
 def get_runs_list(path):
     runs_brief = pd.DataFrame()
@@ -224,8 +255,9 @@ def plot(dir):
     # metric = 'ulMcs' 
     agg_dfs = {}
     # metrics = ['ulMcs', 'dlMcs', 'rssi', 'rsrp', 'rsrq', 'dlBler', 'ulQm', 'dlQm', 'ulBler', 'phr', 'pcmax', 'sinr', 'pucchSnr', 'cqi', 'puschSnr']
+    # segment	ulBler	phr	pucchSnr	ueId	dlMcs	ulMcs	ulQm	ri	ranUeId	dlBytes	dlQm	cqi	puschSnr	inSync	pmi	sinr	pcmax	rsrq	rsrp	rssi	amfUeId	dlBler	ulBytes
     metrics = ['rsrp']
-    pts_to_plot = 500
+    pts_to_plot = 1000
     avgs = {metric: {} for metric in metrics}
     stds = {metric: {} for metric in metrics}
     for path in Path(dir).iterdir():
@@ -259,10 +291,10 @@ def parse(dir):
 
 def main():
     # parse('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/')
-    for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/').iterdir():
-        if path.is_dir():
-            combine_rntis(path)
-    # plot('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/') # TODO integrate with main.py for filtering based on trial params
+    # for path in Path('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/').iterdir():
+    #     if path.is_dir():
+    #         combine_rntis(path)
+    plot('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/') # TODO integrate with main.py for filtering based on trial params
 
 if __name__ == '__main__':
     main()
