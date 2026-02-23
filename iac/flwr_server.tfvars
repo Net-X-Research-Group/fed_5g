@@ -1,0 +1,1 @@
+fed_5g_repo = "https://github.com/Net-X-Research-Group/fed_5g"
