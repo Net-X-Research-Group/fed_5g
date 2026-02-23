@@ -62,3 +62,7 @@ insecure = true
 [tool.flwr.federations.local-deployment]
 address = "127.0.0.1:9093"
 insecure = true
+
+[tool.flwr.federations.gcloud-deployment]
+address = "34.59.63.168:9093"
+insecure = true
