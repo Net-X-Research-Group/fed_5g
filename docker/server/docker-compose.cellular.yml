@@ -30,7 +30,7 @@ services:
     depends_on:
       - superlink
     volumes:
-      - /data/flwr_output:/app/flwr_output
+      - ${HOME}/flwr_output/:/app/flwr_output
     networks:
       - flwr_network
 
