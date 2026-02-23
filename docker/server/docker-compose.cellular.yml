@@ -1,0 +1,39 @@
+services:
+  superlink:
+    image: flwr/superlink:1.22.0
+    command:
+      - --insecure
+      - --isolation
+      - process
+    ports:
+      - "0.0.0.0:9092:9092"  # Expose to all interfaces
+      - "0.0.0.0:9093:9093"
+    networks:
+      - flwr_network
+
+  superexec-serverapp:
+    build:
+      context: ../../flwr-application
+      dockerfile_inline: |
+        FROM flwr/superexec:1.22.0
+        WORKDIR /app
+        COPY --chown=app:app pyproject.toml .
+        RUN sed -i '/"flwr",/d' pyproject.toml \
+          && python -m pip install -U --no-cache-dir .     
+        ENTRYPOINT ["flower-superexec"]
+    command:
+      - --insecure
+      - --plugin-type
+      - serverapp
+      - --appio-api-address
+      - superlink:9091
+    depends_on:
+      - superlink
+    volumes:
+      - /data/flwr_output:/app/flwr_output
+    networks:
+      - flwr_network
+
+networks:
+  flwr_network:
+    driver: bridge
