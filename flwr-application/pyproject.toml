@@ -64,5 +64,5 @@ address = "127.0.0.1:9093"
 insecure = true
 
 [tool.flwr.federations.gcloud-deployment]
-address = "34.59.63.168:9093"
+address = "34.135.18.243:9093"
 insecure = true

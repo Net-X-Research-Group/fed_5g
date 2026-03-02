@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "google" {
-  project = "federated-5g"
+  project = "mcc-rch-sas-cbrs"
   region  = "us-central1"
   zone    = "us-central1-a"
 }
