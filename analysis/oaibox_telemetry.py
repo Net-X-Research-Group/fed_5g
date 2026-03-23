@@ -11,20 +11,24 @@ import os
 
 SAVE_LOCALLY = False # whether to save in working directory (lower stakes for debugging)
 
-def parse_gnb_telemetry(trial_data, savepath):
+def parse_gnb_telemetry(trial_data, savepath, separate=True):
     trial_data = trial_data.with_row_index('segment').drop('_id')
 
-    common = trial_data.drop('ues')
-    common.write_csv(f'{savepath}/common.csv')
+    if separate:
+        common = trial_data.drop('ues')
+        common.write_csv(f'{savepath}/common.csv')
 
     unpacked = trial_data.explode('ues').unnest('ues')
 
     for rnti, group in unpacked.group_by('rnti'):
-        # Remove all duplicate fields (except 'segment', by which we'll merge) and the rnti column since it's in the filename
-        ue_data = group.drop('rnti', set(common.columns) - {'segment'})
+        if separate:
+            # Remove all duplicate fields (except 'segment', by which we'll merge) and the rnti column since it's in the filename
+            ue_data = group.drop('rnti', set(common.columns) - {'segment'})
+            # Save to separate file
+            ue_data.write_csv(f'{savepath}/ue_{rnti[0]}.csv')
+        else:
+            group.write_csv(f'{savepath}/ue_{rnti[0]}.csv')
         
-        # Save to separate file
-        ue_data.write_csv(f'{savepath}/ue_{rnti[0]}.csv')
 
 
 def filter_out_inactivity(agg_metrics_file, trial_data):
@@ -48,7 +52,7 @@ def filter_out_inactivity(agg_metrics_file, trial_data):
 
     # Filter all trial data to exclude data collected during active intervals
     original_size = len(trial_data)
-    trial_data = trial_data.join_asof(intervals, on='timestamp')
+    trial_data = trial_data.join_asof(intervals, on='timestamp', check_sortedness=False)
     trial_data = trial_data.filter(pl.col('timestamp').is_between(pl.col('interval_start'), pl.col('interval_end'), closed='left'))
     trial_data = trial_data.drop('interval_start', 'interval_end')
     print(f'Filtered out {original_size-len(trial_data)} data points collected during downtime')
@@ -236,17 +240,22 @@ def combine_rntis(savepath):
                     del ue_dfs[rnti]
                 # print(f'{rnti} possible pairs: {possible_pairs}')
 
-def get_runs_list(path):
+def get_runs_list(path, name, cols, start_col, end_col):
     runs_brief = pd.DataFrame()
     for file in Path(path).iterdir():
         filename = file.name
-        if "Runs" in filename:
-            runs = pd.read_csv(file)#, columns=['Run ID', 'Created At', 'Finished At'])
-            runs_brief = runs.loc[:, ['Run ID', 'Created At', 'Finished At']]
-            runs_brief['Created At'] = pd.to_datetime(runs_brief['Created At'].str.strip())
-            runs_brief['Finished At'] = pd.to_datetime(runs_brief['Finished At'].str.strip())
+        if name in filename:
+            try:
+                runs = pd.read_csv(file)#, columns=['Run ID', 'Created At', 'Finished At'])
+                runs_brief = runs.loc[:, cols]
+                runs_brief[start_col] = pd.to_datetime(runs_brief[start_col].str.strip(),utc=True)
+                runs_brief[end_col] = pd.to_datetime(runs_brief[end_col].str.strip(),utc=True)
+                runs_brief.name = filename
+            except ValueError:
+                print(f'ValueError getting runs list for {path.name,filename}')
     
-    if runs_brief.empty: # pd dataframe
+    if runs_brief.empty:
+        print([file.name for file in Path(path).iterdir()])
         raise FileNotFoundError('No file containing list of runs in directory')
     
     return runs_brief
@@ -275,26 +284,67 @@ def plot(dir):
             print(f'{trial} \t {avgs[metric][trial]} \t {stds[metric][trial]}')
     # plot_over_trials(agg_dfs, metric, metric_units='')
 
-def parse(dir):
-    runs = get_runs_list(dir)
-
-    source = [file.name for file in Path(dir).iterdir() if 'oaibox' in file.name]
+def parse(telemetry_dir, trial_dir, sort_telemetry_func, runs):
+    source = [file.name for file in Path(telemetry_dir).iterdir() if 'oaibox' in file.name]
     source.sort(key=lambda x: datetime.strptime(x, 'oaibox.telemetry_%m-%d-%y.json'))
 
     for file in source:
-        print(f'Processing {file}')
+        # print(f'Processing {file}')
         if re.search(r'oaibox\.ue-telemetry.*\.json', file):
             print('Not processing ue-telemetry at this time')
         elif re.search(r'oaibox\.telemetry.*\.json', file):
-            telemetry = pl.read_json(dir + file, infer_schema_length=1000).set_sorted('timestamp')
-            sort_telemetry_into_trials(runs, telemetry, dir, parse_gnb_telemetry, file)
+            try:
+                telemetry = pl.read_ndjson(telemetry_dir + file, infer_schema_length=1000).set_sorted('timestamp') # read_json if saved from GUI, read_ndjson if saved from cli
+            except pl.exceptions.ComputeError:
+                telemetry = pl.read_json(telemetry_dir + file, infer_schema_length=1000).set_sorted('timestamp')
+            sort_telemetry_func(runs, telemetry, trial_dir, parse_gnb_telemetry, file)
+
+def sort_telemetry_into_iperf(runs, telemetry_df, run_dir, parser, file):
+    telemetry_df=telemetry_df.with_columns(timestamp=pl.from_epoch(telemetry_df['timestamp'], time_unit="ms").dt.replace_time_zone(time_zone="UTC"))
+    # print(f'telemetry_df: {telemetry_df['timestamp']}')
+
+    for _, trial in runs.iterrows():
+        try:
+            telemetry_df = telemetry_df.filter(pl.col('timestamp') >= trial['start'])
+            trial_df = telemetry_df.filter(pl.col('timestamp') <= trial['end'])
+
+            if telemetry_df.is_empty():
+                return
+
+            # print(f'telemetry_df: {trial_df['timestamp']}, trial start: {trial['start']}, trial end: {trial['end']}')
+            if not trial_df.is_empty():
+                savepath = f"{run_dir}/{trial['device']}_{runs.name}"
+                print(f'saving phys metrics for {savepath}\t{trial_df.shape}')
+                Path(savepath).mkdir(parents=True, exist_ok=True)
+                parser(trial_df, savepath, False)
+        
+        except TypeError as exception:
+            print(f'\033[91mException: {exception}. Data for trial {trial['Run ID']} cannot be parsed.\033[0m')
+            continue
+        
 
 def main():
-    # parse('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/')
-    # for path in Path('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/').iterdir():
+    dir = '/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/'
+    for f in Path(dir).iterdir():
+        if 'iperf' in f.name:
+            print(f'{f.name}')
+            for t in f.iterdir():
+                print(f'Processing {t.name}')
+                if '0_' in t.name:
+                    runs = get_runs_list(t, 'UL.csv', ['start', 'device', 'end'], 'start', 'end')
+                    parse(dir, t, sort_telemetry_into_iperf, runs)
+                    runs = get_runs_list(t, 'DL.csv', ['start', 'device', 'end'], 'start', 'end')
+                    parse(dir, t, sort_telemetry_into_iperf, runs)
+
+    # runs = get_runs_list(dir, 'Runs', ['Run ID', 'Created At', 'Finished At'], 'Created At', 'Finished At')
+    # parse(dir, dir, sort_telemetry_into_trials, runs)
+    # for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/').iterdir():
     #     if path.is_dir():
-    #         combine_rntis(path)
-    plot('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/') # TODO integrate with main.py for filtering based on trial params
+    #         if 'iperf' in str(path):
+    #             pass
+    #         else:
+    #             combine_rntis(path)
+    # plot('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/') # TODO integrate with main.py for filtering based on trial params
 
 if __name__ == '__main__':
     main()
