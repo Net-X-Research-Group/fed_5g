@@ -137,7 +137,23 @@ def gather_metrics_by_rnti(savepath, metrics=None):
     return ue_dfs
 
 
-def combine_rntis(savepath):
+def combine_uedfs_by_rnti(ue_dfs, first, second, trial_path):
+    last_pt_first_rnti = ue_dfs[first]['segment'][-1]
+    first_pt_second_rnti = ue_dfs[second]['segment'][0]
+    assert(last_pt_first_rnti < first_pt_second_rnti)
+
+    new_name = first+'-'+second
+    print(f'Merging {new_name} (from {first} and {second})')
+    ue_dfs[new_name] = pl.concat([ue_dfs[first],ue_dfs[second]], how="vertical_relaxed")
+    ue_dfs[new_name].drop('timestamp').write_csv(f'{trial_path}/phys_layer/ue_{new_name}.csv')
+    os.remove(f'{trial_path}/phys_layer/ue_{first}.csv')
+    os.remove(f'{trial_path}/phys_layer/ue_{second}.csv')
+    del ue_dfs[first]
+    del ue_dfs[second]
+    return new_name
+
+
+def merge_uedfs_single_disconnect(savepath): # Combination by only looking at whether one UE dropped and another joined at one time. Will not combine if multiple possible pairs (simultaneous disconnection)
     try:
         ue_dfs = gather_metrics_by_rnti(savepath)
     except FileNotFoundError as exception:
@@ -150,37 +166,21 @@ def combine_rntis(savepath):
         order = sorted(ue_dfs, key=lambda rnti: ue_dfs[rnti]['segment'][-1]) # sort by last element of segment
         last_overall = ue_dfs[order[-1]]['segment'][-1]
         for rnti in order:
-            # print(f'{df, ue_dfs[df]['segment'][0], ue_dfs[df]['segment'][-1]}')
             if rnti not in ue_dfs: # may have been merged and no longer exist
                 rnti = [name for name in ue_dfs if rnti in name][0] # there should only be one match
             first_pt = ue_dfs[rnti]['segment'][0]
+            print(f'{rnti, first_pt, ue_dfs[rnti]['segment'][-1]}')
             if first_pt != 0:
                 possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][-1] <= first_pt]
                 if len(possible_pairs) == 1:
                     update=True
-                    pair = possible_pairs[0]
-                    new_name = pair+'-'+rnti
-                    ue_dfs[new_name] = pl.concat([ue_dfs[pair],ue_dfs[rnti]], how="vertical_relaxed")
-                    ue_dfs[new_name].drop('timestamp').write_csv(f'{savepath}/phys_layer/ue_{new_name}.csv')
-                    os.remove(f'{savepath}/phys_layer/ue_{rnti}.csv')
-                    os.remove(f'{savepath}/phys_layer/ue_{pair}.csv')
-                    del ue_dfs[pair]
-                    del ue_dfs[rnti]
-                    rnti = new_name
+                    rnti = combine_uedfs_by_rnti(ue_dfs, possible_pairs[0], rnti, savepath)
             last_pt = ue_dfs[rnti]['segment'][-1]
             if last_pt != last_overall:
                 possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][0] >= last_pt] # TODO fix
                 if len(possible_pairs) == 1:
                     update=True
-                    pair = possible_pairs[0]
-                    new_name = rnti+'-'+pair
-                    ue_dfs[new_name] = pl.concat([ue_dfs[rnti],ue_dfs[pair]], how="vertical_relaxed")
-                    ue_dfs[new_name].drop('timestamp').write_csv(f'{savepath}/phys_layer/ue_{new_name}.csv')
-                    os.remove(f'{savepath}/phys_layer/ue_{rnti}.csv')
-                    os.remove(f'{savepath}/phys_layer/ue_{pair}.csv')
-                    del ue_dfs[pair]
-                    del ue_dfs[rnti]
-                # print(f'{rnti} possible pairs: {possible_pairs}')
+                    rnti = combine_uedfs_by_rnti(ue_dfs, rnti, possible_pairs[0], savepath)
 
 
 def get_runs_list(path, name, cols, start_col, end_col):
@@ -264,12 +264,16 @@ def main():
     # parse(dir, dir, sort_telemetry_into_trials, runs)
 
     # Combine RNTIs
-    for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/').iterdir():
+    trial_path = Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/7222719212451226563_6N_20MHz_7-2_MIMO2x2_Dirichlet')
+    ue_dfs = gather_metrics_by_rnti(trial_path)
+    combine_uedfs_by_rnti(ue_dfs, 'abca', '105c', trial_path) # should return error (105c precedes abca)
+
+    for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed').iterdir():
         if path.is_dir():
             if 'iperf' in str(path):
                 pass
             else:
-                combine_rntis(path)
+                merge_uedfs_single_disconnect(path)
 
 if __name__ == '__main__':
     main()
