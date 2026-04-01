@@ -1055,7 +1055,6 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
 
     for exp in experiments:
         path = exp['path']
-        combine_rntis(path)
         ue_dfs = gather_metrics_by_rnti(path, metrics)
         if not ue_dfs:
             continue
