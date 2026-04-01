@@ -3,15 +3,10 @@ from pathlib import Path
 import re
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import stats
-from datetime import datetime, timedelta
 import polars as pl
 import seaborn as sns
-import os
 from data_loading import parse_experiment_name
 from helpers import sort_experiments_by_sweep, format_sweep_label
-
-SAVE_LOCALLY = False # whether to save in working directory (lower stakes for debugging)
 
 THROUGHPUT_METRICS = [
     'ul_throughput_bps',
@@ -308,9 +303,8 @@ def plot_round_average_across_devices(
             continue
 
         df_dev = ue_df.to_pandas()
-        phase_dev = _normalize_phase_filter(phase_filter)
-        if phase_dev is not None and 'phase' in df_dev.columns:
-            df_dev = df_dev[df_dev['phase'].isin(phase_dev)]
+        if phase_list is not None and 'phase' in df_dev.columns:
+            df_dev = df_dev[df_dev['phase'].isin(phase_list)]
         if round_ids is not None and 'round_id' in df_dev.columns:
             df_dev = df_dev[df_dev['round_id'].isin(round_ids)]
         if 'round_id' in df_dev.columns:
@@ -818,40 +812,6 @@ def plot_rntis_distribution(
     else:
         plt.close(g.fig)
 
-def plot_agg_distribution(df_agg, metric, metric_units):
-    plt.figure(figsize=(10, 6))
-    plt.hist(df_agg[metric])
-    
-    # plt.xlabel('Time (s)')
-    plt.ylabel(metric + metric_units)
-    plt.title(f'agg {metric} distribution')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-def plot_agg_rntis_by_time(df_agg, metric, metric_units, pts_to_plot):
-    plt.figure(figsize=(10, 6))
-    interval = min(pts_to_plot, len(df_agg))
-    plt.scatter(df_agg['timestamp'][:interval], df_agg[metric][:interval], marker='.')
-    plt.xlabel('Time (s)')
-    plt.ylabel(metric + metric_units)
-    plt.title(f'agg {metric} over time')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-def plot_over_trials(agg_dfs, metric, metric_units):
-    plt.figure(figsize=(10, 6))
-    for run_id, agg_df in agg_dfs.items():
-        plt.hist(agg_df[metric], label=run_id)
-    
-    # plt.xlabel('Time (s)')
-    plt.ylabel(metric + metric_units)
-    plt.title(f'{metric} distribution across trials')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
 def _metrics_to_load(metrics):
     if metrics is None:
         return None
@@ -892,7 +852,6 @@ def add_throughput_columns(ue_df):
         dl_throughput_mbps=pl.col('dl_throughput_bps') / 1_000_000,
     ).drop('ul_bytes_num', 'dl_bytes_num')
 
-    return ue_df
     return ue_df
 
 
@@ -1011,6 +970,19 @@ def _compute_metric_mean_std(ue_dfs, metric, non_zero_metrics=None, min_threshol
     std = series.std() if len(series) > 1 else None
     return mean, std
 
+
+def _get_round_profile_dir(save_dir):
+    round_profile_dir = (save_dir if save_dir is not None else Path.cwd()) / 'round_profiles'
+    round_profile_dir.mkdir(parents=True, exist_ok=True)
+    return round_profile_dir
+
+
+def _build_round_profile_savepath(save_dir, run_label, filename_stem, phase_target):
+    phase_name = 'all' if phase_target is None else str(phase_target)
+    safe_phase = re.sub(r'[^a-zA-Z0-9_.-]', '_', phase_name)
+    round_profile_dir = _get_round_profile_dir(save_dir)
+    return round_profile_dir / f'{run_label}_{filename_stem}_{safe_phase}.svg'
+
 def _run_phys_layer_plotting(experiments, metrics, **kwargs):
     defaults = dict(
         plot_mode='distribution',
@@ -1019,20 +991,20 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
         non_zero_metrics=None,
         min_thresholds=None,
         pts_to_plot=1000,
-        pts_offset=5000,
+        pts_offset=0,
         save_dir=None,
         filter_rounds_in_memory=False,
         annotate_round_phases=False,
         round_gap_s=200,
         round_ids_to_plot=None,
-        round_phase_to_plot=None,
+        round_phase_to_plot=['all'],
         round_profile_device=None,
         round_profile_all_devices=False,
-        round_profile_points=100,
+        round_profile_points=1000,
         round_profile_error_bars=False,
         round_profile_errorbar_step=10,
         round_profile_ul_dl_combined=False,
-        round_profile_ul_dl_layout='same_axes',
+        round_profile_ul_dl_layout='same_axes', # use 'subplots' for stacked UL/DL panels
         round_profile_include_effective=False,
         round_profile_effective_secondary_axis=True,
         save_round_profiles=False,
@@ -1059,7 +1031,6 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
         if not ue_dfs:
             continue
 
-        rounds = pd.DataFrame()
         if params['filter_rounds_in_memory']:
             ue_dfs, rounds = _apply_round_filter_to_ue_dfs(
                 path,
@@ -1123,9 +1094,9 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
                 if params['plot_mode'] == 'time':
                     save_file = params['save_dir'] / f'{metric}_by_time.svg'
                 elif paired_metric:
-                    save_file = params['save_dir'] / f'{metric}_vs_{paired_metric}_{params['distribution_plot_type']}.svg'
+                    save_file = params['save_dir'] / f"{metric}_vs_{paired_metric}_{params['distribution_plot_type']}.svg"
                 else:
-                    save_file = params['save_dir'] / f'{metric}_{params['distribution_plot_type']}.svg'
+                    save_file = params['save_dir'] / f"{metric}_{params['distribution_plot_type']}.svg"
 
             if params['plot_mode'] == 'time':
                 plot_rntis_by_time(
@@ -1176,15 +1147,14 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
                         ):
                             combined_savepath = None
                             if params['save_round_profiles']:
-                                phase_name = 'all' if phase_target is None else str(phase_target)
-                                safe_phase = re.sub(r'[^a-zA-Z0-9_.-]', '_', phase_name)
-                                if params['save_dir'] is not None:
-                                    round_profile_dir = params['save_dir'] / 'round_profiles'
-                                else:
-                                    round_profile_dir = Path.cwd() / 'round_profiles'
-                                round_profile_dir.mkdir(parents=True, exist_ok=True)
                                 safe_layout = re.sub(r'[^a-zA-Z0-9_.-]', '_', str(params['round_profile_ul_dl_layout']))
-                                combined_savepath = round_profile_dir / f'{run_label}_{metric}_vs_{paired_metric}_{safe_layout}_{safe_phase}.svg'
+                                filename_stem = f'{metric}_vs_{paired_metric}_{safe_layout}'
+                                combined_savepath = _build_round_profile_savepath(
+                                    params['save_dir'],
+                                    run_label,
+                                    filename_stem,
+                                    phase_target,
+                                )
 
                             plot_ul_dl_round_average_across_devices(
                                 ue_dfs,
@@ -1201,14 +1171,12 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
 
                         overlay_savepath = None
                         if params['save_round_profiles']:
-                            phase_name = 'all' if phase_target is None else str(phase_target)
-                            safe_phase = re.sub(r'[^a-zA-Z0-9_.-]', '_', phase_name)
-                            if params['save_dir'] is not None:
-                                round_profile_dir = params['save_dir'] / 'round_profiles'
-                            else:
-                                round_profile_dir = Path.cwd() / 'round_profiles'
-                            round_profile_dir.mkdir(parents=True, exist_ok=True)
-                            overlay_savepath = round_profile_dir / f'{run_label}_{metric}_all_devices_{safe_phase}.svg'
+                            overlay_savepath = _build_round_profile_savepath(
+                                params['save_dir'],
+                                run_label,
+                                f'{metric}_all_devices',
+                                phase_target,
+                            )
 
                         plot_round_average_across_devices(
                             ue_dfs,
@@ -1313,9 +1281,6 @@ def main():
     _run_phys_layer_plotting(
         experiments,
         metrics,
-        plot_mode='distribution',
-        distribution_plot_type='violin',
-        pair_ul_dl=False,
         non_zero_metrics=['ul_throughput_mbps', 'dl_throughput_mbps'],
         min_thresholds={'ul_throughput_mbps': 0.01, 'dl_throughput_mbps': 0.01},
         filter_rounds_in_memory=True,
@@ -1323,13 +1288,10 @@ def main():
         round_ids_to_plot=[2, 3, 4],
         round_phase_to_plot=['all'],  # or 'all' / None
         round_profile_all_devices=True,
-        round_profile_points=100,
         round_profile_ul_dl_combined=True,
         round_profile_ul_dl_layout='same_axes',  # use 'subplots' for stacked UL/DL panels
         round_profile_include_effective=True,
         round_profile_effective_secondary_axis=True,
-        pts_to_plot=100,
-        pts_offset=0,
         round_filter_cache_dir=Path.cwd(),
         save_path=Path.cwd() / 'phys_layer_plots'
     )
