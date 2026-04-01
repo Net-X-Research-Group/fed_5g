@@ -1132,43 +1132,44 @@ def _compute_metric_mean_std(ue_dfs, metric, non_zero_metrics=None, min_threshol
     std = series.std() if len(series) > 1 else None
     return mean, std
 
+def _run_phys_layer_plotting(experiments, metrics, **kwargs):
+    defaults = dict(
+        plot_mode='distribution',
+        distribution_plot_type='violin',
+        pair_ul_dl=False,
+        non_zero_metrics=None,
+        min_thresholds=None,
+        pts_to_plot=1000,
+        pts_offset=5000,
+        save_dir=None,
+        filter_rounds_in_memory=False,
+        annotate_round_phases=False,
+        round_gap_s=200,
+        round_ids_to_plot=None,
+        round_phase_to_plot=None,
+        round_profile_device=None,
+        round_profile_all_devices=False,
+        round_profile_points=100,
+        round_profile_error_bars=False,
+        round_profile_errorbar_step=10,
+        round_profile_ul_dl_combined=False,
+        round_profile_ul_dl_layout='same_axes',
+        round_profile_include_effective=False,
+        round_profile_effective_secondary_axis=True,
+        save_round_profiles=False,
+        round_filter_cache_dir=None,
+        use_round_filter_cache=True,
+    )
 
-def _run_phys_layer_plotting(
-    experiments,
-    metrics,
-    plot_mode='distribution',
-    distribution_plot_type='violin',
-    pair_ul_dl=False,
-    non_zero_metrics=None,
-    min_thresholds=None,
-    pts_to_plot=1000,
-    pts_offset=5000,
-    save_dir=None,
-    filter_rounds_in_memory=False,
-    annotate_round_phases=False,
-    round_gap_s=200,
-    round_ids_to_plot=None,
-    round_phase_to_plot=None,
-    round_profile_device=None,
-    round_profile_all_devices=False,
-    round_profile_points=100,
-    round_profile_error_bars=False,
-    round_profile_errorbar_step=10,
-    round_profile_ul_dl_combined=False,
-    round_profile_ul_dl_layout='same_axes',
-    round_profile_include_effective=False,
-    round_profile_effective_secondary_axis=True,
-    save_round_profiles=False,
-    round_filter_cache_dir=None,
-    use_round_filter_cache=True,
-):
-    non_zero_metrics = _normalize_non_zero_metrics(non_zero_metrics)
-    min_thresholds = _normalize_min_thresholds(min_thresholds)
+    params = {**defaults, **kwargs}
+
+    non_zero_metrics = _normalize_non_zero_metrics(params['non_zero_metrics'])
+    min_thresholds = _normalize_min_thresholds(params['min_thresholds'])
     avgs = {metric: {} for metric in metrics}
     stds = {metric: {} for metric in metrics}
     throughput_summary = []
 
-    if save_dir is None:
+    if params['save_dir'] is None:
         print(f'Plotting phys layer data for {len(experiments)} experiment(s)')
     else:
         print(f'Generating saved phys-layer plots for {len(experiments)} experiment(s)')
@@ -1181,14 +1182,14 @@ def _run_phys_layer_plotting(
             continue
 
         rounds = pd.DataFrame()
-        if filter_rounds_in_memory:
+        if params['filter_rounds_in_memory']:
             ue_dfs, rounds = _apply_round_filter_to_ue_dfs(
                 path,
                 ue_dfs,
-                max_gap_s=round_gap_s,
-                annotate_phases=annotate_round_phases,
-                cache_dir=round_filter_cache_dir,
-                use_cache=use_round_filter_cache,
+                max_gap_s=params['round_gap_s'],
+                annotate_phases=params['annotate_round_phases'],
+                cache_dir=params['round_filter_cache_dir'],
+                use_cache=params['use_round_filter_cache'],
             )
 
         run_label = exp.get('run_label', path.name)
@@ -1201,7 +1202,7 @@ def _run_phys_layer_plotting(
                 continue
 
             paired_metric = None
-            if pair_ul_dl and metric.startswith('ul_'):
+            if params['pair_ul_dl'] and metric.startswith('ul_'):
                 candidate = 'dl_' + metric[3:]
                 if candidate in metrics:
                     paired_metric = candidate
@@ -1240,24 +1241,24 @@ def _run_phys_layer_plotting(
                     continue
 
             save_file = None
-            if save_dir is not None:
-                if plot_mode == 'time':
-                    save_file = save_dir / f'{metric}_by_time.svg'
+            if params['save_dir'] is not None:
+                if params['plot_mode'] == 'time':
+                    save_file = params['save_dir'] / f'{metric}_by_time.svg'
                 elif paired_metric:
-                    save_file = save_dir / f'{metric}_vs_{paired_metric}_{distribution_plot_type}.svg'
+                    save_file = params['save_dir'] / f'{metric}_vs_{paired_metric}_{params['distribution_plot_type']}.svg'
                 else:
-                    save_file = save_dir / f'{metric}_{distribution_plot_type}.svg'
+                    save_file = params['save_dir'] / f'{metric}_{params['distribution_plot_type']}.svg'
 
-            if plot_mode == 'time':
+            if params['plot_mode'] == 'time':
                 plot_rntis_by_time(
                     ue_dfs,
                     metric,
                     metric_units='',
                     run_id=run_label,
-                    pts_to_plot=pts_to_plot,
-                    pts_offset=pts_offset,
+                    pts_to_plot=params['pts_to_plot'],
+                    pts_offset=params['pts_offset'],
                     savepath=save_file,
-                    show=(save_dir is None),
+                    show=(params['save_dir'] is None),
                     non_zero_metrics=non_zero_metrics,
                     min_thresholds=min_thresholds,
                 )
@@ -1267,11 +1268,11 @@ def _run_phys_layer_plotting(
                     metric,
                     metric_units='',
                     run_id=run_label,
-                    plot_type=distribution_plot_type,
+                    plot_type=params['distribution_plot_type'],
                     paired_metric=paired_metric,
                     split_violin=True,
                     savepath=save_file,
-                    show=(save_dir is None),
+                    show=(params['save_dir'] is None),
                     non_zero_metrics=non_zero_metrics,
                     min_thresholds=min_thresholds,
                 )
@@ -1283,49 +1284,49 @@ def _run_phys_layer_plotting(
 
             processed_metrics.add(metric)
 
-            if round_ids_to_plot is not None:
-                phase_list = _normalize_phase_filter(round_phase_to_plot)
+            if params['round_ids_to_plot'] is not None:
+                phase_list = _normalize_phase_filter(params['round_phase_to_plot'])
                 phase_targets = phase_list if phase_list is not None else [None]
 
-                if round_profile_all_devices:
+                if params['round_profile_all_devices']:
                     for phase_target in phase_targets:
                         if (
-                            round_profile_ul_dl_combined and
+                            params['round_profile_ul_dl_combined'] and
                             paired_metric is not None and
                             metric in THROUGHPUT_METRICS and
                             paired_metric in THROUGHPUT_METRICS
                         ):
                             combined_savepath = None
-                            if save_round_profiles:
+                            if params['save_round_profiles']:
                                 phase_name = 'all' if phase_target is None else str(phase_target)
                                 safe_phase = re.sub(r'[^a-zA-Z0-9_.-]', '_', phase_name)
-                                if save_dir is not None:
-                                    round_profile_dir = save_dir / 'round_profiles'
+                                if params['save_dir'] is not None:
+                                    round_profile_dir = params['save_dir'] / 'round_profiles'
                                 else:
                                     round_profile_dir = Path.cwd() / 'round_profiles'
                                 round_profile_dir.mkdir(parents=True, exist_ok=True)
-                                safe_layout = re.sub(r'[^a-zA-Z0-9_.-]', '_', str(round_profile_ul_dl_layout))
+                                safe_layout = re.sub(r'[^a-zA-Z0-9_.-]', '_', str(params['round_profile_ul_dl_layout']))
                                 combined_savepath = round_profile_dir / f'{run_label}_{metric}_vs_{paired_metric}_{safe_layout}_{safe_phase}.svg'
 
                             plot_ul_dl_round_average_across_devices(
                                 ue_dfs,
                                 metric,
                                 paired_metric,
-                                n_points=round_profile_points,
+                                n_points=params['round_profile_points'],
                                 phase_filter=phase_target,
-                                layout=round_profile_ul_dl_layout,
+                                layout=params['round_profile_ul_dl_layout'],
                                 run_label=run_label,
                                 savepath=combined_savepath,
-                                show=(save_dir is None),
+                                show=(params['save_dir'] is None),
                             )
                             continue
 
                         overlay_savepath = None
-                        if save_round_profiles:
+                        if params['save_round_profiles']:
                             phase_name = 'all' if phase_target is None else str(phase_target)
                             safe_phase = re.sub(r'[^a-zA-Z0-9_.-]', '_', phase_name)
-                            if save_dir is not None:
-                                round_profile_dir = save_dir / 'round_profiles'
+                            if params['save_dir'] is not None:
+                                round_profile_dir = params['save_dir'] / 'round_profiles'
                             else:
                                 round_profile_dir = Path.cwd() / 'round_profiles'
                             round_profile_dir.mkdir(parents=True, exist_ok=True)
@@ -1335,18 +1336,18 @@ def _run_phys_layer_plotting(
                             ue_dfs,
                             metric,
                             round_ids=None,
-                            n_points=round_profile_points,
+                            n_points=params['round_profile_points'],
                             phase_filter=phase_target,
-                            show_error_bars=round_profile_error_bars,
-                            errorbar_step=round_profile_errorbar_step,
-                            include_effective_sum=round_profile_include_effective,
-                            effective_on_secondary_axis=round_profile_effective_secondary_axis,
+                            show_error_bars=params['round_profile_error_bars'],
+                            errorbar_step=params['round_profile_errorbar_step'],
+                            include_effective_sum=params['round_profile_include_effective'],
+                            effective_on_secondary_axis=params['round_profile_effective_secondary_axis'],
                             run_label=run_label,
                             savepath=overlay_savepath,
-                            show=(save_dir is None),
+                            show=(params['save_dir'] is None),
                         )
                 else:
-                    target_device = round_profile_device
+                    target_device = params['round_profile_device']
                     if target_device is None:
                         target_device = next(iter(ue_dfs.keys()), None)
                     devices_to_plot = [target_device] if target_device is not None else []
@@ -1357,8 +1358,8 @@ def _run_phys_layer_plotting(
                                 plot_round_examples_and_average(
                                     ue_dfs[device_id],
                                     metric,
-                                    round_ids=round_ids_to_plot,
-                                    n_points=round_profile_points,
+                                    round_ids=params['round_ids_to_plot'],
+                                    n_points=params['round_profile_points'],
                                     phase_filter=phase_target,
                                     device_label=str(device_id),
                                 )
@@ -1378,8 +1379,8 @@ def _run_phys_layer_plotting(
         print('\nThroughput by device (Mbps): mean and std')
         throughput_df = pd.DataFrame(throughput_summary)
         print(throughput_df.to_string(index=False))
-        if save_dir is not None:
-            throughput_fp = save_dir / 'throughput_summary_by_device.csv'
+        if params['save_dir'] is not None:
+            throughput_fp = params['save_dir'] / 'throughput_summary_by_device.csv'
             throughput_df.to_csv(throughput_fp, index=False)
             print(f'Saved throughput summary to {throughput_fp}')
 
@@ -1388,157 +1389,6 @@ def _run_phys_layer_plotting(
         for trial in avgs[metric]:
             print(f'{trial} \t {avgs[metric][trial]} \t {stds[metric][trial]}')
 
-
-def plot(
-    dir,
-    filters=None,
-    sweep_param=None,
-    metrics=None,
-    pts_to_plot=1000,
-    pts_offset=0,
-    plot_mode='distribution',
-    distribution_plot_type='violin', #box,violin
-    pair_ul_dl=False,
-    non_zero_metrics=None,
-    min_thresholds=None,
-    filter_rounds_in_memory=False,
-    annotate_round_phases=False,
-    round_gap_s=200,
-    round_ids_to_plot=None,
-    round_phase_to_plot=None,
-    round_profile_device=None,
-    round_profile_all_devices=False,
-    round_profile_points=100,
-    round_profile_error_bars=False,
-    round_profile_errorbar_step=10,
-    round_profile_ul_dl_combined=False,
-    round_profile_ul_dl_layout='same_axes',
-    round_profile_include_effective=False,
-    round_profile_effective_secondary_axis=True,
-    save_round_profiles=False,
-    round_filter_cache_dir=None,
-    use_round_filter_cache=True,
-):
-    # metrics = ['ulMcs', 'dlMcs', 'rssi', 'rsrp', 'rsrq', 'dlBler', 'ulQm', 'dlQm', 'ulBler', 'phr', 'pcmax', 'sinr', 'pucchSnr', 'cqi', 'puschSnr']
-    # segment\tulBler\tphr\tpucchSnr\tueId\tdlMcs\tulMcs\tulQm\tri\tranUeId\tdlBytes\tdlQm\tcqi\tpuschSnr\tinSync\tpmi\tsinr\tpcmax\trsrq\trsrp\trssi\tamfUeId\tdlBler\tulBytes
-    metrics = metrics or ['rsrp']
-    experiments = build_experiment_index(dir)
-    if filters:
-        experiments = filter_experiments(experiments, filters)
-
-    if sweep_param:
-        experiments = sort_experiments_by_sweep(experiments, sweep_param)
-
-    if not experiments:
-        print('No experiments matched the given filters')
-        return
-
-    for exp in experiments:
-        exp['run_label'] = _format_run_label(exp, sweep_param=sweep_param)
-
-    _run_phys_layer_plotting(
-        experiments,
-        metrics,
-        plot_mode=plot_mode,
-        distribution_plot_type=distribution_plot_type,
-        pair_ul_dl=pair_ul_dl,
-        non_zero_metrics=non_zero_metrics,
-        min_thresholds=min_thresholds,
-        pts_to_plot=pts_to_plot,
-        pts_offset=pts_offset,
-        save_dir=None,
-        filter_rounds_in_memory=filter_rounds_in_memory,
-        annotate_round_phases=annotate_round_phases,
-        round_gap_s=round_gap_s,
-        round_ids_to_plot=round_ids_to_plot,
-        round_phase_to_plot=round_phase_to_plot,
-        round_profile_device=round_profile_device,
-        round_profile_all_devices=round_profile_all_devices,
-        round_profile_points=round_profile_points,
-        round_profile_error_bars=round_profile_error_bars,
-        round_profile_errorbar_step=round_profile_errorbar_step,
-        round_profile_ul_dl_combined=round_profile_ul_dl_combined,
-        round_profile_ul_dl_layout=round_profile_ul_dl_layout,
-        round_profile_include_effective=round_profile_include_effective,
-        round_profile_effective_secondary_axis=round_profile_effective_secondary_axis,
-        save_round_profiles=save_round_profiles,
-        round_filter_cache_dir=round_filter_cache_dir,
-        use_round_filter_cache=use_round_filter_cache,
-    )
-
-
-def plot_cellular_sweep_phys(
-    experiment_paths,
-    filters,
-    sweep,
-    output_dir,
-    metrics=None,
-    pts_to_plot=1000,
-    pts_offset=0,
-    plot_mode='time',
-    distribution_plot_type='violin',
-    pair_ul_dl=False,
-    non_zero_metrics=None,
-    min_thresholds=None,
-    filter_rounds_in_memory=False,
-    annotate_round_phases=False,
-    round_gap_s=200,
-    round_ids_to_plot=None,
-    round_phase_to_plot=None,
-    round_profile_device=None,
-    round_profile_all_devices=False,
-    round_profile_points=100,
-    round_profile_error_bars=False,
-    round_profile_errorbar_step=10,
-    round_profile_ul_dl_combined=False,
-    round_profile_ul_dl_layout='same_axes',
-    round_profile_include_effective=False,
-    round_profile_effective_secondary_axis=True,
-    save_round_profiles=False,
-    round_filter_cache_dir=None,
-    use_round_filter_cache=True,
-):
-    filtered = filter_experiments(experiment_paths, filters)
-    filtered = sort_experiments_by_sweep(filtered, sweep)
-
-    filter_parts = [f"{k}_{str(v).replace('/', '_').replace(' ', '_')}" for k, v in filters.items()]
-    filter_dir = '_'.join(filter_parts)
-    sweep_output_dir = output_dir / filter_dir / sweep
-    sweep_output_dir.mkdir(exist_ok=True, parents=True)
-
-    metrics = metrics or ['rsrp', 'ul_throughput_mbps', 'dl_throughput_mbps']
-    for exp in filtered:
-        exp['run_label'] = _format_run_label(exp, sweep_param=sweep)
-
-    _run_phys_layer_plotting(
-        filtered,
-        metrics,
-        plot_mode=plot_mode,
-        distribution_plot_type=distribution_plot_type,
-        pair_ul_dl=pair_ul_dl,
-        non_zero_metrics=non_zero_metrics,
-        min_thresholds=min_thresholds,
-        pts_to_plot=pts_to_plot,
-        pts_offset=pts_offset,
-        save_dir=sweep_output_dir,
-        filter_rounds_in_memory=filter_rounds_in_memory,
-        annotate_round_phases=annotate_round_phases,
-        round_gap_s=round_gap_s,
-        round_ids_to_plot=round_ids_to_plot,
-        round_phase_to_plot=round_phase_to_plot,
-        round_profile_device=round_profile_device,
-        round_profile_all_devices=round_profile_all_devices,
-        round_profile_points=round_profile_points,
-        round_profile_error_bars=round_profile_error_bars,
-        round_profile_errorbar_step=round_profile_errorbar_step,
-        round_profile_ul_dl_combined=round_profile_ul_dl_combined,
-        round_profile_ul_dl_layout=round_profile_ul_dl_layout,
-        round_profile_include_effective=round_profile_include_effective,
-        round_profile_effective_secondary_axis=round_profile_effective_secondary_axis,
-        save_round_profiles=save_round_profiles,
-        round_filter_cache_dir=round_filter_cache_dir,
-        use_round_filter_cache=use_round_filter_cache,
-    )
 
 def parse(telemetry_dir, trial_dir, sort_telemetry_func, runs):
     source = [file.name for file in Path(telemetry_dir).iterdir() if 'oaibox' in file.name]
@@ -1580,7 +1430,8 @@ def sort_telemetry_into_iperf(runs, telemetry_df, run_dir, parser, file):
         
 
 def main():
-    dir = '/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/'
+    '''Parsing'''
+    # dir = '/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/'
     # for f in Path(dir).iterdir():
     #     if 'iperf' in f.name:
     #         print(f'{f.name}')
@@ -1600,9 +1451,12 @@ def main():
     #             pass
     #         else:
     #             combine_rntis(path)
-    data_dir = Path('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/')
-    all_experiments = build_experiment_index(data_dir)
 
+    '''Plotting'''
+    data_dir = Path('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/')
+    output_dir = Path.cwd() / 'phys_layer_plots'
+
+    # does NOT include all available metrics = ['ulMcs', 'dlMcs', 'rssi', 'rsrp', 'rsrq', 'dlBler', 'ulQm', 'dlQm', 'ulBler', 'phr', 'pcmax', 'sinr', 'pucchSnr', 'cqi', 'puschSnr']
     filters = { # one ue_[rnti].csv per device
         'bandwidth': '40 MHz',
         'rank': '2x2',
@@ -1611,6 +1465,8 @@ def main():
         'tdd': '7-2',
         'nodes': '6N'
     }
+    sweep = 'network'
+    metrics=['rssi', 'ul_throughput_mbps', 'dl_throughput_mbps']
 
     # filters = { # many ue_[rnti].csv per device
     #     'bandwidth': '80 MHz',
@@ -1621,41 +1477,46 @@ def main():
     #     'nodes': '6N'
     # }
 
-    plot(
-    str(data_dir),
-    filters=filters,
-    sweep_param='network',
-    metrics=['rsrp', 'dlBler', 'ulBler', 'rsrq', 'rssi', 'ul_throughput_mbps', 'dl_throughput_mbps', 'puschSnr', 'pucchSnr', 'dlQm', 'ulMcs', 'ulQm', 'dlMcs'],
-    plot_mode='time',
-    distribution_plot_type='violin',
-    pair_ul_dl=False,
-    non_zero_metrics=['ul_throughput_mbps', 'dl_throughput_mbps'],
-    min_thresholds={'ul_throughput_mbps': 0.01, 'dl_throughput_mbps': 0.01},
-    filter_rounds_in_memory=True,
-    annotate_round_phases=True,
-    round_ids_to_plot=[2, 3, 4],
-    round_phase_to_plot=['all'],  # or 'all' / None
-    round_profile_all_devices=True,
-    round_profile_points=100,
-    round_profile_ul_dl_combined=True,
-    round_profile_ul_dl_layout='same_axes',  # use 'subplots' for stacked UL/DL panels
-    round_profile_include_effective=True,
-    round_profile_effective_secondary_axis=True,
-    pts_to_plot=100,
-    pts_offset=0
-    )
+    experiments = build_experiment_index(data_dir)
+    experiments = filter_experiments(experiments, filters)
+    experiments = sort_experiments_by_sweep(experiments, sweep)
 
-    plot_cellular_sweep_phys(
-        all_experiments,
-        filters=filters,
-        sweep='network',
-        output_dir=Path.cwd() / 'phys_layer_plots',
-        metrics=['rsrp', 'rssi', 'rsrq', 'ul_throughput_mbps', 'dl_throughput_mbps'],
+    if not experiments:
+        print('No experiments matched the given filters')
+        return
+    
+    filter_parts = [f"{k}_{str(v).replace('/', '_').replace(' ', '_')}" for k, v in filters.items()]
+    filter_dir = '_'.join(filter_parts)
+    sweep_output_dir = output_dir / filter_dir / sweep
+    sweep_output_dir.mkdir(exist_ok=True, parents=True)
+
+    for exp in experiments:
+        exp['run_label'] = _format_run_label(exp, sweep_param=sweep)
+
+    _run_phys_layer_plotting(
+        experiments,
+        metrics,
         plot_mode='distribution',
         distribution_plot_type='violin',
-        pair_ul_dl=True,
+        pair_ul_dl=False,
         non_zero_metrics=['ul_throughput_mbps', 'dl_throughput_mbps'],
+        min_thresholds={'ul_throughput_mbps': 0.01, 'dl_throughput_mbps': 0.01},
+        filter_rounds_in_memory=True,
+        annotate_round_phases=True,
+        round_ids_to_plot=[2, 3, 4],
+        round_phase_to_plot=['all'],  # or 'all' / None
+        round_profile_all_devices=True,
+        round_profile_points=100,
+        round_profile_ul_dl_combined=True,
+        round_profile_ul_dl_layout='same_axes',  # use 'subplots' for stacked UL/DL panels
+        round_profile_include_effective=True,
+        round_profile_effective_secondary_axis=True,
+        pts_to_plot=100,
+        pts_offset=0,
+        round_filter_cache_dir=Path.cwd(),
+        save_path=Path.cwd() / 'phys_layer_plots'
     )
+
 
 if __name__ == '__main__':
     main()
