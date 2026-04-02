@@ -15,14 +15,6 @@ THROUGHPUT_METRICS = [
     'dl_throughput_mbps',
 ]
 
-DEFAULT_NON_ZERO_METRICS = set(THROUGHPUT_METRICS)
-
-
-def _normalize_non_zero_metrics(non_zero_metrics):
-    if non_zero_metrics is None:
-        return DEFAULT_NON_ZERO_METRICS
-    return set(non_zero_metrics)
-
 
 def _normalize_min_thresholds(min_thresholds):
     if min_thresholds is None:
@@ -43,19 +35,10 @@ def _normalize_phase_filter(phase_filter):
     return phase_list
 
 
-def _cache_paths(cache_dir, exp_name, rnti):
-    exp_cache_dir = Path(cache_dir) / re.sub(r'[^a-zA-Z0-9_.-]', '_', str(exp_name))
-    exp_cache_dir.mkdir(parents=True, exist_ok=True)
-    round_fp = exp_cache_dir / 'rounds.csv'
-    ue_fp = exp_cache_dir / f'ue_{rnti}_round_filtered.csv'
-    return round_fp, ue_fp
-
-
-def _metric_values(ue_df, metric, non_zero_metrics=None, min_thresholds=None):
+def _metric_values(ue_df, metric, min_thresholds=None):
     if metric not in ue_df.columns:
         return []
 
-    ignore_zero = metric in _normalize_non_zero_metrics(non_zero_metrics)
     threshold = _normalize_min_thresholds(min_thresholds).get(metric)
     values = []
     for value in ue_df[metric].to_list():
@@ -66,21 +49,19 @@ def _metric_values(ue_df, metric, non_zero_metrics=None, min_thresholds=None):
         if pd.isna(numeric_value):
             continue
 
-        if ignore_zero and (numeric_value < 0 or np.isclose(numeric_value, 0.0, atol=1e-12)):
-            continue
         if threshold is not None and numeric_value < threshold:
             continue
         values.append(float(numeric_value))
     return values
 
 
-def _build_distribution_dataframe(ue_dfs, metric, paired_metric=None, non_zero_metrics=None, min_thresholds=None):
+def _build_distribution_dataframe(ue_dfs, metric, paired_metric=None, min_thresholds=None):
     rows = []
     for rnti, ue_df in ue_dfs.items():
         if metric not in ue_df.columns:
             continue
 
-        values = _metric_values(ue_df, metric, non_zero_metrics, min_thresholds=min_thresholds)
+        values = _metric_values(ue_df, metric, min_thresholds=min_thresholds)
         for value in values:
             row = {'device': str(rnti), 'value': value, 'series': metric}
             if paired_metric is not None:
@@ -88,7 +69,7 @@ def _build_distribution_dataframe(ue_dfs, metric, paired_metric=None, non_zero_m
             rows.append(row)
 
         if paired_metric is not None and paired_metric in ue_df.columns:
-            paired_values = _metric_values(ue_df, paired_metric, non_zero_metrics, min_thresholds=min_thresholds)
+            paired_values = _metric_values(ue_df, paired_metric, min_thresholds=min_thresholds)
             for value in paired_values:
                 rows.append({
                     'device': str(rnti),
@@ -597,7 +578,7 @@ def filter_out_inactivity(agg_metrics_file, trial_data, max_gap_s=200, return_ro
     return filtered
 
 
-def _apply_round_filter_to_ue_dfs(exp_path, ue_dfs, max_gap_s=200, annotate_phases=False, cache_dir=None, use_cache=True):
+def _apply_round_filter_to_ue_dfs(exp_path, ue_dfs, max_gap_s=200, annotate_phases=False):
     agg_metrics_file = Path(exp_path) / 'train_agg_metrics.csv'
     if not agg_metrics_file.exists():
         return ue_dfs, pd.DataFrame()
@@ -609,27 +590,6 @@ def _apply_round_filter_to_ue_dfs(exp_path, ue_dfs, max_gap_s=200, annotate_phas
     for idx, (rnti, ue_df) in enumerate(ue_dfs.items()):
         round_fp = None
         ue_fp = None
-        if cache_dir is not None:
-            round_fp, ue_fp = _cache_paths(cache_dir, exp_name, rnti)
-
-        if use_cache and ue_fp is not None and ue_fp.exists():
-            cached_df = pl.read_csv(str(ue_fp), try_parse_dates=True)
-            if 'round_id' in cached_df.columns:
-                cached_df = cached_df.with_columns(pl.col('round_id').cast(pl.Int64))
-            filtered_ue_dfs[rnti] = cached_df
-            if rounds.empty and round_fp is not None and round_fp.exists():
-                rounds = pd.read_csv(round_fp)
-                for dt_col in [
-                    'timestamp', 'round_start', 'round_end',
-                    'downlink_start', 'downlink_end',
-                    'training_start', 'training_end',
-                    'evaluation_start', 'evaluation_end',
-                    'uplink_start', 'uplink_end',
-                    'idle_start', 'idle_end',
-                ]:
-                    if dt_col in rounds.columns:
-                        rounds[dt_col] = pd.to_datetime(rounds[dt_col], utc=True, errors='coerce')
-            continue
 
         if idx == 0:
             filtered_df, rounds = filter_out_inactivity(
@@ -676,20 +636,17 @@ def read_data_from_csvs(main_fp, secondary_fp, columns=None):
 
     return df
 
-def plot_rntis_by_time(ue_dfs, metric, metric_units, run_id, pts_to_plot, pts_offset=0, savepath=None, show=True, non_zero_metrics=None, min_thresholds=None):
+def plot_rntis_by_time(ue_dfs, metric, metric_units, run_id, pts_to_plot, pts_offset=0, savepath=None, show=True, min_thresholds=None):
     fig, ax = plt.subplots(figsize=(10, 6))
     rows = []
     pts_offset = max(0, int(pts_offset))
 
     for rnti, ue_df in ue_dfs.items():
-        values = _metric_values(ue_df, metric, non_zero_metrics, min_thresholds=min_thresholds)
+        values = _metric_values(ue_df, metric, min_thresholds=min_thresholds)
         if not values:
             continue
 
         series = ue_df.select(['timestamp', metric]).to_pandas()
-        if metric in _normalize_non_zero_metrics(non_zero_metrics):
-            series[metric] = pd.to_numeric(series[metric], errors='coerce')
-            series = series[(series[metric] > 0) & (~np.isclose(series[metric], 0.0, atol=1e-12))]
         metric_threshold = _normalize_min_thresholds(min_thresholds).get(metric)
         if metric_threshold is not None:
             series[metric] = pd.to_numeric(series[metric], errors='coerce')
@@ -743,14 +700,12 @@ def plot_rntis_distribution(
     split_violin=True,
     savepath=None,
     show=True,
-    non_zero_metrics=None,
     min_thresholds=None,
 ):
     df = _build_distribution_dataframe(
         ue_dfs,
         metric,
         paired_metric=paired_metric,
-        non_zero_metrics=non_zero_metrics,
         min_thresholds=min_thresholds,
     )
     if df.empty:
@@ -855,14 +810,14 @@ def add_throughput_columns(ue_df):
     return ue_df
 
 
-def summarize_throughput_by_device(ue_dfs, run_label, non_zero_metrics=None, min_thresholds=None):
+def summarize_throughput_by_device(ue_dfs, run_label, min_thresholds=None):
     rows = []
     for rnti, ue_df in ue_dfs.items():
         if not {'ul_throughput_mbps', 'dl_throughput_mbps'}.issubset(set(ue_df.columns)):
             continue
 
-        ul_values = _metric_values(ue_df, 'ul_throughput_mbps', non_zero_metrics, min_thresholds=min_thresholds)
-        dl_values = _metric_values(ue_df, 'dl_throughput_mbps', non_zero_metrics, min_thresholds=min_thresholds)
+        ul_values = _metric_values(ue_df, 'ul_throughput_mbps', min_thresholds=min_thresholds)
+        dl_values = _metric_values(ue_df, 'dl_throughput_mbps', min_thresholds=min_thresholds)
 
         ul_avg = pd.Series(ul_values).mean() if ul_values else None
         dl_avg = pd.Series(dl_values).mean() if dl_values else None
@@ -952,13 +907,12 @@ def _format_run_label(exp, sweep_param=None):
     return str(base)
 
 
-def _compute_metric_mean_std(ue_dfs, metric, non_zero_metrics=None, min_thresholds=None):
+def _compute_metric_mean_std(ue_dfs, metric, min_thresholds=None):
     values = []
     for _, ue_df in ue_dfs.items():
         values.extend(_metric_values(
             ue_df,
             metric,
-            non_zero_metrics=non_zero_metrics,
             min_thresholds=min_thresholds,
         ))
 
@@ -988,7 +942,6 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
         plot_mode='distribution',
         distribution_plot_type='violin',
         pair_ul_dl=False,
-        non_zero_metrics=None,
         min_thresholds=None,
         pts_to_plot=1000,
         pts_offset=0,
@@ -1007,14 +960,11 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
         round_profile_ul_dl_layout='same_axes', # use 'subplots' for stacked UL/DL panels
         round_profile_include_effective=False,
         round_profile_effective_secondary_axis=True,
-        save_round_profiles=False,
-        round_filter_cache_dir=None,
-        use_round_filter_cache=True,
+        save_round_profiles=False
     )
 
     params = {**defaults, **kwargs}
 
-    non_zero_metrics = _normalize_non_zero_metrics(params['non_zero_metrics'])
     min_thresholds = _normalize_min_thresholds(params['min_thresholds'])
     avgs = {metric: {} for metric in metrics}
     stds = {metric: {} for metric in metrics}
@@ -1036,10 +986,9 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
                 path,
                 ue_dfs,
                 max_gap_s=params['round_gap_s'],
-                annotate_phases=params['annotate_round_phases'],
-                cache_dir=params['round_filter_cache_dir'],
-                use_cache=params['use_round_filter_cache'],
+                annotate_phases=params['annotate_round_phases']
             )
+        # ue_dfs = filter_out_inactivity(agg_metrics_file, trial_data, max_gap_s=200, return_rounds=False, annotate_phases=False)
 
         run_label = exp.get('run_label', path.name)
         processed_metrics = set()
@@ -1060,7 +1009,6 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
             metric_mean, metric_std = _compute_metric_mean_std(
                 ue_dfs,
                 metric,
-                non_zero_metrics=non_zero_metrics,
                 min_thresholds=min_thresholds,
             )
             avgs[metric][run_label] = metric_mean
@@ -1072,7 +1020,6 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
                 pair_mean, pair_std = _compute_metric_mean_std(
                     ue_dfs,
                     paired_metric,
-                    non_zero_metrics=non_zero_metrics,
                     min_thresholds=min_thresholds,
                 )
                 avgs[paired_metric][run_label] = pair_mean
@@ -1108,7 +1055,6 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
                     pts_offset=params['pts_offset'],
                     savepath=save_file,
                     show=(params['save_dir'] is None),
-                    non_zero_metrics=non_zero_metrics,
                     min_thresholds=min_thresholds,
                 )
             else:
@@ -1122,7 +1068,6 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
                     split_violin=True,
                     savepath=save_file,
                     show=(params['save_dir'] is None),
-                    non_zero_metrics=non_zero_metrics,
                     min_thresholds=min_thresholds,
                 )
 
@@ -1213,7 +1158,6 @@ def _run_phys_layer_plotting(experiments, metrics, **kwargs):
         throughput_summary.extend(summarize_throughput_by_device(
             ue_dfs,
             run_label,
-            non_zero_metrics=non_zero_metrics,
             min_thresholds=min_thresholds,
         ))
 
@@ -1281,7 +1225,6 @@ def main():
     _run_phys_layer_plotting(
         experiments,
         metrics,
-        non_zero_metrics=['ul_throughput_mbps', 'dl_throughput_mbps'],
         min_thresholds={'ul_throughput_mbps': 0.01, 'dl_throughput_mbps': 0.01},
         filter_rounds_in_memory=True,
         annotate_round_phases=True,
@@ -1292,8 +1235,32 @@ def main():
         round_profile_ul_dl_layout='same_axes',  # use 'subplots' for stacked UL/DL panels
         round_profile_include_effective=True,
         round_profile_effective_secondary_axis=True,
-        round_filter_cache_dir=Path.cwd(),
-        save_path=Path.cwd() / 'phys_layer_plots'
+        pair_ul_dl=True,
+    # defaults = dict(
+    #     plot_mode='distribution',
+    #     distribution_plot_type='violin',
+    #     pair_ul_dl=False,
+    #     min_thresholds=None,
+    #     pts_to_plot=1000,
+    #     pts_offset=0,
+    #     save_dir=None,
+    #     filter_rounds_in_memory=False,
+    #     annotate_round_phases=False,
+    #     round_gap_s=200,
+    #     round_ids_to_plot=None,
+    #     round_phase_to_plot=['all'],
+    #     round_profile_device=None,
+    #     round_profile_all_devices=False,
+    #     round_profile_points=1000,
+    #     round_profile_error_bars=False,
+    #     round_profile_errorbar_step=10,
+    #     round_profile_ul_dl_combined=False,
+    #     round_profile_ul_dl_layout='same_axes', # use 'subplots' for stacked UL/DL panels
+    #     round_profile_include_effective=False,
+    #     round_profile_effective_secondary_axis=True,
+    #     save_round_profiles=False
+    # )
+        # save_dir=Path.cwd() / 'phys_layer_plots'
     )
 
 

@@ -1,1522 +1,736 @@
-import pandas as pd
+from dataclasses import dataclass, field
 from pathlib import Path
-import re
-import matplotlib.pyplot as plt
+from typing import Dict, List, Optional, Any, Tuple
+
 import numpy as np
-from scipy import stats
-from datetime import datetime, timedelta
+import pandas as pd
 import polars as pl
+import matplotlib.pyplot as plt
 import seaborn as sns
-import os
+
 from data_loading import parse_experiment_name
 from helpers import sort_experiments_by_sweep, format_sweep_label
 
-SAVE_LOCALLY = False # whether to save in working directory (lower stakes for debugging)
 
-THROUGHPUT_METRICS = [
-    'ul_throughput_bps',
-    'dl_throughput_bps',
-    'ul_throughput_mbps',
-    'dl_throughput_mbps',
-]
-
-DEFAULT_NON_ZERO_METRICS = set(THROUGHPUT_METRICS)
+THROUGHPUT_METRICS = {
+    "ul_throughput_bps",
+    "dl_throughput_bps",
+    "ul_throughput_mbps",
+    "dl_throughput_mbps",
+}
 
 
-def _normalize_non_zero_metrics(non_zero_metrics):
-    if non_zero_metrics is None:
-        return DEFAULT_NON_ZERO_METRICS
-    return set(non_zero_metrics)
+# =========================
+# Config
+# =========================
+
+@dataclass
+class PlotConfig:
+    data_dir: Path
+    output_dir: Path
+    filters: Dict[str, Any]
+    metrics: List[str]
+    sweep: Optional[str] = None
+
+    min_thresholds: Dict[str, float] = field(default_factory=dict)
+
+    # pipeline behavior
+    filter_rounds: bool = True
+    annotate_phases: bool = True
+    round_gap_s: int = 200
+
+    # plotting behavior
+    plot_mode: str = "distribution"          # "distribution" | "time"
+    distribution_plot_type: str = "violin"   # violin|box|bar|count
+    pair_ul_dl: bool = True
+    show_plots: bool = True
+    pts_to_plot: int = 1000
+    pts_offset: int = 0
+
+    # round profiles
+    round_profiles_enabled: bool = False
+    round_profile_points: int = 1000
+    round_profile_phase_filter: Optional[List[str]] = None
+    round_profile_round_ids: Optional[List[int]] = None
+    round_profile_layout: str = "same_axes" # use 'subplots' for stacked UL/DL panels
+    round_profile_error_bars: bool = False
+    round_profile_errorbar_step: int = 10
+    round_profile_include_effective_sum: bool = True
+    round_profile_effective_secondary_axis: bool = True
 
 
-def _normalize_min_thresholds(min_thresholds):
-    if min_thresholds is None:
-        return {}
-    return dict(min_thresholds)
+# =========================
+# Small utilities
+# =========================
+
+def _norm_thresholds(d: Optional[Dict[str, float]]) -> Dict[str, float]:
+    return {} if d is None else dict(d)
 
 
-def _normalize_phase_filter(phase_filter):
+def _phase_list(phase_filter):
     if phase_filter is None:
         return None
     if isinstance(phase_filter, str):
-        if phase_filter.lower() in {'all', '*'}:
-            return None
-        return [phase_filter]
-    phase_list = list(phase_filter)
-    if not phase_list:
-        return None
-    return phase_list
+        return None if phase_filter.lower() in {"all", "*"} else [phase_filter]
+    out = list(phase_filter)
+    return out or None
 
 
-def _cache_paths(cache_dir, exp_name, rnti):
-    exp_cache_dir = Path(cache_dir) / re.sub(r'[^a-zA-Z0-9_.-]', '_', str(exp_name))
-    exp_cache_dir.mkdir(parents=True, exist_ok=True)
-    round_fp = exp_cache_dir / 'rounds.csv'
-    ue_fp = exp_cache_dir / f'ue_{rnti}_round_filtered.csv'
-    return round_fp, ue_fp
-
-
-def _metric_values(ue_df, metric, non_zero_metrics=None, min_thresholds=None):
-    if metric not in ue_df.columns:
+def _metric_values(df: pl.DataFrame, metric: str, thresholds: Dict[str, float]) -> List[float]:
+    if metric not in df.columns:
         return []
+    threshold = thresholds.get(metric)
 
-    ignore_zero = metric in _normalize_non_zero_metrics(non_zero_metrics)
-    threshold = _normalize_min_thresholds(min_thresholds).get(metric)
-    values = []
-    for value in ue_df[metric].to_list():
-        if value is None or pd.isna(value):
+    out = []
+    for v in df[metric].to_list():
+        if v is None or pd.isna(v):
             continue
-
-        numeric_value = pd.to_numeric(value, errors='coerce')
-        if pd.isna(numeric_value):
+        n = pd.to_numeric(v, errors="coerce")
+        if pd.isna(n):
             continue
-
-        if ignore_zero and (numeric_value < 0 or np.isclose(numeric_value, 0.0, atol=1e-12)):
+        if threshold is not None and n < threshold:
             continue
-        if threshold is not None and numeric_value < threshold:
-            continue
-        values.append(float(numeric_value))
-    return values
+        out.append(float(n))
+    return out
 
 
-def _build_distribution_dataframe(ue_dfs, metric, paired_metric=None, non_zero_metrics=None, min_thresholds=None):
-    rows = []
-    for rnti, ue_df in ue_dfs.items():
-        if metric not in ue_df.columns:
-            continue
-
-        values = _metric_values(ue_df, metric, non_zero_metrics, min_thresholds=min_thresholds)
-        for value in values:
-            row = {'device': str(rnti), 'value': value, 'series': metric}
-            if paired_metric is not None:
-                row['direction'] = 'UL'
-            rows.append(row)
-
-        if paired_metric is not None and paired_metric in ue_df.columns:
-            paired_values = _metric_values(ue_df, paired_metric, non_zero_metrics, min_thresholds=min_thresholds)
-            for value in paired_values:
-                rows.append({
-                    'device': str(rnti),
-                    'value': value,
-                    'series': paired_metric,
-                    'direction': 'DL',
-                })
-
-    if not rows:
-        return pd.DataFrame()
-
-    return pd.DataFrame(rows)
-
-def parse_gnb_telemetry(trial_data, savepath, separate=True):
-    trial_data = trial_data.with_row_index('segment').drop('_id')
-
-    if separate:
-        common = trial_data.drop('ues')
-        common.write_csv(f'{savepath}/common.csv')
-
-    unpacked = trial_data.explode('ues').unnest('ues')
-
-    for rnti, group in unpacked.group_by('rnti'):
-        if separate:
-            # Remove all duplicate fields (except 'segment', by which we'll merge) and the rnti column since it's in the filename
-            ue_data = group.drop('rnti', set(common.columns) - {'segment'})
-            # Save to separate file
-            ue_data.write_csv(f'{savepath}/ue_{rnti[0]}.csv')
-        else:
-            group.write_csv(f'{savepath}/ue_{rnti[0]}.csv')
-        
-
-def _get_duration_column(df, candidates, default=0.0):
-    for col in candidates:
-        if col in df.columns:
-            values = pd.to_numeric(df[col], errors='coerce').fillna(default)
-            return np.maximum(values, 0.0)
-    return pd.Series(default, index=df.index, dtype='float64')
+def _compute_mean_std(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: Dict[str, float]) -> Tuple[Optional[float], Optional[float]]:
+    vals = []
+    for df in ue_dfs.values():
+        vals.extend(_metric_values(df, metric, thresholds))
+    if not vals:
+        return None, None
+    s = pd.Series(vals)
+    return float(s.mean()), (float(s.std()) if len(s) > 1 else None)
 
 
-def build_round_windows(agg_metrics_file, max_gap_s=200):
-    agg_metrics = pd.read_csv(agg_metrics_file)
-    agg_metrics['timestamp'] = pd.to_datetime(agg_metrics['timestamp'], unit='s', utc=True)
-    agg_metrics = agg_metrics.sort_values('timestamp').reset_index(drop=True)
+# =========================
+# Data loading
+# =========================
 
-    # Identify downtime by large gaps and derive per-round duration.
-    gap_s = agg_metrics['timestamp'].diff().dt.total_seconds()
-    agg_metrics['round_duration'] = _get_duration_column(
-        agg_metrics,
-        candidates=['round_duration', 'round_time', 'duration_s'],
-        default=np.nan,
+def _metrics_to_load(metrics: List[str]) -> List[str]:
+    base = [m for m in metrics if m not in THROUGHPUT_METRICS]
+    if any(m in THROUGHPUT_METRICS for m in metrics):
+        base += ["ulBytes", "dlBytes"]
+    return list(dict.fromkeys(base))
+
+
+def _read_joined_csv(main_fp: str, secondary_fp: Optional[str], columns: Optional[List[str]] = None) -> pl.DataFrame:
+    if secondary_fp:
+        left = pl.read_csv(main_fp, columns=["timestamp"], try_parse_dates=True).with_row_index("segment")
+        right = pl.read_csv(secondary_fp, columns=(["segment"] + columns) if columns else None)
+        return left.join(right, on="segment", how="right")
+    return pl.read_csv(main_fp, columns=(["timestamp"] + columns) if columns else None, try_parse_dates=True)
+
+
+def _add_throughput(df: pl.DataFrame) -> pl.DataFrame:
+    needed = {"timestamp", "ulBytes", "dlBytes"}
+    if not needed.issubset(df.columns):
+        return df
+
+    return (
+        df.with_columns(
+            ul_num=pl.col("ulBytes").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
+            dl_num=pl.col("dlBytes").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
+        )
+        .sort("timestamp")
+        .with_columns(
+            dt=pl.col("timestamp").diff().dt.total_seconds(),
+            dul=pl.col("ul_num").diff(),
+            ddl=pl.col("dl_num").diff(),
+        )
+        .with_columns(
+            ul_throughput_bps=pl.when((pl.col("dt") > 0) & (pl.col("dul") >= 0)).then((pl.col("dul") * 8) / pl.col("dt")).otherwise(None),
+            dl_throughput_bps=pl.when((pl.col("dt") > 0) & (pl.col("ddl") >= 0)).then((pl.col("ddl") * 8) / pl.col("dt")).otherwise(None),
+        )
+        .with_columns(
+            ul_throughput_mbps=pl.col("ul_throughput_bps") / 1_000_000,
+            dl_throughput_mbps=pl.col("dl_throughput_bps") / 1_000_000,
+        )
+        .drop("ul_num", "dl_num")
     )
 
-    if agg_metrics['round_duration'].isna().all():
-        inferred = gap_s.copy()
-        inferred.iloc[0] = np.nan
-        fallback = np.nanmedian(inferred.to_numpy(dtype=float))
-        if np.isnan(fallback):
-            fallback = 0.0
-        agg_metrics['round_duration'] = inferred.fillna(fallback)
+
+def load_experiment_data(exp_path: Path, metrics: List[str]) -> Dict[str, pl.DataFrame]:
+    phys = exp_path / "phys_layer"
+    if not phys.exists():
+        return {}
+
+    load_cols = _metrics_to_load(metrics)
+    out = {}
+
+    for fp in phys.iterdir():
+        n = fp.name
+        if "ue" not in n or "common" in n:
+            continue
+        rnti = n.split("_")[1].split(".")[0]
+        df = _read_joined_csv(str(phys / "common.csv"), str(fp), load_cols)
+        out[rnti] = _add_throughput(df)
+
+    return out
+
+
+# =========================
+# Round filtering + phases
+# (compact versions)
+# =========================
+
+def _get_duration_column(df: pd.DataFrame, candidates: List[str], default=0.0):
+    for c in candidates:
+        if c in df.columns:
+            vals = pd.to_numeric(df[c], errors="coerce").fillna(default)
+            return np.maximum(vals, 0.0)
+    return pd.Series(default, index=df.index, dtype="float64")
+
+
+def build_round_windows(agg_metrics_file: str, max_gap_s=200) -> pd.DataFrame:
+    agg = pd.read_csv(agg_metrics_file)
+    agg["timestamp"] = pd.to_datetime(agg["timestamp"], unit="s", utc=True)
+    agg = agg.sort_values("timestamp").reset_index(drop=True)
+
+    gap_s = agg["timestamp"].diff().dt.total_seconds()
+    agg["round_duration"] = _get_duration_column(agg, ["round_duration", "round_time", "duration_s"], default=np.nan)
+
+    if agg["round_duration"].isna().all():
+        inf = gap_s.copy()
+        inf.iloc[0] = np.nan
+        fallback = np.nanmedian(inf.to_numpy(dtype=float))
+        fallback = 0.0 if np.isnan(fallback) else fallback
+        agg["round_duration"] = inf.fillna(fallback)
     else:
-        fallback = np.nanmedian(agg_metrics['round_duration'].to_numpy(dtype=float))
-        if np.isnan(fallback):
-            fallback = 0.0
-        agg_metrics['round_duration'] = pd.to_numeric(agg_metrics['round_duration'], errors='coerce').fillna(fallback)
+        fallback = np.nanmedian(agg["round_duration"].to_numpy(dtype=float))
+        fallback = 0.0 if np.isnan(fallback) else fallback
+        agg["round_duration"] = pd.to_numeric(agg["round_duration"], errors="coerce").fillna(fallback)
 
-    active_mask = gap_s.isna() | (gap_s <= max_gap_s)
-    rounds = agg_metrics.loc[active_mask].copy().reset_index(drop=True)
+    active = gap_s.isna() | (gap_s <= max_gap_s)
+    r = agg.loc[active].copy().reset_index(drop=True)
 
-    rounds['round_id'] = np.arange(len(rounds), dtype=int)
-    rounds['round_end'] = rounds['timestamp']
-    rounds['round_start'] = rounds['round_end'] - pd.to_timedelta(rounds['round_duration'], unit='s')
+    r["round_id"] = np.arange(len(r), dtype=int)
+    r["round_end"] = r["timestamp"]
+    r["round_start"] = r["round_end"] - pd.to_timedelta(r["round_duration"], unit="s")
 
-    # Phase durations (seconds). Missing columns default to 0.
-    rounds['downlink_s'] = _get_duration_column(rounds, ['downlink_latency', 'downlink_time', 'dl_time_s'])
-    rounds['train_s'] = _get_duration_column(rounds, ['train_time', 'local_train_time', 'training_time'])
-    rounds['eval_s'] = _get_duration_column(rounds, ['eval_time', 'evaluation_time'])
-    rounds['uplink_s'] = _get_duration_column(rounds, ['uplink_latency', 'uplink_time', 'ul_time_s'])
+    r["downlink_s"] = _get_duration_column(r, ["downlink_latency", "downlink_time", "dl_time_s"])
+    r["train_s"] = _get_duration_column(r, ["train_time", "local_train_time", "training_time"])
+    r["eval_s"] = _get_duration_column(r, ["eval_time", "evaluation_time"])
+    r["uplink_s"] = _get_duration_column(r, ["uplink_latency", "uplink_time", "ul_time_s"])
 
-    # Build phase boundaries from round start.
-    rounds['downlink_start'] = rounds['round_start']
-    rounds['downlink_end'] = rounds['downlink_start'] + pd.to_timedelta(rounds['downlink_s'], unit='s')
-    rounds['training_start'] = rounds['downlink_end']
-    rounds['training_end'] = rounds['training_start'] + pd.to_timedelta(rounds['train_s'], unit='s')
-    rounds['evaluation_start'] = rounds['training_end']
-    rounds['evaluation_end'] = rounds['evaluation_start'] + pd.to_timedelta(rounds['eval_s'], unit='s')
-    rounds['uplink_start'] = rounds['evaluation_end']
-    rounds['uplink_end'] = rounds['uplink_start'] + pd.to_timedelta(rounds['uplink_s'], unit='s')
-
-    # Idle starts after uplink and ends at round_end.
-    rounds['idle_start'] = rounds['uplink_end']
-    rounds['idle_end'] = rounds['round_end']
-
-    return rounds
+    r["downlink_end"] = r["round_start"] + pd.to_timedelta(r["downlink_s"], unit="s")
+    r["training_end"] = r["downlink_end"] + pd.to_timedelta(r["train_s"], unit="s")
+    r["evaluation_end"] = r["training_end"] + pd.to_timedelta(r["eval_s"], unit="s")
+    r["uplink_end"] = r["evaluation_end"] + pd.to_timedelta(r["uplink_s"], unit="s")
+    return r
 
 
-def annotate_telemetry_with_rounds_and_phases(trial_data, rounds):
+def annotate_telemetry_with_rounds_and_phases(trial_data: pl.DataFrame, rounds: pd.DataFrame) -> pl.DataFrame:
     if rounds.empty:
         return trial_data
 
-    rounds_pl = pl.from_pandas(rounds[[
-        'round_id',
-        'round_start',
-        'round_end',
-        'downlink_end',
-        'training_end',
-        'evaluation_end',
-        'uplink_end',
-    ]])
-
-    ts_dtype = trial_data.schema.get('timestamp')
+    rp = pl.from_pandas(rounds[["round_id", "round_start", "round_end", "downlink_end", "training_end", "evaluation_end", "uplink_end"]])
+    ts_dtype = trial_data.schema.get("timestamp")
     if ts_dtype is not None:
-        rounds_pl = rounds_pl.with_columns(
-            pl.col('round_start').cast(ts_dtype),
-            pl.col('round_end').cast(ts_dtype),
-            pl.col('downlink_end').cast(ts_dtype),
-            pl.col('training_end').cast(ts_dtype),
-            pl.col('evaluation_end').cast(ts_dtype),
-            pl.col('uplink_end').cast(ts_dtype),
+        rp = rp.with_columns(
+            pl.col("round_start").cast(ts_dtype),
+            pl.col("round_end").cast(ts_dtype),
+            pl.col("downlink_end").cast(ts_dtype),
+            pl.col("training_end").cast(ts_dtype),
+            pl.col("evaluation_end").cast(ts_dtype),
+            pl.col("uplink_end").cast(ts_dtype),
         )
-    rounds_pl = rounds_pl.set_sorted('round_start')
+    rp = rp.set_sorted("round_start")
 
-    annotated = trial_data.join_asof(
-        rounds_pl,
-        left_on='timestamp',
-        right_on='round_start',
-        strategy='backward',
-        check_sortedness=False,
+    out = trial_data.join_asof(rp, left_on="timestamp", right_on="round_start", strategy="backward", check_sortedness=False)
+    out = out.filter(pl.col("round_id").is_not_null() & (pl.col("timestamp") <= pl.col("round_end")))
+
+    out = out.with_columns(
+        phase=pl.when(pl.col("timestamp") <= pl.col("downlink_end")).then(pl.lit("downlink"))
+        .when(pl.col("timestamp") <= pl.col("training_end")).then(pl.lit("training"))
+        .when(pl.col("timestamp") <= pl.col("evaluation_end")).then(pl.lit("evaluation"))
+        .when(pl.col("timestamp") <= pl.col("uplink_end")).then(pl.lit("uplink"))
+        .otherwise(pl.lit("idle"))
     )
-
-    annotated = annotated.filter(
-        pl.col('round_id').is_not_null() &
-        (pl.col('timestamp') <= pl.col('round_end'))
-    )
-
-    annotated = annotated.with_columns(
-        phase=pl.when(pl.col('timestamp') <= pl.col('downlink_end')).then(pl.lit('downlink'))
-        .when(pl.col('timestamp') <= pl.col('training_end')).then(pl.lit('training'))
-        .when(pl.col('timestamp') <= pl.col('evaluation_end')).then(pl.lit('evaluation'))
-        .when(pl.col('timestamp') <= pl.col('uplink_end')).then(pl.lit('uplink'))
-        .otherwise(pl.lit('idle')),
-        round_elapsed_s=(pl.col('timestamp') - pl.col('round_start')).dt.total_seconds(),
-        round_duration_s=(pl.col('round_end') - pl.col('round_start')).dt.total_seconds(),
-    )
-
-    annotated = annotated.with_columns(
-        round_t=pl.when(pl.col('round_duration_s') > 0)
-        .then(pl.col('round_elapsed_s') / pl.col('round_duration_s'))
-        .otherwise(None),
-    )
-
-    return annotated
+    return out
 
 
-def compute_round_average_profile(annotated_trial_data, metric, n_points=100, phase_filter=None, round_ids=None):
+def apply_round_processing(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], cfg: PlotConfig):
+    if not cfg.filter_rounds:
+        return ue_dfs, pd.DataFrame()
+
+    agg_fp = exp_path / "train_agg_metrics.csv"
+    if not agg_fp.exists():
+        return ue_dfs, pd.DataFrame()
+
+    rounds = build_round_windows(str(agg_fp), max_gap_s=cfg.round_gap_s)
+    if rounds.empty:
+        return ue_dfs, rounds
+
+    out = {}
+    for rnti, df in ue_dfs.items():
+        d = df.sort("timestamp")
+
+        intervals = pl.from_pandas(rounds[["round_start", "round_end"]])
+        ts_dtype = d.schema.get("timestamp")
+        if ts_dtype is not None:
+            intervals = intervals.with_columns(
+                pl.col("round_start").cast(ts_dtype),
+                pl.col("round_end").cast(ts_dtype),
+            )
+        intervals = intervals.set_sorted("round_start")
+
+        d = d.join_asof(
+            intervals,
+            left_on="timestamp",
+            right_on="round_start",
+            strategy="backward",
+            check_sortedness=False,
+        )
+        d = d.filter(
+            pl.col("round_start").is_not_null() &
+            (pl.col("timestamp") <= pl.col("round_end"))
+        ).drop("round_start", "round_end")
+
+        if cfg.annotate_phases:
+            d = annotate_telemetry_with_rounds_and_phases(d, rounds)
+
+        out[rnti] = d
+
+    return out, rounds
+
+# =========================
+# Round profiles extension
+# =========================
+def compute_round_average_profile(
+    annotated_trial_data: pl.DataFrame,
+    metric: str,
+    n_points: int = 100,
+    phase_filter=None,
+    round_ids: Optional[List[int]] = None,
+) -> pd.DataFrame:
     if metric not in annotated_trial_data.columns:
         return pd.DataFrame()
 
     df = annotated_trial_data.to_pandas()
-    phase_list = _normalize_phase_filter(phase_filter)
-    if phase_list is not None:
-        df = df[df['phase'].isin(phase_list)]
-    if round_ids is not None:
-        df = df[df['round_id'].isin(round_ids)]
+    phases = _phase_list(phase_filter)
+    if phases is not None and "phase" in df.columns:
+        df = df[df["phase"].isin(phases)]
+    if round_ids is not None and "round_id" in df.columns:
+        df = df[df["round_id"].isin(round_ids)]
 
-    df = df.dropna(subset=['round_id', 'round_t', metric])
+    # round_t may not exist in compact pipeline; compute if missing
+    if "round_t" not in df.columns:
+        if not {"round_start", "round_end", "timestamp"}.issubset(df.columns):
+            return pd.DataFrame()
+        rs = pd.to_datetime(df["round_start"], utc=True)
+        re = pd.to_datetime(df["round_end"], utc=True)
+        ts = pd.to_datetime(df["timestamp"], utc=True)
+        dur = (re - rs).dt.total_seconds()
+        el = (ts - rs).dt.total_seconds()
+        df["round_t"] = np.where(dur > 0, el / dur, np.nan)
+
+    df = df.dropna(subset=["round_id", "round_t", metric])
     if df.empty:
         return pd.DataFrame()
 
     grid = np.linspace(0.0, 1.0, n_points)
     aligned = []
 
-    for round_id, grp in df.groupby('round_id'):
-        grp = grp.sort_values('round_t')
-        x = grp['round_t'].to_numpy(dtype=float)
-        y = pd.to_numeric(grp[metric], errors='coerce').to_numpy(dtype=float)
+    for rid, grp in df.groupby("round_id"):
+        grp = grp.sort_values("round_t")
+        x = grp["round_t"].to_numpy(dtype=float)
+        y = pd.to_numeric(grp[metric], errors="coerce").to_numpy(dtype=float)
 
         mask = np.isfinite(x) & np.isfinite(y)
-        x = x[mask]
-        y = y[mask]
+        x, y = x[mask], y[mask]
         if len(x) < 2:
             continue
 
         keep = np.r_[True, np.diff(x) > 0]
-        x = x[keep]
-        y = y[keep]
+        x, y = x[keep], y[keep]
         if len(x) < 2:
             continue
 
-        interp = np.interp(grid, x, y)
-        aligned.append(interp)
+        aligned.append(np.interp(grid, x, y))
 
     if not aligned:
         return pd.DataFrame()
 
-    aligned = np.vstack(aligned)
-    return pd.DataFrame({
-        'round_t': grid,
-        'mean': np.nanmean(aligned, axis=0),
-        'std': np.nanstd(aligned, axis=0),
-    })
+    arr = np.vstack(aligned)
+    return pd.DataFrame(
+        {"round_t": grid, "mean": np.nanmean(arr, axis=0), "std": np.nanstd(arr, axis=0)}
+    )
 
 
-def plot_round_average_across_devices(
-    ue_dfs,
-    metric,
-    round_ids=None,
-    n_points=100,
+def plot_round_profiles(
+    ue_dfs: Dict[str, pl.DataFrame],
+    metric: str,
+    run_label: str,
+    paired_metric: Optional[str] = None,
+    *,
+    round_ids: Optional[List[int]] = None,
     phase_filter=None,
-    show_error_bars=False,
-    errorbar_step=10,
-    include_effective_sum=False,
-    effective_on_secondary_axis=True,
-    run_label=None,
-    savepath=None,
-    show=True,
+    n_points: int = 200,
+    layout: str = "same_axes",  # same_axes | subplots
+    include_effective_sum: bool = False,
+    effective_secondary_axis: bool = True,
+    show_error_bars: bool = False,
+    errorbar_step: int = 10,
+    show: bool = True,
 ):
-    phase_list = _normalize_phase_filter(phase_filter)
-    phase_suffix = '' if phase_list is None else f" ({'/'.join(phase_list)})"
-    effective_allowed = metric in THROUGHPUT_METRICS
+    """
+    Unified round-profile plotter:
+      - single metric across devices
+      - or UL/DL paired metric across devices
+      - optional effective sum line for throughput metrics
+    """
+    layout = (layout or "same_axes").lower()
+    phases = _phase_list(phase_filter)
+    phase_suffix = "" if phases is None else f" ({'/'.join(phases)})"
 
+    # build profiles once
+    prof_a, prof_b = {}, {}
+    for dev, df in ue_dfs.items():
+        if "round_id" not in df.columns:
+            continue
+        p1 = compute_round_average_profile(df, metric, n_points=n_points, phase_filter=phase_filter, round_ids=round_ids)
+        if not p1.empty:
+            prof_a[str(dev)] = p1
+        if paired_metric:
+            p2 = compute_round_average_profile(df, paired_metric, n_points=n_points, phase_filter=phase_filter, round_ids=round_ids)
+            if not p2.empty:
+                prof_b[str(dev)] = p2
+
+    if not prof_a and not prof_b:
+        return
+
+    # -------- paired UL/DL mode --------
+    if paired_metric:
+        if layout == "subplots":
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 8), sharex=True)
+            for dev, p in prof_a.items():
+                ax1.plot(p["round_t"], p["mean"], linewidth=2, label=dev)
+            for dev, p in prof_b.items():
+                ax2.plot(p["round_t"], p["mean"], linewidth=2, label=dev)
+
+            ax1.set_ylabel(metric)
+            ax2.set_ylabel(paired_metric)
+            ax2.set_xlabel("Normalized Round Time")
+            ax1.set_title(f"{metric} round profile [{run_label}]{phase_suffix}")
+            ax2.set_title(f"{paired_metric} round profile [{run_label}]{phase_suffix}")
+            ax1.grid(True); ax2.grid(True)
+            ax1.legend(ncol=2, fontsize=8); ax2.legend(ncol=2, fontsize=8)
+        else:
+            fig, ax = plt.subplots(figsize=(11, 5))
+            devices = sorted(set(list(prof_a.keys()) + list(prof_b.keys())))
+            colors = sns.color_palette("tab10", n_colors=max(1, len(devices)))
+            c = {d: colors[i % len(colors)] for i, d in enumerate(devices)}
+
+            for dev, p in prof_a.items():
+                ax.plot(p["round_t"], p["mean"], "-", color=c[dev], linewidth=2, label=f"{dev} UL")
+            for dev, p in prof_b.items():
+                ax.plot(p["round_t"], p["mean"], "--", color=c[dev], linewidth=2, label=f"{dev} DL")
+
+            ax.set_xlabel("Normalized Round Time")
+            ax.set_ylabel(f"{metric} / {paired_metric}")
+            ax.set_title(f"UL/DL round profile [{run_label}]{phase_suffix}")
+            ax.grid(True)
+            ax.legend(ncol=2, fontsize=8)
+
+        fig.tight_layout()
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+        return
+
+    # -------- single-metric mode --------
     fig, ax = plt.subplots(figsize=(11, 5))
-    plotted = 0
-    effective_sum = None
-    round_t_grid = None
-    round_counts = {}
+    effective = None
+    grid = None
 
-    for device_id, ue_df in ue_dfs.items():
-        if 'round_id' not in ue_df.columns:
-            continue
+    for dev, p in prof_a.items():
+        ax.plot(p["round_t"], p["mean"], linewidth=2, label=dev)
 
-        df_dev = ue_df.to_pandas()
-        phase_dev = _normalize_phase_filter(phase_filter)
-        if phase_dev is not None and 'phase' in df_dev.columns:
-            df_dev = df_dev[df_dev['phase'].isin(phase_dev)]
-        if round_ids is not None and 'round_id' in df_dev.columns:
-            df_dev = df_dev[df_dev['round_id'].isin(round_ids)]
-        if 'round_id' in df_dev.columns:
-            round_counts[str(device_id)] = int(df_dev['round_id'].nunique())
-
-        profile = compute_round_average_profile(
-            ue_df,
-            metric,
-            n_points=n_points,
-            phase_filter=phase_filter,
-            round_ids=round_ids,
-        )
-        if profile.empty:
-            continue
-
-        ax.plot(profile['round_t'], profile['mean'], label=str(device_id), linewidth=2)
         if show_error_bars:
             step = max(1, int(errorbar_step))
-            idx = np.arange(0, len(profile), step)
+            idx = np.arange(0, len(p), step)
             ax.errorbar(
-                profile['round_t'].to_numpy()[idx],
-                profile['mean'].to_numpy()[idx],
-                yerr=profile['std'].to_numpy()[idx],
-                fmt='none',
+                p["round_t"].to_numpy()[idx],
+                p["mean"].to_numpy()[idx],
+                yerr=p["std"].to_numpy()[idx],
+                fmt="none",
                 alpha=0.35,
                 capsize=2,
             )
 
-        if include_effective_sum and effective_allowed:
-            if effective_sum is None:
-                effective_sum = np.zeros(len(profile), dtype=float)
-                round_t_grid = profile['round_t'].to_numpy(dtype=float)
-            effective_sum += profile['mean'].to_numpy(dtype=float)
-        plotted += 1
+        if include_effective_sum and metric in THROUGHPUT_METRICS:
+            if effective is None:
+                effective = np.zeros(len(p), dtype=float)
+                grid = p["round_t"].to_numpy(dtype=float)
+            effective += p["mean"].to_numpy(dtype=float)
 
-    if plotted == 0:
-        plt.close(fig)
-        return
-
-    handles, labels = ax.get_legend_handles_labels()
-    if include_effective_sum and effective_allowed and effective_sum is not None:
-        if effective_on_secondary_axis:
+    if effective is not None:
+        if effective_secondary_axis:
             ax2 = ax.twinx()
-            eff_line = ax2.plot(
-                round_t_grid,
-                effective_sum,
-                color='black',
-                linestyle='--',
-                linewidth=2,
-                label='effective total',
-            )
-            ax2.set_ylabel(f'effective {metric}')
-            handles += eff_line
-            labels += ['effective total']
+            ax2.plot(grid, effective, "k--", linewidth=2, label="effective total")
+            ax2.set_ylabel(f"effective {metric}")
         else:
-            eff_line = ax.plot(
-                round_t_grid,
-                effective_sum,
-                color='black',
-                linestyle='--',
-                linewidth=2,
-                label='effective total',
-            )
-            handles += eff_line
-            labels += ['effective total']
+            ax.plot(grid, effective, "k--", linewidth=2, label="effective total")
 
-    ax.set_xlabel('Normalized Round Time')
+    ax.set_xlabel("Normalized Round Time")
     ax.set_ylabel(metric)
-    run_suffix = f' [{run_label}]' if run_label else ''
-    ax.set_title(f'Round-averaged profile by device: {metric}{phase_suffix}{run_suffix}')
+    ax.set_title(f"{metric} round profile [{run_label}]{phase_suffix}")
     ax.grid(True)
-    ax.legend(handles, labels, ncol=2, fontsize=8)
-
-    if round_counts:
-        counts_text = ', '.join(f'{dev}:{cnt}' for dev, cnt in sorted(round_counts.items()))
-        summary_text = f'devices={plotted} | rounds per device: {counts_text}'
-        ax.text(
-            0.01,
-            0.01,
-            summary_text,
-            transform=ax.transAxes,
-            fontsize=8,
-            va='bottom',
-            ha='left',
-            bbox=dict(facecolor='white', alpha=0.75, edgecolor='none'),
-        )
-
-    if savepath:
-        fig.savefig(savepath, format='svg', dpi=300, bbox_inches='tight')
-
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-
-
-def plot_ul_dl_round_average_across_devices(
-    ue_dfs,
-    ul_metric,
-    dl_metric,
-    n_points=100,
-    phase_filter=None,
-    layout='same_axes',
-    run_label=None,
-    savepath=None,
-    show=True,
-):
-    phase_list = _normalize_phase_filter(phase_filter)
-    phase_suffix = '' if phase_list is None else f" ({'/'.join(phase_list)})"
-    layout = (layout or 'same_axes').lower()
-
-    # Collect profiles once for UL/DL.
-    ul_profiles = {}
-    dl_profiles = {}
-    for device_id, ue_df in ue_dfs.items():
-        if 'round_id' not in ue_df.columns:
-            continue
-        ul_profile = compute_round_average_profile(
-            ue_df,
-            ul_metric,
-            n_points=n_points,
-            phase_filter=phase_filter,
-            round_ids=None,
-        )
-        dl_profile = compute_round_average_profile(
-            ue_df,
-            dl_metric,
-            n_points=n_points,
-            phase_filter=phase_filter,
-            round_ids=None,
-        )
-        if not ul_profile.empty:
-            ul_profiles[str(device_id)] = ul_profile
-        if not dl_profile.empty:
-            dl_profiles[str(device_id)] = dl_profile
-
-    if not ul_profiles and not dl_profiles:
-        return
-
-    run_suffix = f' [{run_label}]' if run_label else ''
-
-    if layout == 'subplots':
-        fig, (ax_ul, ax_dl) = plt.subplots(2, 1, figsize=(11, 8), sharex=True)
-        for device_id, prof in ul_profiles.items():
-            ax_ul.plot(prof['round_t'], prof['mean'], linewidth=2, label=device_id)
-        for device_id, prof in dl_profiles.items():
-            ax_dl.plot(prof['round_t'], prof['mean'], linewidth=2, label=device_id)
-
-        ax_ul.set_ylabel(ul_metric)
-        ax_ul.set_title(f'UL round-averaged profile by device{phase_suffix}{run_suffix}')
-        ax_ul.grid(True)
-        ax_ul.legend(ncol=2, fontsize=8)
-
-        ax_dl.set_xlabel('Normalized Round Time')
-        ax_dl.set_ylabel(dl_metric)
-        ax_dl.set_title(f'DL round-averaged profile by device{phase_suffix}{run_suffix}')
-        ax_dl.grid(True)
-        ax_dl.legend(ncol=2, fontsize=8)
-    else:
-        fig, ax = plt.subplots(figsize=(11, 5))
-        colors = sns.color_palette('tab10', n_colors=max(len(ul_profiles), len(dl_profiles), 1))
-        device_order = sorted(set(list(ul_profiles.keys()) + list(dl_profiles.keys())))
-        color_map = {dev: colors[i % len(colors)] for i, dev in enumerate(device_order)}
-
-        for device_id, prof in ul_profiles.items():
-            ax.plot(
-                prof['round_t'],
-                prof['mean'],
-                linewidth=2,
-                linestyle='-',
-                color=color_map[device_id],
-                label=f'{device_id} UL',
-            )
-        for device_id, prof in dl_profiles.items():
-            ax.plot(
-                prof['round_t'],
-                prof['mean'],
-                linewidth=2,
-                linestyle='--',
-                color=color_map[device_id],
-                label=f'{device_id} DL',
-            )
-
-        ax.set_xlabel('Normalized Round Time')
-        ax.set_ylabel(f'{ul_metric} / {dl_metric}')
-        ax.set_title(f'UL/DL round-averaged profile by device{phase_suffix}{run_suffix}')
-        ax.grid(True)
-        ax.legend(ncol=2, fontsize=8)
+    ax.legend(ncol=2, fontsize=8)
 
     fig.tight_layout()
-    if savepath:
-        fig.savefig(savepath, format='svg', dpi=300, bbox_inches='tight')
-
     if show:
         plt.show()
     else:
         plt.close(fig)
 
+# =========================
+# Plotting
+# =========================
 
-def plot_round_examples_and_average(annotated_trial_data, metric, round_ids=None, n_points=100, phase_filter=None, device_label=None):
-    df = annotated_trial_data.to_pandas()
-    phase_list = _normalize_phase_filter(phase_filter)
-    if phase_list is not None:
-        df = df[df['phase'].isin(phase_list)]
-    if round_ids is not None:
-        df = df[df['round_id'].isin(round_ids)]
-
-    if device_label is None:
-        device_label = 'device'
-    phase_suffix = '' if phase_list is None else f" ({'/'.join(phase_list)})"
-
-    if not df.empty and metric in df.columns:
-        plt.figure(figsize=(11, 5))
-        for rid, grp in df.groupby('round_id'):
-            grp = grp.sort_values('round_elapsed_s')
-            plt.plot(grp['round_elapsed_s'], grp[metric], alpha=0.5, label=f'round {rid}')
-        plt.xlabel('Round Time (s)')
-        plt.ylabel(metric)
-        plt.title(f'Per-round traces: {metric} [{device_label}]{phase_suffix}')
-        plt.grid(True)
-        plt.legend(ncol=2, fontsize=8)
-        plt.show()
-
-    profile = compute_round_average_profile(
-        annotated_trial_data,
-        metric,
-        n_points=n_points,
-        phase_filter=phase_filter,
-        round_ids=round_ids,
-    )
-    if not profile.empty:
-        plt.figure(figsize=(11, 5))
-        plt.plot(profile['round_t'], profile['mean'], color='black', label='mean')
-        plt.fill_between(
-            profile['round_t'],
-            profile['mean'] - profile['std'],
-            profile['mean'] + profile['std'],
-            alpha=0.2,
-            color='gray',
-            label='mean ± std',
-        )
-        plt.xlabel('Normalized Round Time')
-        plt.ylabel(metric)
-        plt.title(f'Round-averaged profile: {metric} [{device_label}]{phase_suffix}')
-        plt.grid(True)
-        plt.legend()
-        plt.show()
-
-
-def filter_out_inactivity(agg_metrics_file, trial_data, max_gap_s=200, return_rounds=False, annotate_phases=False):
-    trial_data = trial_data.sort('timestamp')
-    rounds = build_round_windows(agg_metrics_file, max_gap_s=max_gap_s)
-    total_rows = len(pd.read_csv(agg_metrics_file))
-    # print(f'Detected {total_rows-len(rounds)} period(s) of downtime')
-
-    if rounds.empty:
-        if return_rounds:
-            return trial_data, rounds
-        return trial_data
-
-    intervals = pl.from_pandas(rounds[['round_start', 'round_end']])
-    ts_dtype = trial_data.schema.get('timestamp')
-    if ts_dtype is not None:
-        intervals = intervals.with_columns(
-            pl.col('round_start').cast(ts_dtype),
-            pl.col('round_end').cast(ts_dtype),
-        )
-    intervals = intervals.set_sorted('round_start')
-
-    original_size = len(trial_data)
-    filtered = trial_data.join_asof(
-        intervals,
-        left_on='timestamp',
-        right_on='round_start',
-        strategy='backward',
-        check_sortedness=False,
-    )
-    filtered = filtered.filter(
-        pl.col('round_start').is_not_null() &
-        (pl.col('timestamp') <= pl.col('round_end'))
-    ).drop('round_start', 'round_end')
-
-    # print(f'Filtered out {original_size-len(filtered)} data points collected during downtime')
-
-    if annotate_phases:
-        filtered = annotate_telemetry_with_rounds_and_phases(filtered, rounds)
-
-    if return_rounds:
-        return filtered, rounds
-    return filtered
-
-
-def _apply_round_filter_to_ue_dfs(exp_path, ue_dfs, max_gap_s=200, annotate_phases=False, cache_dir=None, use_cache=True):
-    agg_metrics_file = Path(exp_path) / 'train_agg_metrics.csv'
-    if not agg_metrics_file.exists():
-        return ue_dfs, pd.DataFrame()
-
-    filtered_ue_dfs = {}
-    rounds = pd.DataFrame()
-    exp_name = Path(exp_path).name
-
-    for idx, (rnti, ue_df) in enumerate(ue_dfs.items()):
-        round_fp = None
-        ue_fp = None
-        if cache_dir is not None:
-            round_fp, ue_fp = _cache_paths(cache_dir, exp_name, rnti)
-
-        if use_cache and ue_fp is not None and ue_fp.exists():
-            cached_df = pl.read_csv(str(ue_fp), try_parse_dates=True)
-            if 'round_id' in cached_df.columns:
-                cached_df = cached_df.with_columns(pl.col('round_id').cast(pl.Int64))
-            filtered_ue_dfs[rnti] = cached_df
-            if rounds.empty and round_fp is not None and round_fp.exists():
-                rounds = pd.read_csv(round_fp)
-                for dt_col in [
-                    'timestamp', 'round_start', 'round_end',
-                    'downlink_start', 'downlink_end',
-                    'training_start', 'training_end',
-                    'evaluation_start', 'evaluation_end',
-                    'uplink_start', 'uplink_end',
-                    'idle_start', 'idle_end',
-                ]:
-                    if dt_col in rounds.columns:
-                        rounds[dt_col] = pd.to_datetime(rounds[dt_col], utc=True, errors='coerce')
-            continue
-
-        if idx == 0:
-            filtered_df, rounds = filter_out_inactivity(
-                str(agg_metrics_file),
-                ue_df,
-                max_gap_s=max_gap_s,
-                return_rounds=True,
-                annotate_phases=annotate_phases,
-            )
-        else:
-            filtered_df = filter_out_inactivity(
-                str(agg_metrics_file),
-                ue_df,
-                max_gap_s=max_gap_s,
-                return_rounds=False,
-                annotate_phases=annotate_phases,
-            )
-
-        if ue_fp is not None:
-            filtered_df.write_csv(str(ue_fp))
-        if round_fp is not None and not round_fp.exists() and not rounds.empty:
-            rounds.to_csv(round_fp, index=False)
-
-        filtered_ue_dfs[rnti] = filtered_df
-
-    return filtered_ue_dfs, rounds
-
-def sort_telemetry_into_trials(runs, telemetry_df, runs_dir, parser, file):
-    telemetry_df=telemetry_df.with_columns(timestamp=pl.from_epoch(telemetry_df['timestamp'], time_unit="ms").dt.replace_time_zone(time_zone="UTC"))
-
-    for _, trial in runs.iterrows():
-        try:
-            telemetry_df = telemetry_df.filter(pl.col('timestamp') >= trial['Created At']) # we can always move forward since all datasets are sorted by datetime
-        except TypeError as exception:
-            print(f'\033[91mException: {exception}. Data for trial {trial['Run ID']} cannot be parsed.\033[0m')
-            continue
-
-        if telemetry_df.is_empty():
-            print(f'Finished parsing {file}')
-            return
-        
-        trial_data = telemetry_df.filter(pl.col('timestamp') <= trial['Finished At'])
-        if not trial_data.is_empty():
-            # Look for a matching trial run directory (if provided)
-            run_dir = None
-            if Path(runs_dir).exists():
-                for item in Path(runs_dir).iterdir():
-                    if str(trial['Run ID']) in item.name:
-                        print(f'Found data for trial {trial['Run ID']}')
-                        run_dir = item
-                        break
-            else:
-                print(f'Directory with trials {runs_dir} does not exist')
-
-            # If we found a trial dir, filter out inactivity using its agg metrics
-            if run_dir:
-                trial_data = filter_out_inactivity(f'{run_dir}/train_agg_metrics.csv', trial_data)
-                if SAVE_LOCALLY:
-                    run_dir = run_dir.name
-
-                # Create a save path and save the filtered telemetry
-                savepath = f"{run_dir}/phys_layer/"
-                Path(savepath).mkdir(parents=True, exist_ok=True)
-
-                parser(trial_data, savepath)
-            else:
-                print(f'Warning: Run dir not found for {trial["Run ID"]}; not saving telemetry')
-
-
-def read_data_from_csvs(main_fp, secondary_fp, columns=None):
-    if secondary_fp:
-        df = pl.read_csv(main_fp, columns=['timestamp'], try_parse_dates=True).with_row_index('segment')
-
-        if columns is not None:
-            secondary_df = pl.read_csv(secondary_fp, columns=['segment']+columns)
-        else:
-            secondary_df = pl.read_csv(secondary_fp)
-        df = df.join(secondary_df, on='segment', how='right') # here
-    else:
-        if columns is not None:
-            df = pl.read_csv(main_fp, columns=['timestamp']+columns, try_parse_dates=True)
-        else:
-            df = pl.read_csv(main_fp, try_parse_dates=True)
-
-    return df
-
-def plot_rntis_by_time(ue_dfs, metric, metric_units, run_id, pts_to_plot, pts_offset=0, savepath=None, show=True, non_zero_metrics=None, min_thresholds=None):
-    fig, ax = plt.subplots(figsize=(10, 6))
+def _distribution_df(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: Dict[str, float], paired_metric: Optional[str]):
     rows = []
-    pts_offset = max(0, int(pts_offset))
+    for rnti, df in ue_dfs.items():
+        for v in _metric_values(df, metric, thresholds):
+            row = {"device": str(rnti), "value": v, "series": metric}
+            if paired_metric:
+                row["direction"] = "UL"
+            rows.append(row)
 
-    for rnti, ue_df in ue_dfs.items():
-        values = _metric_values(ue_df, metric, non_zero_metrics, min_thresholds=min_thresholds)
-        if not values:
-            continue
+        if paired_metric and paired_metric in df.columns:
+            for v in _metric_values(df, paired_metric, thresholds):
+                rows.append({"device": str(rnti), "value": v, "series": paired_metric, "direction": "DL"})
 
-        series = ue_df.select(['timestamp', metric]).to_pandas()
-        if metric in _normalize_non_zero_metrics(non_zero_metrics):
-            series[metric] = pd.to_numeric(series[metric], errors='coerce')
-            series = series[(series[metric] > 0) & (~np.isclose(series[metric], 0.0, atol=1e-12))]
-        metric_threshold = _normalize_min_thresholds(min_thresholds).get(metric)
-        if metric_threshold is not None:
-            series[metric] = pd.to_numeric(series[metric], errors='coerce')
-            series = series[series[metric] >= metric_threshold]
+    return pd.DataFrame(rows)
 
-        series = series.dropna(subset=[metric]).iloc[pts_offset: pts_offset + pts_to_plot]
-        if series.empty:
-            continue
 
-        for _, row in series.iterrows():
-            rows.append({'timestamp': row['timestamp'], 'value': row[metric], 'device': str(rnti)})
+def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cfg: PlotConfig, paired_metric: Optional[str] = None):
+    thresholds = _norm_thresholds(cfg.min_thresholds)
 
-    if not rows:
-        plt.close(fig)
+    if cfg.plot_mode == "time":
+        fig, ax = plt.subplots(figsize=(10, 6))
+        rows = []
+        for rnti, df in ue_dfs.items():
+            if metric not in df.columns:
+                continue
+            pdf = df.select(["timestamp", metric]).to_pandas().dropna(subset=[metric])
+            t = thresholds.get(metric)
+            if t is not None:
+                pdf[metric] = pd.to_numeric(pdf[metric], errors="coerce")
+                pdf = pdf[pdf[metric] >= t]
+            pdf = pdf.iloc[cfg.pts_offset: cfg.pts_offset + cfg.pts_to_plot]
+            for _, r in pdf.iterrows():
+                rows.append({"timestamp": r["timestamp"], "value": r[metric], "device": str(rnti)})
+
+        if not rows:
+            plt.close(fig)
+            return
+
+        plot_df = pd.DataFrame(rows)
+        sns.scatterplot(data=plot_df, x="timestamp", y="value", hue="device", alpha=0.8, ax=ax)
+        ax.set_title(f"{metric} over time [{run_label}]")
+        ax.grid(True)
+        if cfg.show_plots:
+            plt.show()
+        else:
+            plt.close(fig)
         return
 
-    plot_df = pd.DataFrame(rows)
-    sns.scatterplot(
-        data=plot_df,
-        x='timestamp',
-        y='value',
-        hue='device',
-        # jitter=False,
-        # dodge=False,
-        alpha=0.8,
-        size=3,
-        ax=ax,
-    )
-
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel(metric + metric_units)
-    ax.set_title(f'{metric} over time for all UEs, trial {run_id}')
-    ax.legend()
-    ax.grid(True)
-
-    if savepath:
-        fig.savefig(savepath, format='svg', dpi=300, bbox_inches='tight')
-
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-
-def plot_rntis_distribution(
-    ue_dfs,
-    metric,
-    metric_units,
-    run_id,
-    plot_type='kde',
-    paired_metric=None,
-    split_violin=True,
-    savepath=None,
-    show=True,
-    non_zero_metrics=None,
-    min_thresholds=None,
-):
-    df = _build_distribution_dataframe(
-        ue_dfs,
-        metric,
-        paired_metric=paired_metric,
-        non_zero_metrics=non_zero_metrics,
-        min_thresholds=min_thresholds,
-    )
+    # distribution mode
+    df = _distribution_df(ue_dfs, metric, thresholds, paired_metric)
     if df.empty:
         return
 
-    kind_map = {
-        'violin': 'violin',
-        'box': 'box',
-        'count': 'count',
-        'bar': 'bar',
-        # Use bar as a catplot-compatible fallback for previous kde option.
-        'kde': 'bar',
-    }
-    kind = kind_map.get(plot_type, 'violin')
+    kind_map = {"violin": "violin", "box": "box", "count": "count", "bar": "bar", "kde": "bar"}
+    kind = kind_map.get(cfg.distribution_plot_type, "violin")
 
-    catplot_kwargs = {
-        'data': df,
-        'x': 'device',
-        'kind': kind,
-        'height': 6,
-        'aspect': 1.8,
-    }
+    kwargs = {"data": df, "x": "device", "kind": kind, "height": 6, "aspect": 1.8}
+    if paired_metric:
+        kwargs["hue"] = "direction"
+    if kind in {"violin", "box", "bar"}:
+        kwargs["y"] = "value"
+    if kind == "violin":
+        kwargs.update({"inner": "quart", "cut": 0})
+        if paired_metric:
+            kwargs.update({"split": True, "gap": 0.1})
 
-    if paired_metric is not None:
-        catplot_kwargs['hue'] = 'direction'
-
-    if kind in {'violin', 'box', 'bar'}:
-        catplot_kwargs['y'] = 'value'
-
-    if kind == 'violin':
-        catplot_kwargs['inner'] = 'quart'
-        catplot_kwargs['cut'] = 0
-        if paired_metric is not None:
-            catplot_kwargs['split'] = split_violin
-        catplot_kwargs['gap'] = 0.1
-
-    try:
-        g = sns.catplot(**catplot_kwargs)
-    except TypeError:
-        # Fallback for seaborn versions that do not support some kwargs like `gap`.
-        catplot_kwargs.pop('gap', None)
-        g = sns.catplot(**catplot_kwargs)
-
+    g = sns.catplot(**kwargs)
     ax = g.ax
-    if paired_metric is not None:
-        ax.set_ylabel(f'{metric} / {paired_metric}{metric_units}')
-        ax.set_title(f'{metric} vs {paired_metric} by device, trial {run_id}')
-    else:
-        ax.set_ylabel(metric + metric_units)
-        ax.set_title(f'{metric} distribution for all UEs, trial {run_id}')
-    ax.set_xlabel('Device')
+    title = f"{metric} distribution [{run_label}]" if not paired_metric else f"{metric} vs {paired_metric} [{run_label}]"
+    ax.set_title(title)
     ax.grid(True)
 
-    if savepath:
-        g.savefig(savepath, format='svg', dpi=300, bbox_inches='tight')
-
-    if show:
+    if cfg.show_plots:
         plt.show()
     else:
         plt.close(g.fig)
 
-def plot_agg_distribution(df_agg, metric, metric_units):
-    plt.figure(figsize=(10, 6))
-    plt.hist(df_agg[metric])
-    
-    # plt.xlabel('Time (s)')
-    plt.ylabel(metric + metric_units)
-    plt.title(f'agg {metric} distribution')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
 
-def plot_agg_rntis_by_time(df_agg, metric, metric_units, pts_to_plot):
-    plt.figure(figsize=(10, 6))
-    interval = min(pts_to_plot, len(df_agg))
-    plt.scatter(df_agg['timestamp'][:interval], df_agg[metric][:interval], marker='.')
-    plt.xlabel('Time (s)')
-    plt.ylabel(metric + metric_units)
-    plt.title(f'agg {metric} over time')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+# =========================
+# Experiment selection + run labels
+# =========================
 
-def plot_over_trials(agg_dfs, metric, metric_units):
-    plt.figure(figsize=(10, 6))
-    for run_id, agg_df in agg_dfs.items():
-        plt.hist(agg_df[metric], label=run_id)
-    
-    # plt.xlabel('Time (s)')
-    plt.ylabel(metric + metric_units)
-    plt.title(f'{metric} distribution across trials')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-def _metrics_to_load(metrics):
-    if metrics is None:
-        return None
-
-    derived = set(THROUGHPUT_METRICS)
-    load_metrics = [m for m in metrics if m not in derived]
-    if any(m in derived for m in metrics):
-        load_metrics.extend(['ulBytes', 'dlBytes'])
-
-    # preserve order while removing duplicates
-    deduped = list(dict.fromkeys(load_metrics))
-    return deduped
+def build_experiment_index(root_dir: Path) -> List[dict]:
+    exps = []
+    for exp in root_dir.iterdir():
+        if exp.is_dir():
+            exps.append({"path": exp, **parse_experiment_name(exp.name)})
+    return exps
 
 
-def add_throughput_columns(ue_df):
-    required = {'timestamp', 'ulBytes', 'dlBytes'}
-    if not required.issubset(set(ue_df.columns)):
-        return ue_df
-
-    ue_df = ue_df.with_columns(
-        # Some exports store counters as strings (and occasionally include commas).
-        ul_bytes_num=pl.col('ulBytes').cast(pl.Utf8).str.replace_all(',', '').cast(pl.Float64, strict=False),
-        dl_bytes_num=pl.col('dlBytes').cast(pl.Utf8).str.replace_all(',', '').cast(pl.Float64, strict=False),
-    ).sort('timestamp').with_columns(
-        delta_t_s=pl.col('timestamp').diff().dt.total_seconds(),
-        ul_bytes_delta=pl.col('ul_bytes_num').diff(),
-        dl_bytes_delta=pl.col('dl_bytes_num').diff(),
-    ).with_columns(
-        # Counter resets or duplicate timestamps create invalid/negative throughput; ignore those points.
-        ul_throughput_bps=pl.when(
-            (pl.col('delta_t_s') > 0) & (pl.col('ul_bytes_delta') >= 0)
-        ).then((pl.col('ul_bytes_delta') * 8) / pl.col('delta_t_s')).otherwise(None),
-        dl_throughput_bps=pl.when(
-            (pl.col('delta_t_s') > 0) & (pl.col('dl_bytes_delta') >= 0)
-        ).then((pl.col('dl_bytes_delta') * 8) / pl.col('delta_t_s')).otherwise(None),
-    ).with_columns(
-        ul_throughput_mbps=pl.col('ul_throughput_bps') / 1_000_000,
-        dl_throughput_mbps=pl.col('dl_throughput_bps') / 1_000_000,
-    ).drop('ul_bytes_num', 'dl_bytes_num')
-
-    return ue_df
-    return ue_df
+def filter_experiments(experiments: List[dict], filters: Dict[str, Any]) -> List[dict]:
+    out = []
+    for exp in experiments:
+        keep = True
+        for k, v in filters.items():
+            ev = exp.get(k)
+            if ev is None:
+                continue
+            if isinstance(v, list) and ev not in v:
+                keep = False
+                break
+            if not isinstance(v, list) and ev != v:
+                keep = False
+                break
+        if keep:
+            out.append(exp)
+    return out
 
 
-def summarize_throughput_by_device(ue_dfs, run_label, non_zero_metrics=None, min_thresholds=None):
+def run_label_for(exp: dict, sweep: Optional[str]) -> str:
+    if sweep:
+        return str(format_sweep_label(sweep, exp[sweep], exp))
+    return exp["path"].name
+
+
+# =========================
+# Pipeline
+# =========================
+
+def summarize_throughput(ue_dfs: Dict[str, pl.DataFrame], run_label: str, thresholds: Dict[str, float]):
     rows = []
-    for rnti, ue_df in ue_dfs.items():
-        if not {'ul_throughput_mbps', 'dl_throughput_mbps'}.issubset(set(ue_df.columns)):
+    for rnti, df in ue_dfs.items():
+        if not {"ul_throughput_mbps", "dl_throughput_mbps"}.issubset(df.columns):
             continue
-
-        ul_values = _metric_values(ue_df, 'ul_throughput_mbps', non_zero_metrics, min_thresholds=min_thresholds)
-        dl_values = _metric_values(ue_df, 'dl_throughput_mbps', non_zero_metrics, min_thresholds=min_thresholds)
-
-        ul_avg = pd.Series(ul_values).mean() if ul_values else None
-        dl_avg = pd.Series(dl_values).mean() if dl_values else None
-        ul_std = pd.Series(ul_values).std() if len(ul_values) > 1 else None
-        dl_std = pd.Series(dl_values).std() if len(dl_values) > 1 else None
+        ul = _metric_values(df, "ul_throughput_mbps", thresholds)
+        dl = _metric_values(df, "dl_throughput_mbps", thresholds)
         rows.append({
-            'run_id': run_label,
-            'device': rnti,
-            'avg_ul_throughput_mbps': ul_avg,
-            'std_ul_throughput_mbps': ul_std,
-            'avg_dl_throughput_mbps': dl_avg,
-            'std_dl_throughput_mbps': dl_std,
+            "run_id": run_label,
+            "device": rnti,
+            "avg_ul_throughput_mbps": pd.Series(ul).mean() if ul else None,
+            "std_ul_throughput_mbps": pd.Series(ul).std() if len(ul) > 1 else None,
+            "avg_dl_throughput_mbps": pd.Series(dl).mean() if dl else None,
+            "std_dl_throughput_mbps": pd.Series(dl).std() if len(dl) > 1 else None,
         })
-
     return rows
 
 
-def gather_metrics_by_rnti(savepath, metrics=None):
-    try:
-        phys_layer = savepath.joinpath('phys_layer')
-    except FileNotFoundError as exception:
-        print(f'phys_layer directory not found on savepath {savepath}. Exception: {exception}')
-        return
-    
-    ue_dfs = {}
-    load_metrics = _metrics_to_load(metrics)
-    for file in phys_layer.iterdir():
-        filename = file.name
-        if 'ue' in filename and 'common' not in filename:
-            rnti = (filename.split('_')[1]).split('.')[0]
-            ue_df = read_data_from_csvs(str(phys_layer)+'/common.csv', str(file), load_metrics)
-            ue_dfs[rnti] = add_throughput_columns(ue_df)
-    
-    return ue_dfs
+def run_experiment(exp: dict, cfg: PlotConfig):
+    label = run_label_for(exp, cfg.sweep)
+    thresholds = _norm_thresholds(cfg.min_thresholds)
 
-def combine_rntis(savepath):
-    try:
-        ue_dfs = gather_metrics_by_rnti(savepath)
-    except FileNotFoundError as exception:
-        print(f'phys_layer directory not found on savepath {savepath}. Exception: {exception}')
-        return
-    
-    update = True
-    while update:
-        update = False
-        order = sorted(ue_dfs, key=lambda rnti: ue_dfs[rnti]['segment'][-1]) # sort by last element of segment
-        last_overall = ue_dfs[order[-1]]['segment'][-1]
-        for rnti in order:
-            if rnti not in ue_dfs: # may have been merged and no longer exist
-                rnti = [name for name in ue_dfs if rnti in name][0] # there should only be one match
-            print(f'{rnti, ue_dfs[rnti]['segment'][0], ue_dfs[rnti]['segment'][-1]}')
-            first_pt = ue_dfs[rnti]['segment'][0]
-            if first_pt != 0:
-                possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][-1] <= first_pt]
-                if len(possible_pairs) == 1:
-                    update=True
-                    pair = possible_pairs[0]
-                    new_name = pair+'-'+rnti
-                    ue_dfs[new_name] = pl.concat([ue_dfs[pair],ue_dfs[rnti]], how="vertical_relaxed")
-                    ue_dfs[new_name].drop('timestamp').write_csv(f'{savepath}/phys_layer/ue_{new_name}.csv')
-                    os.remove(f'{savepath}/phys_layer/ue_{rnti}.csv')
-                    os.remove(f'{savepath}/phys_layer/ue_{pair}.csv')
-                    del ue_dfs[pair]
-                    del ue_dfs[rnti]
-                    rnti = new_name
-            last_pt = ue_dfs[rnti]['segment'][-1]
-            if last_pt != last_overall:
-                possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][0] >= last_pt] # TODO fix
-                if len(possible_pairs) == 1:
-                    update=True
-                    pair = possible_pairs[0]
-                    new_name = rnti+'-'+pair
-                    ue_dfs[new_name] = pl.concat([ue_dfs[rnti],ue_dfs[pair]], how="vertical_relaxed")
-                    ue_dfs[new_name].drop('timestamp').write_csv(f'{savepath}/phys_layer/ue_{new_name}.csv')
-                    os.remove(f'{savepath}/phys_layer/ue_{rnti}.csv')
-                    os.remove(f'{savepath}/phys_layer/ue_{pair}.csv')
-                    del ue_dfs[pair]
-                    del ue_dfs[rnti]
-                # print(f'{rnti} possible pairs: {possible_pairs}')
+    ue_dfs = load_experiment_data(exp["path"], cfg.metrics)
+    if not ue_dfs:
+        print(f"[{label}] no UE data")
+        return []
 
-def get_runs_list(path, name, cols, start_col, end_col):
-    runs_brief = pd.DataFrame()
-    for file in Path(path).iterdir():
-        filename = file.name
-        if name in filename:
-            try:
-                runs = pd.read_csv(file)#, columns=['Run ID', 'Created At', 'Finished At'])
-                runs_brief = runs.loc[:, cols]
-                runs_brief[start_col] = pd.to_datetime(runs_brief[start_col].str.strip(),utc=True)
-                runs_brief[end_col] = pd.to_datetime(runs_brief[end_col].str.strip(),utc=True)
-                runs_brief.name = filename
-            except ValueError:
-                print(f'ValueError getting runs list for {path.name,filename}')
-    
-    if runs_brief.empty:
-        print([file.name for file in Path(path).iterdir()])
-        raise FileNotFoundError('No file containing list of runs in directory')
-    
-    return runs_brief
+    ue_dfs, _rounds = apply_round_processing(exp["path"], ue_dfs, cfg)
 
-def build_experiment_index(root_dir):
-    experiments = []
-    for exp in Path(root_dir).iterdir():
-        if not exp.is_dir():
-            continue
-        params = parse_experiment_name(exp.name)
-        experiments.append({'path': exp, **params})
-    return experiments
-
-
-def filter_experiments(experiment_paths, filters):
-    return [
-        exp for exp in experiment_paths
-        if all(
-            exp.get(k) is None or (exp.get(k) in v if isinstance(v, list) else exp.get(k) == v)
-            for k, v in filters.items()
-        )
-    ]
-
-
-def _extract_run_id(exp):
-    if exp.get('run_id') is not None:
-        return str(exp.get('run_id'))
-
-    name = exp['path'].name
-    match = re.search(r'(^|_)(\d{6,})(_|$)', name)
-    if match:
-        return match.group(2)
-    return None
-
-
-def _format_run_label(exp, sweep_param=None):
-    if sweep_param:
-        base = format_sweep_label(sweep_param, exp[sweep_param], exp)
-    else:
-        base = exp['path'].name
-
-    run_id = _extract_run_id(exp)
-    nodes = exp.get('nodes')
-    suffix_parts = []
-
-    if nodes is not None and str(nodes) not in str(base):
-        suffix_parts.append(str(nodes))
-
-    if run_id is not None and run_id not in str(base):
-        suffix_parts.append(f'RunID:{run_id}')
-
-    if suffix_parts:
-        return f"{base}, {', '.join(suffix_parts)}"
-    return str(base)
-
-
-def _compute_metric_mean_std(ue_dfs, metric, non_zero_metrics=None, min_thresholds=None):
-    values = []
-    for _, ue_df in ue_dfs.items():
-        values.extend(_metric_values(
-            ue_df,
-            metric,
-            non_zero_metrics=non_zero_metrics,
-            min_thresholds=min_thresholds,
-        ))
-
-    if not values:
-        return None, None
-
-    series = pd.Series(values)
-    mean = series.mean()
-    std = series.std() if len(series) > 1 else None
-    return mean, std
-
-def _run_phys_layer_plotting(experiments, metrics, **kwargs):
-    defaults = dict(
-        plot_mode='distribution',
-        distribution_plot_type='violin',
-        pair_ul_dl=False,
-        non_zero_metrics=None,
-        min_thresholds=None,
-        pts_to_plot=1000,
-        pts_offset=5000,
-        save_dir=None,
-        filter_rounds_in_memory=False,
-        annotate_round_phases=False,
-        round_gap_s=200,
-        round_ids_to_plot=None,
-        round_phase_to_plot=None,
-        round_profile_device=None,
-        round_profile_all_devices=False,
-        round_profile_points=100,
-        round_profile_error_bars=False,
-        round_profile_errorbar_step=10,
-        round_profile_ul_dl_combined=False,
-        round_profile_ul_dl_layout='same_axes',
-        round_profile_include_effective=False,
-        round_profile_effective_secondary_axis=True,
-        save_round_profiles=False,
-        round_filter_cache_dir=None,
-        use_round_filter_cache=True,
-    )
-
-    params = {**defaults, **kwargs}
-
-    non_zero_metrics = _normalize_non_zero_metrics(params['non_zero_metrics'])
-    min_thresholds = _normalize_min_thresholds(params['min_thresholds'])
-    avgs = {metric: {} for metric in metrics}
-    stds = {metric: {} for metric in metrics}
-    throughput_summary = []
-
-    if params['save_dir'] is None:
-        print(f'Plotting phys layer data for {len(experiments)} experiment(s)')
-    else:
-        print(f'Generating saved phys-layer plots for {len(experiments)} experiment(s)')
-
-    for exp in experiments:
-        path = exp['path']
-        combine_rntis(path)
-        ue_dfs = gather_metrics_by_rnti(path, metrics)
-        if not ue_dfs:
+    processed = set()
+    for metric in cfg.metrics:
+        if metric in processed:
             continue
 
-        rounds = pd.DataFrame()
-        if params['filter_rounds_in_memory']:
-            ue_dfs, rounds = _apply_round_filter_to_ue_dfs(
-                path,
-                ue_dfs,
-                max_gap_s=params['round_gap_s'],
-                annotate_phases=params['annotate_round_phases'],
-                cache_dir=params['round_filter_cache_dir'],
-                use_cache=params['use_round_filter_cache'],
-            )
+        paired = None
+        if cfg.pair_ul_dl and metric.startswith("ul_"):
+            candidate = "dl_" + metric[3:]
+            if candidate in cfg.metrics:
+                paired = candidate
+                processed.add(candidate)
 
-        run_label = exp.get('run_label', path.name)
-        processed_metrics = set()
-        plotted_metrics = []
-        skipped_metrics = []
-
-        for metric in metrics:
-            if metric in processed_metrics:
+        m, _s = _compute_mean_std(ue_dfs, metric, thresholds)
+        if paired:
+            pm, _ps = _compute_mean_std(ue_dfs, paired, thresholds)
+            if m is None and pm is None:
+                continue
+        else:
+            if m is None:
                 continue
 
-            paired_metric = None
-            if params['pair_ul_dl'] and metric.startswith('ul_'):
-                candidate = 'dl_' + metric[3:]
-                if candidate in metrics:
-                    paired_metric = candidate
-                    processed_metrics.add(candidate)
-
-            metric_mean, metric_std = _compute_metric_mean_std(
+        plot_metric(ue_dfs, metric, label, cfg, paired_metric=paired)
+        if cfg.round_profiles_enabled:
+            plot_round_profiles(
                 ue_dfs,
-                metric,
-                non_zero_metrics=non_zero_metrics,
-                min_thresholds=min_thresholds,
+                metric=metric,
+                paired_metric=paired,
+                run_label=label,
+                round_ids=cfg.round_profile_round_ids,
+                phase_filter=cfg.round_profile_phase_filter,
+                n_points=cfg.round_profile_points,
+                layout=cfg.round_profile_layout,
+                include_effective_sum=cfg.round_profile_include_effective_sum,
+                effective_secondary_axis=cfg.round_profile_effective_secondary_axis,
+                show_error_bars=cfg.round_profile_error_bars,
+                errorbar_step=cfg.round_profile_errorbar_step,
+                show=cfg.show_plots,
             )
-            avgs[metric][run_label] = metric_mean
-            stds[metric][run_label] = metric_std
+        processed.add(metric)
 
-            pair_mean = None
-            pair_std = None
-            if paired_metric is not None:
-                pair_mean, pair_std = _compute_metric_mean_std(
-                    ue_dfs,
-                    paired_metric,
-                    non_zero_metrics=non_zero_metrics,
-                    min_thresholds=min_thresholds,
-                )
-                avgs[paired_metric][run_label] = pair_mean
-                stds[paired_metric][run_label] = pair_std
-
-            if paired_metric is not None:
-                if metric_mean is None and pair_mean is None:
-                    skipped_metrics.append(f'{metric} vs {paired_metric} (no values after filtering)')
-                    processed_metrics.add(metric)
-                    continue
-            else:
-                if metric_mean is None:
-                    skipped_metrics.append(f'{metric} (no values after filtering)')
-                    processed_metrics.add(metric)
-                    continue
-
-            save_file = None
-            if params['save_dir'] is not None:
-                if params['plot_mode'] == 'time':
-                    save_file = params['save_dir'] / f'{metric}_by_time.svg'
-                elif paired_metric:
-                    save_file = params['save_dir'] / f'{metric}_vs_{paired_metric}_{params['distribution_plot_type']}.svg'
-                else:
-                    save_file = params['save_dir'] / f'{metric}_{params['distribution_plot_type']}.svg'
-
-            if params['plot_mode'] == 'time':
-                plot_rntis_by_time(
-                    ue_dfs,
-                    metric,
-                    metric_units='',
-                    run_id=run_label,
-                    pts_to_plot=params['pts_to_plot'],
-                    pts_offset=params['pts_offset'],
-                    savepath=save_file,
-                    show=(params['save_dir'] is None),
-                    non_zero_metrics=non_zero_metrics,
-                    min_thresholds=min_thresholds,
-                )
-            else:
-                plot_rntis_distribution(
-                    ue_dfs,
-                    metric,
-                    metric_units='',
-                    run_id=run_label,
-                    plot_type=params['distribution_plot_type'],
-                    paired_metric=paired_metric,
-                    split_violin=True,
-                    savepath=save_file,
-                    show=(params['save_dir'] is None),
-                    non_zero_metrics=non_zero_metrics,
-                    min_thresholds=min_thresholds,
-                )
-
-            if paired_metric is not None:
-                plotted_metrics.append(f'{metric} vs {paired_metric}')
-            else:
-                plotted_metrics.append(metric)
-
-            processed_metrics.add(metric)
-
-            if params['round_ids_to_plot'] is not None:
-                phase_list = _normalize_phase_filter(params['round_phase_to_plot'])
-                phase_targets = phase_list if phase_list is not None else [None]
-
-                if params['round_profile_all_devices']:
-                    for phase_target in phase_targets:
-                        if (
-                            params['round_profile_ul_dl_combined'] and
-                            paired_metric is not None and
-                            metric in THROUGHPUT_METRICS and
-                            paired_metric in THROUGHPUT_METRICS
-                        ):
-                            combined_savepath = None
-                            if params['save_round_profiles']:
-                                phase_name = 'all' if phase_target is None else str(phase_target)
-                                safe_phase = re.sub(r'[^a-zA-Z0-9_.-]', '_', phase_name)
-                                if params['save_dir'] is not None:
-                                    round_profile_dir = params['save_dir'] / 'round_profiles'
-                                else:
-                                    round_profile_dir = Path.cwd() / 'round_profiles'
-                                round_profile_dir.mkdir(parents=True, exist_ok=True)
-                                safe_layout = re.sub(r'[^a-zA-Z0-9_.-]', '_', str(params['round_profile_ul_dl_layout']))
-                                combined_savepath = round_profile_dir / f'{run_label}_{metric}_vs_{paired_metric}_{safe_layout}_{safe_phase}.svg'
-
-                            plot_ul_dl_round_average_across_devices(
-                                ue_dfs,
-                                metric,
-                                paired_metric,
-                                n_points=params['round_profile_points'],
-                                phase_filter=phase_target,
-                                layout=params['round_profile_ul_dl_layout'],
-                                run_label=run_label,
-                                savepath=combined_savepath,
-                                show=(params['save_dir'] is None),
-                            )
-                            continue
-
-                        overlay_savepath = None
-                        if params['save_round_profiles']:
-                            phase_name = 'all' if phase_target is None else str(phase_target)
-                            safe_phase = re.sub(r'[^a-zA-Z0-9_.-]', '_', phase_name)
-                            if params['save_dir'] is not None:
-                                round_profile_dir = params['save_dir'] / 'round_profiles'
-                            else:
-                                round_profile_dir = Path.cwd() / 'round_profiles'
-                            round_profile_dir.mkdir(parents=True, exist_ok=True)
-                            overlay_savepath = round_profile_dir / f'{run_label}_{metric}_all_devices_{safe_phase}.svg'
-
-                        plot_round_average_across_devices(
-                            ue_dfs,
-                            metric,
-                            round_ids=None,
-                            n_points=params['round_profile_points'],
-                            phase_filter=phase_target,
-                            show_error_bars=params['round_profile_error_bars'],
-                            errorbar_step=params['round_profile_errorbar_step'],
-                            include_effective_sum=params['round_profile_include_effective'],
-                            effective_on_secondary_axis=params['round_profile_effective_secondary_axis'],
-                            run_label=run_label,
-                            savepath=overlay_savepath,
-                            show=(params['save_dir'] is None),
-                        )
-                else:
-                    target_device = params['round_profile_device']
-                    if target_device is None:
-                        target_device = next(iter(ue_dfs.keys()), None)
-                    devices_to_plot = [target_device] if target_device is not None else []
-
-                    for device_id in devices_to_plot:
-                        if device_id in ue_dfs and 'round_id' in ue_dfs[device_id].columns:
-                            for phase_target in phase_targets:
-                                plot_round_examples_and_average(
-                                    ue_dfs[device_id],
-                                    metric,
-                                    round_ids=params['round_ids_to_plot'],
-                                    n_points=params['round_profile_points'],
-                                    phase_filter=phase_target,
-                                    device_label=str(device_id),
-                                )
-
-        throughput_summary.extend(summarize_throughput_by_device(
-            ue_dfs,
-            run_label,
-            non_zero_metrics=non_zero_metrics,
-            min_thresholds=min_thresholds,
-        ))
-
-        print(f'Run {run_label}: plotted metrics -> {plotted_metrics if plotted_metrics else "none"}')
-        if skipped_metrics:
-            print(f'Run {run_label}: skipped metrics -> {skipped_metrics}')
-
-    if throughput_summary:
-        print('\nThroughput by device (Mbps): mean and std')
-        throughput_df = pd.DataFrame(throughput_summary)
-        print(throughput_df.to_string(index=False))
-        if params['save_dir'] is not None:
-            throughput_fp = params['save_dir'] / 'throughput_summary_by_device.csv'
-            throughput_df.to_csv(throughput_fp, index=False)
-            print(f'Saved throughput summary to {throughput_fp}')
-
-    for metric in avgs:
-        print(f'trial, \t\t\t mean \t\t\t std \t\t\t (metric: {metric})')
-        for trial in avgs[metric]:
-            print(f'{trial} \t {avgs[metric][trial]} \t {stds[metric][trial]}')
+    print(f"[{label}] complete")
+    return summarize_throughput(ue_dfs, label, thresholds)
 
 
-def parse(telemetry_dir, trial_dir, sort_telemetry_func, runs):
-    source = [file.name for file in Path(telemetry_dir).iterdir() if 'oaibox' in file.name]
-    source.sort(key=lambda x: datetime.strptime(x, 'oaibox.telemetry_%m-%d-%y.json'))
+def run_pipeline(cfg: PlotConfig):
+    cfg.output_dir.mkdir(parents=True, exist_ok=True)
 
-    for file in source:
-        # print(f'Processing {file}')
-        if re.search(r'oaibox\.ue-telemetry.*\.json', file):
-            print('Not processing ue-telemetry at this time')
-        elif re.search(r'oaibox\.telemetry.*\.json', file):
-            try:
-                telemetry = pl.read_ndjson(telemetry_dir + file, infer_schema_length=1000).set_sorted('timestamp') # read_json if saved from GUI, read_ndjson if saved from cli
-            except pl.exceptions.ComputeError:
-                telemetry = pl.read_json(telemetry_dir + file, infer_schema_length=1000).set_sorted('timestamp')
-            sort_telemetry_func(runs, telemetry, trial_dir, parse_gnb_telemetry, file)
+    exps = build_experiment_index(cfg.data_dir)
+    exps = filter_experiments(exps, cfg.filters)
+    if cfg.sweep:
+        exps = sort_experiments_by_sweep(exps, cfg.sweep)
 
-def sort_telemetry_into_iperf(runs, telemetry_df, run_dir, parser, file):
-    telemetry_df=telemetry_df.with_columns(timestamp=pl.from_epoch(telemetry_df['timestamp'], time_unit="ms").dt.replace_time_zone(time_zone="UTC"))
-    # print(f'telemetry_df: {telemetry_df['timestamp']}')
+    if not exps:
+        print("No experiments matched filters")
+        return
 
-    for _, trial in runs.iterrows():
-        try:
-            telemetry_df = telemetry_df.filter(pl.col('timestamp') >= trial['start'])
-            trial_df = telemetry_df.filter(pl.col('timestamp') <= trial['end'])
+    all_rows = []
+    for exp in exps:
+        all_rows.extend(run_experiment(exp, cfg))
 
-            if telemetry_df.is_empty():
-                return
+    if all_rows:
+        df = pd.DataFrame(all_rows)
+        out_fp = cfg.output_dir / "throughput_summary_by_device.csv"
+        df.to_csv(out_fp, index=False)
+        print(f"Saved throughput summary: {out_fp}")
 
-            # print(f'telemetry_df: {trial_df['timestamp']}, trial start: {trial['start']}, trial end: {trial['end']}')
-            if not trial_df.is_empty():
-                savepath = f"{run_dir}/{trial['device']}_{runs.name}"
-                print(f'saving phys metrics for {savepath}\t{trial_df.shape}')
-                Path(savepath).mkdir(parents=True, exist_ok=True)
-                parser(trial_df, savepath, False)
-        
-        except TypeError as exception:
-            print(f'\033[91mException: {exception}. Data for trial {trial['Run ID']} cannot be parsed.\033[0m')
-            continue
-        
 
 def main():
-    '''Parsing'''
-    # dir = '/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/'
-    # for f in Path(dir).iterdir():
-    #     if 'iperf' in f.name:
-    #         print(f'{f.name}')
-    #         for t in f.iterdir():
-    #             print(f'Processing {t.name}')
-    #             if '0_' in t.name:
-    #                 runs = get_runs_list(t, 'UL.csv', ['start', 'device', 'end'], 'start', 'end')
-    #                 parse(dir, t, sort_telemetry_into_iperf, runs)
-    #                 runs = get_runs_list(t, 'DL.csv', ['start', 'device', 'end'], 'start', 'end')
-    #                 parse(dir, t, sort_telemetry_into_iperf, runs)
-
-    # runs = get_runs_list(dir, 'Runs', ['Run ID', 'Created At', 'Finished At'], 'Created At', 'Finished At')
-    # parse(dir, dir, sort_telemetry_into_trials, runs)
-    # for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/').iterdir():
-    #     if path.is_dir():
-    #         if 'iperf' in str(path):
-    #             pass
-    #         else:
-    #             combine_rntis(path)
-
-    '''Plotting'''
-    data_dir = Path('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/')
-    output_dir = Path.cwd() / 'phys_layer_plots'
-
-    # does NOT include all available metrics = ['ulMcs', 'dlMcs', 'rssi', 'rsrp', 'rsrq', 'dlBler', 'ulQm', 'dlQm', 'ulBler', 'phr', 'pcmax', 'sinr', 'pucchSnr', 'cqi', 'puschSnr']
-    filters = { # one ue_[rnti].csv per device
-        'bandwidth': '40 MHz',
-        'rank': '2x2',
-        'distribution': 'dirichlet',
-        'congestion': False,
-        'tdd': '7-2',
-        'nodes': '6N'
-    }
-    sweep = 'network'
-    metrics=['rssi', 'ul_throughput_mbps', 'dl_throughput_mbps']
-
-    # filters = { # many ue_[rnti].csv per device
-    #     'bandwidth': '80 MHz',
-    #     'rank': '2x2',
-    #     'distribution': 'dirichlet',
-    #     'congestion': False,
-    #     'tdd': '5-4',
-    #     'nodes': '6N'
-    # }
-
-    experiments = build_experiment_index(data_dir)
-    experiments = filter_experiments(experiments, filters)
-    experiments = sort_experiments_by_sweep(experiments, sweep)
-
-    if not experiments:
-        print('No experiments matched the given filters')
-        return
-    
-    filter_parts = [f"{k}_{str(v).replace('/', '_').replace(' ', '_')}" for k, v in filters.items()]
-    filter_dir = '_'.join(filter_parts)
-    sweep_output_dir = output_dir / filter_dir / sweep
-    sweep_output_dir.mkdir(exist_ok=True, parents=True)
-
-    for exp in experiments:
-        exp['run_label'] = _format_run_label(exp, sweep_param=sweep)
-
-    _run_phys_layer_plotting(
-        experiments,
-        metrics,
-        plot_mode='distribution',
-        distribution_plot_type='violin',
-        pair_ul_dl=False,
-        non_zero_metrics=['ul_throughput_mbps', 'dl_throughput_mbps'],
-        min_thresholds={'ul_throughput_mbps': 0.01, 'dl_throughput_mbps': 0.01},
-        filter_rounds_in_memory=True,
-        annotate_round_phases=True,
-        round_ids_to_plot=[2, 3, 4],
-        round_phase_to_plot=['all'],  # or 'all' / None
-        round_profile_all_devices=True,
-        round_profile_points=100,
-        round_profile_ul_dl_combined=True,
-        round_profile_ul_dl_layout='same_axes',  # use 'subplots' for stacked UL/DL panels
-        round_profile_include_effective=True,
-        round_profile_effective_secondary_axis=True,
-        pts_to_plot=100,
-        pts_offset=0,
-        round_filter_cache_dir=Path.cwd(),
-        save_path=Path.cwd() / 'phys_layer_plots'
+    cfg = PlotConfig(
+        data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
+        output_dir=Path.cwd() / "phys_layer_plots",
+        filters={
+            "bandwidth": "40 MHz",
+            "rank": "2x2",
+            "distribution": "dirichlet",
+            "congestion": False,
+            "tdd": "7-2",
+            "nodes": "6N",
+        },
+        sweep="network",
+        metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
+        min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
+        filter_rounds=True,
+        annotate_phases=True,
+        pair_ul_dl=True,
+        plot_mode="distribution",
+        distribution_plot_type="violin",
+        show_plots=True,
+        round_profiles_enabled=True,
     )
+    run_pipeline(cfg)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
