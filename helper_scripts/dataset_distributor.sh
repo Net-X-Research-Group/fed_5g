@@ -28,7 +28,16 @@ $PYTHON "$PARTITIONER_SCRIPT" -d $DATASET -n "$NUM_CLIENTS" -p $STRATEGY
 
 # Distribute
 for ((CID=1;CID<=NUM_CLIENTS;CID++)); do
+    if ((CID>=10)); then
+    LOGIN=commnetpi${CID}@commnetpi${CID}.ece.northwestern.edu
+    
+    elif ((CID>=6)); then
+    LOGIN=$DEVICE_NAME_PREFIX$CID@$DEVICE_NAME_PREFIX$CID.ece.northwestern.edu
+
+    else
     LOGIN=$DEVICE_NAME_PREFIX$CID@$IP_PREFIX${IP_SUFFIXES[$CID-1]}
+    
+    fi
     FOLDER="~/node_datasets/"
     ssh "$LOGIN" mkdir -p "$FOLDER"
     echo "Copying part ${CID} to $DEVICE_NAME_PREFIX${CID}"
