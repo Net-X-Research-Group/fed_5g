@@ -609,7 +609,12 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
             
             pdf = pdf.iloc[cfg.pts_offset: cfg.pts_offset + cfg.pts_to_plot]
             for _, r in pdf.iterrows():
-                rows.append({"timestamp": r["timestamp"], "value": r[metric], "device": str(rnti)})
+                rows.append({
+                    "timestamp": r["timestamp"],
+                    "relative_time_s": r.get("relative_time_s", np.nan),
+                    "value": r[metric],
+                    "device": str(rnti),
+                })
 
         if not rows:
             plt.close(fig)
@@ -879,10 +884,10 @@ def main():
             "location": ["normal", "fair"],
         },
         cid_filter=["1", "2", "3", "4", "5", "6"],
-        direction_filter=["UL", "DL"],
+        direction_filter=["UL"], # ["UL", "DL"]
         metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
-        plot_mode="dist",
-        use_relative_time=True,
+        plot_mode="time",
+        use_relative_time=False,
         pair_ul_dl=False,
         show_plots=True,
         save_plots=True,
