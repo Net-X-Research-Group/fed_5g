@@ -641,38 +641,38 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
             plt.show()
         else:
             plt.close(fig)
-        return
 
     # distribution mode
-    df = _distribution_df(ue_dfs, metric, thresholds, paired_metric)
-    if df.empty:
-        return
+    elif cfg.plot_mode == "dist":
+        df = _distribution_df(ue_dfs, metric, thresholds, paired_metric)
+        if df.empty:
+            return
 
-    kind_map = {"violin": "violin", "box": "box", "count": "count", "bar": "bar", "kde": "bar"}
-    kind = kind_map.get(cfg.distribution_plot_type, "violin")
+        kind_map = {"violin": "violin", "box": "box", "count": "count", "bar": "bar", "kde": "bar"}
+        kind = kind_map.get(cfg.distribution_plot_type, "violin")
 
-    kwargs = {"data": df, "x": "device", "kind": kind, "height": 6, "aspect": 1.8}
-    if paired_metric:
-        kwargs["hue"] = "direction"
-    if kind in {"violin", "box", "bar"}:
-        kwargs["y"] = "value"
-    if kind == "violin":
-        kwargs.update({"inner": "quart", "cut": 0})
+        kwargs = {"data": df, "x": "device", "kind": kind, "height": 6, "aspect": 1.8}
         if paired_metric:
-            kwargs.update({"split": True, "gap": 0.1})
+            kwargs["hue"] = "direction"
+        if kind in {"violin", "box", "bar"}:
+            kwargs["y"] = "value"
+        if kind == "violin":
+            kwargs.update({"inner": "quart", "cut": 0})
+            if paired_metric:
+                kwargs.update({"split": True, "gap": 0.1})
 
-    g = sns.catplot(**kwargs)
-    ax = g.ax
-    title = f"{metric} distribution [{run_label}]" if not paired_metric else f"{metric} vs {paired_metric} [{run_label}]"
-    ax.set_title(title)
-    ax.grid(True)
+        g = sns.catplot(**kwargs)
+        ax = g.ax
+        title = f"{metric} distribution [{run_label}]" if not paired_metric else f"{metric} vs {paired_metric} [{run_label}]"
+        ax.set_title(title)
+        ax.grid(True)
 
-    if cfg.save_plots:
-        plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
-    if cfg.show_plots:
-        plt.show()
-    else:
-        plt.close(g.fig)
+        if cfg.save_plots:
+            plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+        if cfg.show_plots:
+            plt.show()
+        else:
+            plt.close(g.figure)
 
 
 # =========================
@@ -848,50 +848,50 @@ def run_pipeline(cfg: PlotConfig):
 
 
 def main():
-    # cfg = PlotConfig(
-    #     data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
-    #     output_dir=Path.cwd() / "phys_layer_plots",
-    #     filters={
-    #         "bandwidth": "80 MHz",
-    #         "rank": "2x2",
-    #         "distribution": "dirichlet",
-    #         "congestion": False,
-    #         "tdd": "5-4",
-    #         "nodes": "6N",
-    #     },
-    #     sweep="network",
-    #     metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
-    #     min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
-    #     filter_rounds=True,
-    #     annotate_phases=True,
-    #     pair_ul_dl=True,
-    #     plot_mode="time",
-    #     smoothing=True,
-    #     pts_to_plot = 100,
-    #     pts_offset = 1000,
-    #     distribution_plot_type="violin",
-    #     show_plots=True,
-    #     round_profiles_enabled=True,
-    # )
     cfg = PlotConfig(
-        data_dir=Path("/unused/for/iperf"),
-        iperf_root_dir=Path("/Users/kmcomer/Documents/5G Experiment Data"),
-        output_dir=Path.cwd() / "iperf_plots",
-        dataset_type="iperf",
+        data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
+        output_dir=Path.cwd() / "phys_layer_plots",
         filters={
-            "bandwidth": ["20", "40", "80"],   # also accepts "20 MHz"
-            "tdd": ["7-2", "5-4"],
-            "location": ["normal", "fair"],
+            "bandwidth": "100 MHz",
+            "rank": "2x2",
+            "distribution": "dirichlet",
+            "congestion": False,
+            "tdd": "7-2",
+            "nodes": "6N",
         },
-        cid_filter=["1", "2", "3", "4", "5", "6"],
-        direction_filter=["UL"], # ["UL", "DL"]
+        sweep="network",
         metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
-        plot_mode="time",
-        use_relative_time=False,
-        pair_ul_dl=False,
+        min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
+        filter_rounds=True,
+        annotate_phases=True,
+        pair_ul_dl=True,
+        plot_mode=None,
+        smoothing=True,
+        pts_to_plot = 100,
+        pts_offset = 1000,
+        distribution_plot_type="box",
         show_plots=True,
-        save_plots=True,
+        round_profiles_enabled=True,
     )
+    # cfg = PlotConfig(
+    #     data_dir=Path("/unused/for/iperf"),
+    #     iperf_root_dir=Path("/Users/kmcomer/Documents/5G Experiment Data"),
+    #     output_dir=Path.cwd() / "iperf_plots",
+    #     dataset_type="iperf",
+    #     filters={
+    #         "bandwidth": ["20", "40", "80"],   # also accepts "20 MHz"
+    #         "tdd": ["7-2", "5-4"],
+    #         "location": ["normal", "fair"],
+    #     },
+    #     cid_filter=["1", "2", "3", "4", "5", "6"],
+    #     direction_filter=["UL"], # ["UL", "DL"]
+    #     metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
+    #     plot_mode="dist",
+    #     use_relative_time=False,
+    #     pair_ul_dl=False,
+    #     show_plots=True,
+    #     save_plots=True,
+    # )
     run_pipeline(cfg)
 
 
