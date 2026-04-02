@@ -250,37 +250,41 @@ def sort_telemetry_into_iperf(runs, telemetry_df, run_dir, parser, file):
 def main():
     dir = '/Users/kmcomer/Documents/5G Experiment Data/'
 
-    # Parse phys layer data from iperf trials
-    for f in Path(dir).iterdir():
-        if 'iperf' in f.name and 'zip' not in f.name:
-            print(f'{f.name}')
-            for t in f.iterdir():
-                print(f'Processing {t.name}')
-                if '0_' in t.name:
-                    for s in t.iterdir():
-                        if s.is_dir():
-                            merge_uedfs_single_disconnect(s, drop_timestamp=False, iperf=True)
-                    # runs = get_runs_list(t, 'UL.csv', ['start', 'device', 'end'], 'start', 'end')
-                    # parse(dir, t, sort_telemetry_into_iperf, runs)
-                    # runs = get_runs_list(t, 'DL.csv', ['start', 'device', 'end'], 'start', 'end')
-                    # parse(dir, t, sort_telemetry_into_iperf, runs)
+    # # Parse phys layer data from iperf trials
+    # for f in Path(dir).iterdir():
+    #     if 'iperf' in f.name and 'zip' not in f.name:
+    #         print(f'{f.name}')
+    #         for t in f.iterdir():
+    #             print(f'Processing {t.name}')
+    #             if '0_' in t.name:
+    #                 # Merge disconnected/segmented data from same device
+    #                 for s in t.iterdir():
+    #                     if s.is_dir():
+    #                         merge_uedfs_single_disconnect(s, drop_timestamp=False, iperf=True)
+                    
+    #                 # Parse iperf data from gNB telemetry
+    #                 runs = get_runs_list(t, 'UL.csv', ['start', 'device', 'end'], 'start', 'end')
+    #                 parse(dir, t, sort_telemetry_into_iperf, runs)
+    #                 runs = get_runs_list(t, 'DL.csv', ['start', 'device', 'end'], 'start', 'end')
+    #                 parse(dir, t, sort_telemetry_into_iperf, runs)
                     
     
-    # Parse phys layer data from FL experiments
+    # # Parse phys layer data from FL experiments
     # runs = get_runs_list(dir, 'Runs', ['Run ID', 'Created At', 'Finished At'], 'Created At', 'Finished At')
     # parse(dir, dir, sort_telemetry_into_trials, runs)
 
-    # Combine RNTIs by name
+    # Combine RNTIs by name (manually) -- only if certain about data belonging to same device
     # trial_path = Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/7222719212451226563_6N_20MHz_7-2_MIMO2x2_Dirichlet')
     # ue_dfs = gather_metrics_by_rnti(trial_path)
     # combine_uedfs_by_rnti(ue_dfs, 'abca', '105c', trial_path) # should return error (105c precedes abca)
 
-    for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed').iterdir():
-        if path.is_dir():
-            if 'iperf' in str(path):
-                pass
-            else:
-                merge_uedfs_single_disconnect(path / 'phys_layer')
+    # # Combine RNTIs that must belong to the same device (one disconnect & reconnect only)
+    # for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed').iterdir():
+    #     if path.is_dir():
+    #         if 'iperf' in str(path):
+    #             pass
+    #         else:
+    #             merge_uedfs_single_disconnect(path / 'phys_layer')
 
 if __name__ == '__main__':
     main()
