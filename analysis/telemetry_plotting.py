@@ -7,6 +7,7 @@ import pandas as pd
 import polars as pl
 import matplotlib.pyplot as plt
 import seaborn as sns
+import re
 
 from data_loading import parse_experiment_name
 from helpers import sort_experiments_by_sweep, format_sweep_label
@@ -43,6 +44,7 @@ class PlotConfig:
     pair_ul_dl: bool = True
     show_plots: bool = True
     save_plots: bool = True
+    smoothing: bool = False
     pts_to_plot: int = 1000
     pts_offset: int = 0
 
@@ -57,10 +59,20 @@ class PlotConfig:
     round_profile_include_effective_sum: bool = True
     round_profile_effective_secondary_axis: bool = True
 
+    # iperf
+    dataset_type: str = "fedavg"   # "fedavg" | "iperf"
+    iperf_root_dir: Optional[Path] = None
+    cid_filter: Optional[List[str]] = None         # e.g. ["05", "06"] or ["5","6"]
+    direction_filter: Optional[List[str]] = None   # ["UL","DL"]
+    use_relative_time: bool = True
+
 
 # =========================
 # Small utilities
 # =========================
+
+def _safe_filename(name: str) -> str:
+    return re.sub(r'[^A-Za-z0-9._-]+', '_', name).strip('_')
 
 def _norm_thresholds(d: Optional[Dict[str, float]]) -> Dict[str, float]:
     return {} if d is None else dict(d)
@@ -161,6 +173,82 @@ def load_experiment_data(exp_path: Path, metrics: List[str]) -> Dict[str, pl.Dat
         rnti = n.split("_")[1].split(".")[0]
         df = _read_joined_csv(str(phys / "common.csv"), str(fp), load_cols)
         out[rnti] = _add_throughput(df)
+
+    return out
+
+# iperf data loading
+def build_iperf_experiment_index(root_dir: Path) -> List[dict]:
+    exps = []
+    location_dirs = [
+        ("normal", root_dir / "iperf_normal_locations"),
+        ("fair", root_dir / "iperf_fair"),
+    ]
+
+    for location, base in location_dirs:
+        if not base.exists():
+            continue
+        for cfg_dir in base.iterdir():
+            if not cfg_dir.is_dir():
+                continue
+            m = re.match(r"(?P<bw>\d+)[_\-](?P<tdd>\d-\d)$", cfg_dir.name)
+            if not m:
+                continue
+            exps.append({
+                "path": cfg_dir,
+                "location": location,
+                "bandwidth": f"{m.group('bw')} MHz",
+                "bandwidth_raw": m.group("bw"),
+                "tdd": m.group("tdd"),
+            })
+    return exps
+
+
+def _normalize_cid(cid: str) -> str:
+    # "05" -> "5", "5" -> "5"
+    return str(int(str(cid)))
+
+
+def load_iperf_experiment_data(
+    exp_path: Path,
+    metrics: List[str],
+    cid_filter: Optional[List[str]] = None,
+    direction_filter: Optional[List[str]] = None,
+) -> Dict[str, pl.DataFrame]:
+    cid_filter_norm = set(_normalize_cid(c) for c in cid_filter) if cid_filter else None
+    direction_filter_norm = set(d.upper() for d in direction_filter) if direction_filter else None
+
+    out = {}
+
+    # folders like pi05_UL, pi06_DL
+    for child in exp_path.iterdir():
+        if not child.is_dir():
+            continue
+        
+        m = re.match(r"pi0?(\d+)_((UL)|(DL)).csv$", child.name, re.IGNORECASE)
+        if not m:
+            continue
+        cid_raw = m.group(1)           # e.g. "05" or "5"
+        cid_norm = _normalize_cid(cid_raw)
+        direction = m.group(2).upper()
+
+        if cid_filter_norm and cid_norm not in cid_filter_norm:
+            continue
+        if direction_filter_norm and direction not in direction_filter_norm:
+            continue
+        for fp in child.glob("ue_*.csv"):
+            df = pl.read_csv(str(fp), try_parse_dates=True)
+
+            # ensure timestamp is datetime if read as string
+            if "timestamp" in df.columns and df.schema["timestamp"] == pl.Utf8:
+                df = df.with_columns(
+                    pl.col("timestamp").str.to_datetime(time_zone="UTC", strict=False)
+                )
+
+            df = _add_throughput(df)
+
+            rnti = fp.stem.replace("ue_", "")
+            key = f"pi{int(cid_norm):02d}_{direction}_{rnti}"
+            out[key] = df
 
     return out
 
@@ -424,7 +512,7 @@ def plot_round_profiles(
 
         fig.tight_layout()
         if cfg.output_dir is not None:
-            plt.savefig(cfg.output_dir / f'{title}.pdf')
+            plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
         if cfg.show_plots:
             plt.show()
         else:
@@ -474,7 +562,7 @@ def plot_round_profiles(
 
     fig.tight_layout()
     if cfg.output_dir is not None:
-        plt.savefig(cfg.output_dir / f'{title}.pdf')
+        plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
     if cfg.show_plots:
         plt.show()
     else:
@@ -514,6 +602,11 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
             if t is not None:
                 pdf[metric] = pd.to_numeric(pdf[metric], errors="coerce")
                 pdf = pdf[pdf[metric] >= t]
+            
+            if cfg.use_relative_time and not pdf.empty:
+                ts = pd.to_datetime(pdf["timestamp"], utc=True, errors="coerce")
+                pdf["relative_time_s"] = (ts - ts.min()).dt.total_seconds()
+            
             pdf = pdf.iloc[cfg.pts_offset: cfg.pts_offset + cfg.pts_to_plot]
             for _, r in pdf.iterrows():
                 rows.append({"timestamp": r["timestamp"], "value": r[metric], "device": str(rnti)})
@@ -523,12 +616,22 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
             return
 
         plot_df = pd.DataFrame(rows)
-        sns.scatterplot(data=plot_df, x="timestamp", y="value", hue="device", alpha=0.8, ax=ax)
+        # if cfg.smoothing:
+        #     plot_df['value'] = plot_df.transform(lambda s: s.rolling(10, min_periods=1).mean())
+        x_col = "relative_time_s" if cfg.use_relative_time else "timestamp"
+        try: 
+            sns.scatterplot(data=plot_df, x=x_col, y="value", hue="device", alpha=0.8, ax=ax)
+        except ValueError:
+            print(f'x_col: {x_col}, plot_df: {plot_df}')
+            sns.scatterplot(data=plot_df, x='timestamp', y="value", hue="device", alpha=0.8, ax=ax)
+        ax.set_xlabel("Relative Time (s)" if cfg.use_relative_time else "Timestamp")
+        # sns.scatterplot(data=plot_df, x="timestamp", y="value", hue="device", alpha=0.8, ax=ax)
+        # ax.plot(plot_df['timestamp'], plot_df['value'])
         title = f"{metric} over time [{run_label}]"
         ax.set_title(title)
         ax.grid(True)
         if cfg.save_plots:
-            plt.savefig(cfg.output_dir / f'{title}.pdf')
+            plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
         if cfg.show_plots:
             plt.show()
         else:
@@ -560,7 +663,7 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
     ax.grid(True)
 
     if cfg.save_plots:
-        plt.savefig(cfg.output_dir / f'{title}.pdf')
+        plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
     if cfg.show_plots:
         plt.show()
     else:
@@ -585,6 +688,25 @@ def filter_experiments(experiments: List[dict], filters: Dict[str, Any]) -> List
         keep = True
         for k, v in filters.items():
             ev = exp.get(k)
+
+            # Special-case bandwidth so "20" matches "20 MHz"
+            if k == "bandwidth":
+                candidates = {str(ev)} if ev is not None else set()
+                bw_raw = exp.get("bandwidth_raw")
+                if bw_raw is not None:
+                    candidates.add(str(bw_raw))
+                    candidates.add(f"{bw_raw} MHz")
+
+                if isinstance(v, list):
+                    if not any(str(x) in candidates for x in v):
+                        keep = False
+                        break
+                else:
+                    if str(v) not in candidates:
+                        keep = False
+                        break
+                continue
+
             if ev is None:
                 continue
             if isinstance(v, list) and ev not in v:
@@ -599,6 +721,14 @@ def filter_experiments(experiments: List[dict], filters: Dict[str, Any]) -> List
 
 
 def run_label_for(exp: dict, sweep: Optional[str]) -> str:
+    # Iperf experiments: readable composite label
+    if "location" in exp and "tdd" in exp and ("bandwidth" in exp or "bandwidth_raw" in exp):
+        bw = exp.get("bandwidth", f"{exp.get('bandwidth_raw', 'NA')} MHz")
+        loc = exp.get("location", "unknown")
+        tdd = exp.get("tdd", "NA")
+        return f"{loc} | {bw} | {tdd}"
+
+    # Original behavior for FedAvg experiments
     if sweep:
         return str(format_sweep_label(sweep, exp[sweep], exp))
     return exp["path"].name
@@ -630,12 +760,22 @@ def run_analysis(exp: dict, cfg: PlotConfig):
     label = run_label_for(exp, cfg.sweep)
     thresholds = _norm_thresholds(cfg.min_thresholds)
 
-    ue_dfs = load_experiment_data(exp["path"], cfg.metrics)
+    if cfg.dataset_type.lower() == "iperf":
+        ue_dfs = load_iperf_experiment_data(
+            exp["path"],
+            cfg.metrics,
+            cid_filter=cfg.cid_filter,
+            direction_filter=cfg.direction_filter,
+        )
+    else:
+        ue_dfs = load_experiment_data(exp["path"], cfg.metrics)
+    
     if not ue_dfs:
         print(f"[{label}] no UE data")
         return []
-
-    ue_dfs, _rounds = apply_round_processing(exp["path"], ue_dfs, cfg)
+    
+    if cfg.dataset_type.lower() != "iperf":
+        ue_dfs, _rounds = apply_round_processing(exp["path"], ue_dfs, cfg)
 
     processed = set()
     for metric in cfg.metrics:
@@ -676,9 +816,15 @@ def run_analysis(exp: dict, cfg: PlotConfig):
 def run_pipeline(cfg: PlotConfig):
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
 
-    exps = build_experiment_index(cfg.data_dir)
+    if cfg.dataset_type.lower() == "iperf":
+        if cfg.iperf_root_dir is None:
+            raise ValueError("cfg.iperf_root_dir must be set when dataset_type='iperf'")
+        exps = build_iperf_experiment_index(cfg.iperf_root_dir)
+    else:
+        exps = build_experiment_index(cfg.data_dir)
+
     exps = filter_experiments(exps, cfg.filters)
-    if cfg.sweep:
+    if cfg.sweep and cfg.dataset_type.lower() != "iperf":
         exps = sort_experiments_by_sweep(exps, cfg.sweep)
 
     if not exps:
@@ -697,27 +843,49 @@ def run_pipeline(cfg: PlotConfig):
 
 
 def main():
+    # cfg = PlotConfig(
+    #     data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
+    #     output_dir=Path.cwd() / "phys_layer_plots",
+    #     filters={
+    #         "bandwidth": "80 MHz",
+    #         "rank": "2x2",
+    #         "distribution": "dirichlet",
+    #         "congestion": False,
+    #         "tdd": "5-4",
+    #         "nodes": "6N",
+    #     },
+    #     sweep="network",
+    #     metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
+    #     min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
+    #     filter_rounds=True,
+    #     annotate_phases=True,
+    #     pair_ul_dl=True,
+    #     plot_mode="time",
+    #     smoothing=True,
+    #     pts_to_plot = 100,
+    #     pts_offset = 1000,
+    #     distribution_plot_type="violin",
+    #     show_plots=True,
+    #     round_profiles_enabled=True,
+    # )
     cfg = PlotConfig(
-        data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
-        output_dir=Path.cwd() / "phys_layer_plots",
+        data_dir=Path("/unused/for/iperf"),
+        iperf_root_dir=Path("/Users/kmcomer/Documents/5G Experiment Data"),
+        output_dir=Path.cwd() / "iperf_plots",
+        dataset_type="iperf",
         filters={
-            "bandwidth": "80 MHz",
-            "rank": "2x2",
-            "distribution": "dirichlet",
-            "congestion": False,
-            "tdd": "5-4",
-            "nodes": "6N",
+            "bandwidth": ["20", "40", "80"],   # also accepts "20 MHz"
+            "tdd": ["7-2", "5-4"],
+            "location": ["normal", "fair"],
         },
-        sweep="network",
+        cid_filter=["1", "2", "3", "4", "5", "6"],
+        direction_filter=["UL", "DL"],
         metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
-        min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
-        filter_rounds=True,
-        annotate_phases=True,
-        pair_ul_dl=True,
-        plot_mode="distribution",
-        distribution_plot_type="violin",
+        plot_mode="dist",
+        use_relative_time=True,
+        pair_ul_dl=False,
         show_plots=True,
-        round_profiles_enabled=True,
+        save_plots=True,
     )
     run_pipeline(cfg)
 
