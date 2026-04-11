@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
+import json
 
 import numpy as np
 import pandas as pd
@@ -62,6 +63,29 @@ def theoretical_throughput(bw, Qm, R_max=948/1024, slot_config='7:2', direction=
     allocated_slots = slot_configs[slot_config][direction] / num_users
     return 1e-6 * v_layers * Qm * f * R_max * ((N_PRB[bw] * 12) / T_s) * (1 - oh) * allocated_slots
 
+
+def _num_users_from_exp(exp: dict) -> int:
+    if exp is None:
+        return 1
+
+    explicit = exp.get("_num_users")
+    if explicit is not None:
+        try:
+            n = int(explicit)
+            return max(1, n)
+        except (TypeError, ValueError):
+            pass
+
+    for key in ["nodes", "num_nodes", "n_nodes", "clients", "num_clients"]:
+        raw = exp.get(key)
+        if raw is None:
+            continue
+        m = re.search(r"(\d+)", str(raw))
+        if m:
+            return max(1, int(m.group(1)))
+
+    return 1
+
 # =========================
 # Config
 # =========================
@@ -110,6 +134,8 @@ class PlotConfig:
     round_profile_ci_bands: bool = False
     round_profile_ci_level: float = 0.95
     round_profile_bin_s: float = 0.25   # for real-time mode binning
+    round_profile_real_time_quantile: float = 0.995  # trim extreme late-time outliers
+    round_profile_real_time_max_s: Optional[float] = None  # hard cap for time-since-round-start
 
     # iperf
     dataset_type: str = "fedavg"   # "fedavg" | "iperf"
@@ -117,6 +143,10 @@ class PlotConfig:
     cid_filter: Optional[List[str]] = None         # e.g. ["05", "06"] or ["5","6"]
     direction_filter: Optional[List[str]] = None   # ["UL","DL"]
     use_relative_time: bool = True
+    throughput_overlay_enabled: bool = False
+    throughput_overlay_models: List[str] = field(default_factory=lambda: ["shannon", "3gpp"])
+    round_profile_include_theoretical: bool = True
+    round_profile_theoretical_models: List[str] = field(default_factory=lambda: ["shannon", "3gpp"])
 
 
 # =========================
@@ -207,6 +237,8 @@ def _add_throughput(df: pl.DataFrame, exp: dict) -> pl.DataFrame:
     )
     bw = int(exp['bandwidth'].split(" ")[0])
     tdd = exp['tdd']
+    num_users = _num_users_from_exp(exp)
+    num_users = 1
     dl_parts, ul_parts = map(int, tdd.split('-'))
     dl_pct = dl_parts / (dl_parts + ul_parts + 1)
     ul_pct = ul_parts / (dl_parts + ul_parts + 1)
@@ -285,12 +317,12 @@ def _add_throughput(df: pl.DataFrame, exp: dict) -> pl.DataFrame:
         .with_columns(
             ul_throughput_mbps=pl.when((pl.col("dt") > 0) & (pl.col("dul") >= 0)).then((pl.col("dul") * 8 / 1_000_000) / pl.col("dt")).otherwise(None),
             dl_throughput_mbps=pl.when((pl.col("dt") > 0) & (pl.col("ddl") >= 0)).then((pl.col("ddl") * 8 / 1_000_000) / pl.col("dt")).otherwise(None),
-            ul_shannon=ul_pct*bw*(1+pl.col("puschSnr_linear")).log(base=2),
-            dl_shannon=dl_pct*bw*(1+pl.col("puschSnr_linear")).log(base=2),
-            ul_shannon_sinr=ul_pct*bw*(1+pl.col("sinr_linear")).log(base=2),
-            dl_shannon_sinr=dl_pct*bw*(1+pl.col("sinr_linear")).log(base=2),
-            ul_3gpp = theoretical_throughput(bw, pl.col("ulQm"), pl.col("ul_code_rate"), tdd, "ul"),
-            dl_3gpp = theoretical_throughput(bw, pl.col("dlQm"), pl.col("dl_code_rate"), tdd, "dl")
+            ul_shannon=(ul_pct*bw*(1+pl.col("puschSnr_linear")).log(base=2)) / num_users,
+            dl_shannon=(dl_pct*bw*(1+pl.col("puschSnr_linear")).log(base=2)) / num_users,
+            ul_shannon_sinr=ul_pct*bw*(1+pl.col("sinr_linear")).log(base=2) / num_users,
+            dl_shannon_sinr=dl_pct*bw*(1+pl.col("sinr_linear")).log(base=2) / num_users,
+            ul_3gpp = theoretical_throughput(bw, pl.col("ulQm"), pl.col("ul_code_rate"), tdd, "ul", num_users),
+            dl_3gpp = theoretical_throughput(bw, pl.col("dlQm"), pl.col("dl_code_rate"), tdd, "dl", num_users)
         )
         .drop("ul_num", "dl_num")
     )
@@ -305,13 +337,19 @@ def load_experiment_data(exp: dict, metrics: List[str]) -> Dict[str, pl.DataFram
     load_cols = _metrics_to_load(metrics)
     out = {}
 
+    ue_files = []
     for fp in phys.iterdir():
         n = fp.name
-        if "ue" not in n or "common" in n:
-            continue
+        if "ue" in n and "common" not in n:
+            ue_files.append(fp)
+
+    exp_with_users = {**exp, "_num_users": max(1, len(ue_files))}
+
+    for fp in ue_files:
+        n = fp.name
         rnti = n.split("_")[1].split(".")[0]
         df = _read_joined_csv(str(phys / "common.csv"), str(fp), load_cols)
-        out[rnti] = _add_throughput(df, exp)
+        out[rnti] = _add_throughput(df, exp_with_users)
 
     return out
 
@@ -354,6 +392,7 @@ def load_iperf_experiment_data(
     cid_filter: Optional[List[str]] = None,
     direction_filter: Optional[List[str]] = None,
 ) -> Dict[str, pl.DataFrame]:
+    bw, tdd = exp_path.name.split('_')
     cid_filter_norm = set(_normalize_cid(c) for c in cid_filter) if cid_filter else None
     direction_filter_norm = set(d.upper() for d in direction_filter) if direction_filter else None
 
@@ -384,7 +423,7 @@ def load_iperf_experiment_data(
                     pl.col("timestamp").str.to_datetime(time_zone="UTC", strict=False)
                 )
 
-            df = _add_throughput(df)
+            df = _add_throughput(df, {"bandwidth": bw, "tdd": tdd})
 
             rnti = fp.stem.replace("ue_", "")
             key = f"pi{int(cid_norm):02d}_{direction}_{rnti}"
@@ -406,7 +445,163 @@ def _get_duration_column(df: pd.DataFrame, candidates: List[str], default=0.0):
     return pd.Series(default, index=df.index, dtype="float64")
 
 
-def build_round_windows(agg_metrics_file: str, max_gap_s=200) -> pd.DataFrame:
+def _load_start_time_s(exp_path: Path) -> Optional[float]:
+    fp = exp_path / "start_time.txt"
+    if not fp.exists():
+        return None
+    try:
+        raw = fp.read_text(encoding="utf-8").strip().rstrip("s")
+        return float(raw)
+    except (OSError, ValueError):
+        return None
+
+
+def _load_individual_timing_records(exp_path: Path) -> pd.DataFrame:
+    ind_fp = exp_path / "individual_metrics.json"
+    if not ind_fp.exists():
+        return pd.DataFrame()
+
+    try:
+        with open(ind_fp, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return pd.DataFrame()
+
+    rows: List[Dict[str, Any]] = []
+    for round_key, round_payload in payload.items():
+        try:
+            rid = int(round_key)
+        except (TypeError, ValueError):
+            continue
+
+        for rec in (round_payload or {}).get("train", []) or []:
+            cid = rec.get("cid")
+            ts = pd.to_numeric(rec.get("timestamp"), errors="coerce")
+            train_s = pd.to_numeric(rec.get("train_time"), errors="coerce")
+            eval_s = pd.to_numeric(rec.get("eval_time"), errors="coerce")
+            if pd.isna(cid) or pd.isna(ts):
+                continue
+
+            rows.append(
+                {
+                    "round_id": rid,
+                    "cid": int(cid),
+                    "timestamp_s": float(ts),
+                    "train_s": 0.0 if pd.isna(train_s) else max(0.0, float(train_s)),
+                    "eval_s": 0.0 if pd.isna(eval_s) else max(0.0, float(eval_s)),
+                }
+            )
+
+    if not rows:
+        return pd.DataFrame()
+
+    base = pd.DataFrame(rows)
+
+    # Pull per-client UL/DL latency by CID so we can estimate UL completion timing.
+    lat_rows: List[pd.DataFrame] = []
+    for lat_fp in exp_path.glob("latency_*_CID*.csv"):
+        m = re.search(r"CID(\d+)", lat_fp.name)
+        if not m:
+            continue
+        cid = int(m.group(1))
+        try:
+            ldf = pd.read_csv(lat_fp)
+        except OSError:
+            continue
+        if ldf.empty:
+            continue
+
+        ldf = ldf.copy()
+        ldf["round_id"] = np.arange(1, len(ldf) + 1, dtype=int)
+        ldf["cid"] = cid
+        lat_rows.append(ldf)
+
+    if lat_rows:
+        lat = pd.concat(lat_rows, ignore_index=True)
+        lat["uplink_s"] = _get_duration_column(lat, ["uplink_latency", "uplink_time", "ul_time_s"], default=0.0)
+        lat["downlink_s"] = _get_duration_column(lat, ["downlink_latency", "downlink_time", "dl_time_s"], default=0.0)
+        keep = lat[["round_id", "cid", "uplink_s", "downlink_s"]]
+        base = base.merge(keep, on=["round_id", "cid"], how="left")
+    else:
+        base["uplink_s"] = 0.0
+        base["downlink_s"] = 0.0
+
+    base["uplink_s"] = pd.to_numeric(base.get("uplink_s"), errors="coerce").fillna(0.0).clip(lower=0.0)
+    base["downlink_s"] = pd.to_numeric(base.get("downlink_s"), errors="coerce").fillna(0.0).clip(lower=0.0)
+    base["ul_start_s"] = base["timestamp_s"] + base["train_s"] + base["eval_s"]
+    base["ul_end_s"] = base["ul_start_s"] + base["uplink_s"]
+    return base
+
+
+def _build_round_windows_from_individual(exp_path: Path, max_gap_s=200) -> pd.DataFrame:
+    rows = _load_individual_timing_records(exp_path)
+    if rows.empty:
+        return pd.DataFrame()
+
+    g = (
+        rows.groupby("round_id", as_index=False)
+        .agg(
+            train_start_min_s=("timestamp_s", "min"),
+            training_end_s=("timestamp_s", lambda s: np.nanmax(s + rows.loc[s.index, "train_s"])),
+            evaluation_end_s=("timestamp_s", lambda s: np.nanmax(s + rows.loc[s.index, "train_s"] + rows.loc[s.index, "eval_s"])),
+            uplink_end_s=("ul_end_s", "max"),
+        )
+        .sort_values("round_id")
+        .reset_index(drop=True)
+    )
+
+    if g.empty:
+        return pd.DataFrame()
+
+    # Keep contiguous active rounds similarly to prior max-gap behavior.
+    train_gaps = g["train_start_min_s"].diff()
+    active = train_gaps.isna() | (train_gaps <= float(max_gap_s))
+    g = g.loc[active].copy().reset_index(drop=True)
+    if g.empty:
+        return pd.DataFrame()
+
+    start_time_s = _load_start_time_s(exp_path)
+    prev_end = None
+    starts = []
+    for i, r in g.iterrows():
+        train_start = float(r["train_start_min_s"])
+        if i == 0:
+            if start_time_s is not None and np.isfinite(start_time_s):
+                rs = min(train_start, float(start_time_s))
+            else:
+                rs = train_start
+        else:
+            rs = prev_end if prev_end is not None else train_start
+        starts.append(rs)
+        prev_end = float(r["uplink_end_s"])
+
+    g["round_start_s"] = starts
+    g["downlink_end_s"] = g["train_start_min_s"]
+    g["round_end_s"] = g["uplink_end_s"]
+
+    out = pd.DataFrame(
+        {
+            "round_id": g["round_id"].astype(int),
+            "round_start": pd.to_datetime(g["round_start_s"], unit="s", utc=True),
+            "round_end": pd.to_datetime(g["round_end_s"], unit="s", utc=True),
+            "downlink_end": pd.to_datetime(g["downlink_end_s"], unit="s", utc=True),
+            "training_end": pd.to_datetime(g["training_end_s"], unit="s", utc=True),
+            "evaluation_end": pd.to_datetime(g["evaluation_end_s"], unit="s", utc=True),
+            "uplink_end": pd.to_datetime(g["uplink_end_s"], unit="s", utc=True),
+        }
+    )
+    return out.sort_values("round_id").reset_index(drop=True)
+
+
+def build_round_windows(agg_metrics_file: str, max_gap_s=200, exp_path: Optional[Path] = None) -> pd.DataFrame:
+    if exp_path is None:
+        exp_path = Path(agg_metrics_file).parent
+
+    # Prefer per-device timings because aggregate timestamps are not aligned to true round boundaries.
+    from_individual = _build_round_windows_from_individual(exp_path, max_gap_s=max_gap_s)
+    if not from_individual.empty:
+        return from_individual
+
     agg = pd.read_csv(agg_metrics_file)
     agg["timestamp"] = pd.to_datetime(agg["timestamp"], unit="s", utc=True)
     agg = agg.sort_values("timestamp").reset_index(drop=True)
@@ -482,7 +677,7 @@ def apply_round_processing(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], cfg:
     if not agg_fp.exists():
         return ue_dfs, pd.DataFrame()
 
-    rounds = build_round_windows(str(agg_fp), max_gap_s=cfg.round_gap_s)
+    rounds = build_round_windows(str(agg_fp), max_gap_s=cfg.round_gap_s, exp_path=exp_path)
     if rounds.empty:
         return ue_dfs, rounds
 
@@ -517,6 +712,158 @@ def apply_round_processing(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], cfg:
         out[rnti] = d
 
     return out, rounds
+
+
+def _fl_ul_order_by_round(exp_path: Path) -> Dict[int, List[int]]:
+    rows = _load_individual_timing_records(exp_path)
+    if rows.empty:
+        return {}
+
+    out: Dict[int, List[int]] = {}
+    for rid, grp in rows.groupby("round_id"):
+        g = grp.sort_values("ul_start_s")
+        cids = [int(c) for c in g["cid"].tolist()]
+        if cids:
+            out[int(rid)] = cids
+    return out
+
+
+def _phy_ul_order_by_round(ue_dfs: Dict[str, pl.DataFrame]) -> Dict[int, List[str]]:
+    peak_rows: List[Dict[str, Any]] = []
+    for rnti, df in ue_dfs.items():
+        needed = {"round_id", "timestamp", "ul_throughput_mbps"}
+        if not needed.issubset(df.columns):
+            continue
+
+        pdf = df.select(["round_id", "timestamp", "ul_throughput_mbps"]).to_pandas()
+        if pdf.empty:
+            continue
+
+        pdf["round_id"] = pd.to_numeric(pdf["round_id"], errors="coerce")
+        pdf["ul_throughput_mbps"] = pd.to_numeric(pdf["ul_throughput_mbps"], errors="coerce")
+        pdf["timestamp"] = pd.to_datetime(pdf["timestamp"], utc=True, errors="coerce")
+        pdf = pdf.dropna(subset=["round_id", "ul_throughput_mbps", "timestamp"])
+        if pdf.empty:
+            continue
+
+        for rid, grp in pdf.groupby("round_id"):
+            g = grp.sort_values("ul_throughput_mbps", ascending=False)
+            if g.empty:
+                continue
+            top = g.iloc[0]
+            peak_rows.append({"round_id": int(rid), "rnti": str(rnti), "peak_ts": top["timestamp"]})
+
+    if not peak_rows:
+        return {}
+
+    peaks = pd.DataFrame(peak_rows)
+    out: Dict[int, List[str]] = {}
+    for rid, grp in peaks.groupby("round_id"):
+        g = grp.sort_values("peak_ts")
+        rntis = [str(r) for r in g["rnti"].tolist()]
+        if rntis:
+            out[int(rid)] = rntis
+    return out
+
+
+def _rnti_segment_window_and_rounds(ue_dfs: Dict[str, pl.DataFrame]) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for rnti, df in ue_dfs.items():
+        key = str(rnti)
+        info: Dict[str, Any] = {"first_segment": None, "last_segment": None, "round_ids": set()}
+
+        cols = set(df.columns)
+        if "round_id" in cols:
+            rids = (
+                df.select(["round_id"]).to_pandas()["round_id"]
+                .dropna()
+                .astype(int)
+                .tolist()
+            )
+            info["round_ids"] = set(rids)
+
+        if "segment" in cols:
+            seg = pd.to_numeric(df.select(["segment"]).to_pandas()["segment"], errors="coerce").dropna()
+            if not seg.empty:
+                info["first_segment"] = int(seg.min())
+                info["last_segment"] = int(seg.max())
+
+        out[key] = info
+    return out
+
+
+def print_rnti_cid_mapping(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], run_label: str):
+    fl_orders = _fl_ul_order_by_round(exp_path)
+    phy_orders = _phy_ul_order_by_round(ue_dfs)
+    common_rounds = sorted(set(fl_orders.keys()) & set(phy_orders.keys()))
+    rnti_windows = _rnti_segment_window_and_rounds(ue_dfs)
+
+    if not common_rounds:
+        print(f"[{run_label}] mapping skipped: no overlapping FL/PHY UL-order rounds")
+        return
+
+    vote_table: Dict[str, Dict[int, int]] = {}
+    for rid in common_rounds:
+        cids = fl_orders[rid]
+        rntis = phy_orders[rid]
+        n = min(len(cids), len(rntis))
+        for i in range(n):
+            rnti = rntis[i]
+            active_rounds = rnti_windows.get(rnti, {}).get("round_ids", set())
+            # Only score alignments for rounds where this RNTI is active.
+            if active_rounds and rid not in active_rounds:
+                continue
+            cid = int(cids[i])
+            vote_table.setdefault(rnti, {})
+            vote_table[rnti][cid] = vote_table[rnti].get(cid, 0) + 1
+
+    if not vote_table:
+        print(f"[{run_label}] mapping skipped: insufficient per-round UL ordering data")
+        return
+
+    best_map: Dict[str, int] = {}
+    print(f"[{run_label}] RNTI->CID mapping from UL-order consistency:")
+    for rnti in sorted(vote_table.keys()):
+        votes = vote_table[rnti]
+        total = int(sum(votes.values()))
+        cid, score = max(votes.items(), key=lambda kv: kv[1])
+        p = (score / total) if total > 0 else 0.0
+        best_map[rnti] = int(cid)
+        seg_first = rnti_windows.get(rnti, {}).get("first_segment")
+        seg_last = rnti_windows.get(rnti, {}).get("last_segment")
+        seg_txt = (
+            "segments unknown"
+            if seg_first is None or seg_last is None
+            else f"segments {seg_first}..{seg_last}"
+        )
+        print(f"  RNTI {rnti} -> CID {cid} | p={p:.3f} ({score}/{total} aligned rounds) | {seg_txt}")
+
+    agree = 0
+    total = 0
+    for rid in common_rounds:
+        fl = [int(c) for c in fl_orders[rid]]
+        phy = [
+            str(r)
+            for r in phy_orders[rid]
+            if str(r) in best_map and (rid in rnti_windows.get(str(r), {}).get("round_ids", set()))
+        ]
+        mapped = [best_map[r] for r in phy]
+        if not mapped or not fl:
+            continue
+
+        common_cids = [c for c in fl if c in set(mapped)]
+        mapped_trim = [c for c in mapped if c in set(common_cids)]
+        if not common_cids or not mapped_trim:
+            continue
+
+        total += 1
+        if common_cids == mapped_trim:
+            agree += 1
+
+    if total > 0:
+        print(f"[{run_label}] global ordering consistency: {agree}/{total} rounds ({agree / total:.1%})")
+    else:
+        print(f"[{run_label}] global ordering consistency: insufficient comparable rounds")
 
 # =========================
 # Round profiles extension
@@ -597,6 +944,8 @@ def compute_round_average_profile_real_time(
     bin_s: float = 0.25,
     phase_filter=None,
     round_ids: Optional[List[int]] = None,
+    max_time_s: Optional[float] = None,
+    time_quantile: float = 0.995,
 ) -> pd.DataFrame:
     if metric not in annotated_trial_data.columns:
         return pd.DataFrame()
@@ -614,16 +963,43 @@ def compute_round_average_profile_real_time(
 
     ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
     rs = pd.to_datetime(df["round_start"], utc=True, errors="coerce")
+    re = pd.to_datetime(df["round_end"], utc=True, errors="coerce") if "round_end" in df.columns else pd.Series(pd.NaT, index=df.index)
     y = pd.to_numeric(df[metric], errors="coerce")
 
     work = pd.DataFrame({
         "round_id": df["round_id"],
         "t_since_start_s": (ts - rs).dt.total_seconds(),   # >= 0 during round
+        "round_duration_s": (re - rs).dt.total_seconds(),
         "value": y
     }).dropna()
 
     if work.empty:
         return pd.DataFrame()
+
+    work = work[work["t_since_start_s"] >= 0].copy()
+    if work.empty:
+        return pd.DataFrame()
+
+    # Keep values within each round's expected duration when available.
+    has_dur = pd.to_numeric(work["round_duration_s"], errors="coerce")
+    dur_mask = has_dur.notna() & (has_dur > 0)
+    if dur_mask.any():
+        work = work[(~dur_mask) | (work["t_since_start_s"] <= (has_dur + 1.0))].copy()
+        if work.empty:
+            return pd.DataFrame()
+
+    # Robust trimming for occasional telemetry points far outside normal round times.
+    cap = None
+    q = float(time_quantile)
+    if 0.0 < q < 1.0 and len(work) >= 10:
+        cap = float(work["t_since_start_s"].quantile(q))
+    if max_time_s is not None and np.isfinite(float(max_time_s)) and float(max_time_s) > 0:
+        hard = float(max_time_s)
+        cap = hard if cap is None else min(cap, hard)
+    if cap is not None and np.isfinite(cap):
+        work = work[work["t_since_start_s"] <= cap].copy()
+        if work.empty:
+            return pd.DataFrame()
 
     # Bin by real time from round start
     b = float(bin_s)
@@ -658,6 +1034,22 @@ def compute_round_curves_for_one_rnti(
         ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
         rs = pd.to_datetime(df["round_start"], utc=True, errors="coerce")
         df["x"] = (ts - rs).dt.total_seconds()
+
+        # Guard against pathological timestamps that are far from nominal round length.
+        if "round_end" in df.columns:
+            re = pd.to_datetime(df["round_end"], utc=True, errors="coerce")
+            round_dur = (re - rs).dt.total_seconds()
+            df = df[(pd.to_numeric(df["x"], errors="coerce") >= 0) & ((round_dur.isna()) | (pd.to_numeric(df["x"], errors="coerce") <= (round_dur + 1.0)))].copy()
+
+        max_time_s = cfg.round_profile_real_time_max_s
+        if max_time_s is not None and np.isfinite(float(max_time_s)) and float(max_time_s) > 0:
+            df = df[pd.to_numeric(df["x"], errors="coerce") <= float(max_time_s)].copy()
+
+        q = float(cfg.round_profile_real_time_quantile)
+        if 0.0 < q < 1.0 and not df.empty:
+            cap = pd.to_numeric(df["x"], errors="coerce").dropna().quantile(q)
+            if pd.notna(cap):
+                df = df[pd.to_numeric(df["x"], errors="coerce") <= float(cap)].copy()
     else:
         # round_t may not exist in compact pipeline; compute if missing.
         if "round_t" not in df.columns:
@@ -737,6 +1129,7 @@ def plot_round_profiles(
     run_label: str,
     cfg: PlotConfig,
     paired_metric: Optional[str] = None,
+    exp_path: Optional[Path] = None,
 ):
     """
     Unified round-profile plotter:
@@ -792,6 +1185,17 @@ def plot_round_profiles(
             rntis = sorted(rounds_for_rnti.keys())
             palette = sns.color_palette("tab10", n_colors=max(1, len(rntis)))
             color_map = {r: palette[i % len(palette)] for i, r in enumerate(rntis)}
+
+            # Print FL CID order for the same rounds used in this overlay.
+            if exp_path is not None:
+                fl_orders = _fl_ul_order_by_round(exp_path)
+                plotted_rounds = sorted({rid for rr in rounds_for_rnti.values() for rid in rr})
+                if plotted_rounds:
+                    print(f"[{run_label}] FL CID UL-order for same_axes plotted rounds:")
+                    for rid in plotted_rounds:
+                        cids = fl_orders.get(int(rid), [])
+                        cid_txt = ",".join(str(c) for c in cids) if cids else "(no FL data)"
+                        print(f"  round {rid}: [{cid_txt}]")
 
             # Legend denotes RNTI color, not round number.
             for rnti in rntis:
@@ -852,19 +1256,66 @@ def plot_round_profiles(
 
     # -------- averaged profile mode --------
     prof_a, prof_b = {}, {}
+    prof_theory: Dict[str, Dict[str, pd.DataFrame]] = {}
+    theory_cols = _round_profile_theory_columns(metric, cfg.round_profile_theoretical_models) if cfg.round_profile_include_theoretical else []
     for dev, df in ue_dfs.items():
         if "round_id" not in df.columns:
             continue
         if cfg.round_profile_time_mode == "real_from_round_start":
-            p1 = compute_round_average_profile_real_time(df, metric, bin_s=cfg.round_profile_bin_s, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
+            p1 = compute_round_average_profile_real_time(
+                df,
+                metric,
+                bin_s=cfg.round_profile_bin_s,
+                phase_filter=cfg.round_profile_phase_filter,
+                round_ids=cfg.round_profile_round_ids,
+                max_time_s=cfg.round_profile_real_time_max_s,
+                time_quantile=cfg.round_profile_real_time_quantile,
+            )
         else:
             p1 = compute_round_average_profile(df, metric, n_points=cfg.round_profile_points, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
 
         if not p1.empty:
             prof_a[str(dev)] = p1
+
+        if theory_cols:
+            dev_theory = {}
+            for col, label in theory_cols:
+                if col not in df.columns:
+                    continue
+                if cfg.round_profile_time_mode == "real_from_round_start":
+                    pt = compute_round_average_profile_real_time(
+                        df,
+                        col,
+                        bin_s=cfg.round_profile_bin_s,
+                        phase_filter=cfg.round_profile_phase_filter,
+                        round_ids=cfg.round_profile_round_ids,
+                        max_time_s=cfg.round_profile_real_time_max_s,
+                        time_quantile=cfg.round_profile_real_time_quantile,
+                    )
+                else:
+                    pt = compute_round_average_profile(
+                        df,
+                        col,
+                        n_points=cfg.round_profile_points,
+                        phase_filter=cfg.round_profile_phase_filter,
+                        round_ids=cfg.round_profile_round_ids,
+                    )
+                if not pt.empty:
+                    dev_theory[label] = pt
+            if dev_theory:
+                prof_theory[str(dev)] = dev_theory
+
         if paired_metric:
             if cfg.round_profile_time_mode == "real_from_round_start":
-                p2 = compute_round_average_profile_real_time(df, paired_metric, bin_s=cfg.round_profile_bin_s, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
+                p2 = compute_round_average_profile_real_time(
+                    df,
+                    paired_metric,
+                    bin_s=cfg.round_profile_bin_s,
+                    phase_filter=cfg.round_profile_phase_filter,
+                    round_ids=cfg.round_profile_round_ids,
+                    max_time_s=cfg.round_profile_real_time_max_s,
+                    time_quantile=cfg.round_profile_real_time_quantile,
+                )
             else:
                 p2 = compute_round_average_profile(df, paired_metric, n_points=cfg.round_profile_points, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
             if not p2.empty:
@@ -974,6 +1425,17 @@ def plot_round_profiles(
                 grid = p[xcol].to_numpy(dtype=float)
             effective += p["mean"].to_numpy(dtype=float)
 
+        if dev in prof_theory:
+            for theory_label, pth in prof_theory[dev].items():
+                ax.plot(
+                    pth[xcol],
+                    pth["mean"],
+                    linestyle="--" if theory_label == "Shannon" else ":",
+                    linewidth=1.8,
+                    alpha=0.95,
+                    label=f"{dev} {theory_label}",
+                )
+
     if effective is not None:
         if cfg.round_profile_effective_secondary_axis:
             ax2 = ax.twinx()
@@ -1015,6 +1477,134 @@ def _distribution_df(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: D
                 rows.append({"device": str(rnti), "value": v, "series": paired_metric, "direction": "DL"})
 
     return pd.DataFrame(rows)
+
+
+def _throughput_overlay_columns(metric: str, models: List[str]) -> List[Tuple[str, str]]:
+    if metric not in {"ul_throughput_mbps", "dl_throughput_mbps"}:
+        return []
+
+    prefix = "ul" if metric.startswith("ul_") else "dl"
+    out: List[Tuple[str, str]] = [(metric, f"{prefix.upper()} actual")]
+
+    model_map = {
+        "shannon": (f"{prefix}_shannon", "Shannon"),
+        "shannon_sinr": (f"{prefix}_shannon_sinr", "Shannon (SINR)"),
+        "3gpp": (f"{prefix}_3gpp", "3GPP"),
+    }
+    for m in models:
+        key = str(m).strip().lower()
+        if key in model_map:
+            col, label = model_map[key]
+            out.append((col, label))
+
+    # Remove duplicates while preserving order.
+    seen = set()
+    deduped: List[Tuple[str, str]] = []
+    for col, label in out:
+        if col in seen:
+            continue
+        seen.add(col)
+        deduped.append((col, label))
+    return deduped
+
+
+def _round_profile_theory_columns(metric: str, models: List[str]) -> List[Tuple[str, str]]:
+    if metric not in {"ul_throughput_mbps", "dl_throughput_mbps"}:
+        return []
+
+    prefix = "ul" if metric.startswith("ul_") else "dl"
+    model_map = {
+        "shannon": (f"{prefix}_shannon", "Shannon"),
+        "3gpp": (f"{prefix}_3gpp", "3GPP"),
+        "shannon_sinr": (f"{prefix}_shannon_sinr", "Shannon (SINR)"),
+    }
+
+    out: List[Tuple[str, str]] = []
+    for m in models:
+        key = str(m).strip().lower()
+        if key in model_map:
+            out.append(model_map[key])
+    return out
+
+
+def plot_throughput_overlay(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cfg: PlotConfig):
+    if "time" not in cfg.plot_mode:
+        return
+
+    series_cols = _throughput_overlay_columns(metric, cfg.throughput_overlay_models)
+    if len(series_cols) <= 1:
+        return
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    rows = []
+
+    for rnti, df in ue_dfs.items():
+        needed = ["timestamp"] + [c for c, _ in series_cols if c in df.columns]
+        if len(needed) <= 1:
+            continue
+
+        pdf = df.select(needed).to_pandas()
+        pdf["timestamp"] = pd.to_datetime(pdf["timestamp"], utc=True, errors="coerce")
+        pdf = pdf.dropna(subset=["timestamp"])
+        if pdf.empty:
+            continue
+
+        if cfg.use_relative_time:
+            pdf["relative_time_s"] = (pdf["timestamp"] - pdf["timestamp"].min()).dt.total_seconds()
+
+        pdf = pdf.iloc[cfg.pts_offset: cfg.pts_offset + cfg.pts_to_plot].copy()
+        if pdf.empty:
+            continue
+
+        threshold = cfg.min_thresholds.get(metric)
+        for col, series_label in series_cols:
+            if col not in pdf.columns:
+                continue
+            y = pd.to_numeric(pdf[col], errors="coerce")
+            if col == metric and threshold is not None:
+                y = y.where(y >= threshold)
+
+            x = pdf["relative_time_s"] if cfg.use_relative_time else pdf["timestamp"]
+            valid = pd.notna(x) & pd.notna(y)
+            if not valid.any():
+                continue
+
+            rows.append(pd.DataFrame({
+                "x": x[valid],
+                "value": y[valid],
+                "device": str(rnti),
+                "series": series_label,
+            }))
+
+    if not rows:
+        plt.close(fig)
+        return
+
+    plot_df = pd.concat(rows, ignore_index=True)
+    sns.lineplot(
+        data=plot_df,
+        x="x",
+        y="value",
+        hue="device",
+        style="series",
+        linewidth=1.6,
+        alpha=0.9,
+        ax=ax,
+    )
+
+    prefix = "UL" if metric.startswith("ul_") else "DL"
+    title = f"{prefix} actual vs theoretical throughput [{run_label}]"
+    ax.set_title(title)
+    ax.set_ylabel("Throughput (Mbps)")
+    ax.set_xlabel("Relative Time (s)" if cfg.use_relative_time else "Timestamp")
+    ax.grid(True)
+
+    if cfg.save_plots:
+        plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+    if cfg.show_plots:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cfg: PlotConfig, paired_metric: Optional[str] = None):
@@ -1210,8 +1800,10 @@ def run_analysis(exp: dict, cfg: PlotConfig):
     
     if cfg.dataset_type.lower() != "iperf":
         ue_dfs, _rounds = apply_round_processing(exp["path"], ue_dfs, cfg)
+        print_rnti_cid_mapping(exp["path"], ue_dfs, label)
 
     processed = set()
+    throughput_overlay_done = set()
     for metric in cfg.metrics:
         if metric in processed:
             continue
@@ -1233,6 +1825,10 @@ def run_analysis(exp: dict, cfg: PlotConfig):
                 continue
 
         plot_metric(ue_dfs, metric, label, cfg, paired_metric=paired)
+        if cfg.throughput_overlay_enabled and metric in {"ul_throughput_mbps", "dl_throughput_mbps"}:
+            if metric not in throughput_overlay_done:
+                plot_throughput_overlay(ue_dfs, metric, label, cfg)
+                throughput_overlay_done.add(metric)
         if cfg.round_profiles_enabled:
             plot_round_profiles(
                 ue_dfs,
@@ -1240,6 +1836,7 @@ def run_analysis(exp: dict, cfg: PlotConfig):
                 paired_metric=paired,
                 run_label=label,
                 cfg=cfg,
+                exp_path=exp.get("path"),
             )
         processed.add(metric)
 
@@ -1281,8 +1878,8 @@ def main():
         data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
         output_dir=Path.cwd() / "phys_layer_plots",
         filters={
-            # "bandwidth": "20 MHz",
-            # "distribution": "dirichlet",
+            "bandwidth": "80 MHz",
+            "distribution": "dirichlet",
             # "tdd": "2-7",
             # "nodes": "9N",
             "rank": "2x2",
@@ -1290,7 +1887,7 @@ def main():
         },
         sweep="network",
         # metrics=["ulMcs", "dlMcs", "puschSnr", "rssi", "ul_throughput_mbps", "dl_throughput_mbps", "phr", "ulBler", "dlBler", "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp"],
-        metrics=["ul_throughput_mbps", "dl_throughput_mbps"],#["ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp", "ul_shannon_sinr", "dl_shannon_sinr"],
+        metrics=["ul_throughput_mbps", "dl_throughput_mbps"],#, "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp", "ul_shannon_sinr", "dl_shannon_sinr"],
         # min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
         filter_rounds=True,
         annotate_phases=True,
@@ -1307,15 +1904,19 @@ def main():
         round_profile_points = 10000,
         use_relative_time=False,
         # round_profile_round_ids=[3,77,180],  # choose exact rounds in per_round mode
-        round_profile_curve_mode = "average",   # "average" | "per_round"
+        round_profile_curve_mode = "per_round",   # "average" | "per_round"
         round_profile_target_rnti = None,        # e.g. "65" for per_round mode
         round_profile_target_rntis = None,       # e.g. ["65", "66"]; None means all in multi modes
-        round_profile_per_round_rnti_layout = "single",  # "single" | "same_axes" | "separate_figures"
+        round_profile_per_round_rnti_layout = "same_axes",  # "single" | "same_axes" | "separate_figures"
         round_profile_max_curves = 12,
         round_profile_time_mode = "real_from_round_start",   # "normalized" | "real_from_round_start"
         round_profile_ci_bands = True,
         round_profile_ci_level = 0.95,
         round_profile_bin_s = 0.1,   # for real-time mode binning
+        throughput_overlay_enabled = False,
+        throughput_overlay_models = ["shannon", "3gpp", "shannon_sinr"],
+        round_profile_include_theoretical = False,
+        round_profile_theoretical_models = ["shannon", "3gpp"],
     )
 
     # ["segment", "pucchSnr", "ranUeId", "dlBytes", "dlMcs", "ulQm", "rsrp", "ueId", "amfUeId", "dlQm",
@@ -1334,7 +1935,7 @@ def main():
     #     },
     #     cid_filter=["1", "2", "3", "4", "5", "6"],
     #     direction_filter=["UL", "DL"], # ["UL", "DL"]
-    #     metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps", "rsrp"],
+    #     metrics=["ul_throughput_mbps", "dl_throughput_mbps", "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp", "ul_shannon_sinr", "dl_shannon_sinr"],
     #     plot_mode="time",
     #     use_relative_time=False,
     #     pair_ul_dl=False,
