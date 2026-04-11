@@ -16,8 +16,51 @@ from helpers import sort_experiments_by_sweep, format_sweep_label
 THROUGHPUT_METRICS = {
     "ul_throughput_mbps",
     "dl_throughput_mbps",
+    "ul_shannon",
+    "dl_shannon",
+    "ul_shannon_sinr",
+    "dl_shannon_sinr",
+    "ul_3gpp",
+    "dl_3gpp"
 }
 
+
+# =========================
+# Theoretical throughput
+# =========================
+data_size = 2.9172 * 8
+
+mu = 1
+T_s = 1e-3 / (14 *2 ** mu)
+# R_max = 948 / 1024
+f = 1
+OH_dl = 0.14
+OH_ul = 0.08
+v_layers = 2
+
+def calc_ratios(dl_slots, ul_slots, period_slots):
+    flex_slots = period_slots - dl_slots - ul_slots
+    # Flexible slot: 6/14 DL, 4/14 UL symbols
+    eff_dl = (dl_slots + flex_slots * 6 / 14) / period_slots
+    eff_ul = (ul_slots + flex_slots * 4 / 14) / period_slots
+    return {'dl': eff_dl, 'ul': eff_ul}
+
+# mu=1 -> 0.5ms slots -> 5ms = 10 slots, 2.5ms = 5 slots
+slot_configs = {
+    '7-2': calc_ratios(7, 2, 10),   # 1 flex slot
+    '5-4': calc_ratios(5, 4, 10),   # 1 flex slot
+    '2-7': calc_ratios(2, 7, 10),   # 1 flex slot
+    '3-1': calc_ratios(3, 1, 5),    # 1 flex slot
+    '2-2': calc_ratios(2, 2, 5),    # 1 flex slot
+}
+# N_PRB = {'20 MHz': 51, '40 MHz': 106, '60 MHz': 162,'80 MHz': 217, '100 MHz': 273}
+N_PRB = {20: 51, 40: 106, 60: 162, 80: 217, 100: 273}
+bandwidths = ['20 MHz', '40 MHz', '80 MHz', '100 MHz']
+
+def theoretical_throughput(bw, Qm, R_max=948/1024, slot_config='7:2', direction='dl', num_users=1):
+    oh = OH_dl if direction == 'dl' else OH_ul
+    allocated_slots = slot_configs[slot_config][direction] / num_users
+    return 1e-6 * v_layers * Qm * f * R_max * ((N_PRB[bw] * 12) / T_s) * (1 - oh) * allocated_slots
 
 # =========================
 # Config
@@ -50,7 +93,7 @@ class PlotConfig:
 
     # round profiles
     round_profiles_enabled: bool = False
-    round_profile_points: int = 1000
+    round_profile_points: int = 100000
     round_profile_phase_filter: Optional[List[str]] = None
     round_profile_round_ids: Optional[List[int]] = None
     round_profile_layout: str = "same_axes" # use 'subplots' for stacked UL/DL panels
@@ -58,6 +101,15 @@ class PlotConfig:
     round_profile_errorbar_step: int = 10
     round_profile_include_effective_sum: bool = True
     round_profile_effective_secondary_axis: bool = True
+    round_profile_time_mode: str = "normalized"   # "normalized" | "real_from_round_start"
+    round_profile_curve_mode: str = "average"      # "average" | "per_round"
+    round_profile_target_rnti: Optional[str] = None # plot this RNTI in per_round mode; default first available
+    round_profile_target_rntis: Optional[List[str]] = None # per_round multi-RNTI selection; None uses all for multi modes
+    round_profile_per_round_rnti_layout: str = "single"   # "single" | "same_axes" | "separate_figures"
+    round_profile_max_curves: int = 12              # max number of round curves to overlay in per_round mode
+    round_profile_ci_bands: bool = False
+    round_profile_ci_level: float = 0.95
+    round_profile_bin_s: float = 0.25   # for real-time mode binning
 
     # iperf
     dataset_type: str = "fedavg"   # "fedavg" | "iperf"
@@ -114,15 +166,22 @@ def _compute_mean_std(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: 
     s = pd.Series(vals)
     return float(s.mean()), (float(s.std()) if len(s) > 1 else None)
 
+def _ci_halfwidth(std: np.ndarray, n: np.ndarray, level: float = 0.95) -> np.ndarray:
+    # normal approx; switch to t-dist if you want exact small-sample behavior
+    z = 1.96 if abs(level - 0.95) < 1e-9 else 1.96
+    out = np.full_like(std, np.nan, dtype=float)
+    mask = np.isfinite(std) & np.isfinite(n) & (n > 1)
+    out[mask] = z * (std[mask] / np.sqrt(n[mask]))
+    return out
+
 
 # =========================
 # Data loading
 # =========================
-
 def _metrics_to_load(metrics: List[str]) -> List[str]:
     base = [m for m in metrics if m not in THROUGHPUT_METRICS]
     if any(m in THROUGHPUT_METRICS for m in metrics):
-        base += ["ulBytes", "dlBytes"]
+        base += ["ulBytes", "dlBytes", "ulMcs", "dlMcs", "ulQm", "dlQm", "puschSnr", "sinr"]
     return list(dict.fromkeys(base))
 
 
@@ -134,31 +193,111 @@ def _read_joined_csv(main_fp: str, secondary_fp: Optional[str], columns: Optiona
     return pl.read_csv(main_fp, columns=(["timestamp"] + columns) if columns else None, try_parse_dates=True)
 
 
-def _add_throughput(df: pl.DataFrame) -> pl.DataFrame:
-    needed = {"timestamp", "ulBytes", "dlBytes"}
+def _add_throughput(df: pl.DataFrame, exp: dict) -> pl.DataFrame:
+    # def theoretical_throughput(bw, Qm, R_max, slot_config='7:2', direction='dl', num_users=1):
+    needed = {"timestamp", "ulBytes", "dlBytes", "ulQm", "dlQm", "ulMcs", "dlMcs", "puschSnr", "sinr"}
     if not needed.issubset(df.columns):
         return df
+    
+    ref_lut = (
+        pl.read_csv(Path("ref.csv"), columns=["index", "mcs target code rate", "sinr"])
+        .rename({"mcs target code rate": "mcs_target_code_rate", "sinr" : "sinr_map"})
+        .with_columns(pl.col("index").cast(pl.Float64, strict=False))
+        .with_columns(pl.col("sinr_map").cast(pl.Float64, strict=False))
+    )
+    bw = int(exp['bandwidth'].split(" ")[0])
+    tdd = exp['tdd']
+    dl_parts, ul_parts = map(int, tdd.split('-'))
+    dl_pct = dl_parts / (dl_parts + ul_parts + 1)
+    ul_pct = ul_parts / (dl_parts + ul_parts + 1)
+
+#     ref_base = (
+#     pl.read_csv(Path("ref.csv"), columns=["index", "mcs target code rate", "sinr"])
+#     .rename({"mcs target code rate": "code_rate", "sinr": "sinr_map"})
+#     .with_columns(pl.col("index").cast(pl.Float64, strict=False))
+# )
+
+# ul_lut = ref_base.select([
+#     pl.col("mcs_index"),
+#     pl.col("code_rate").alias("ul_code_rate"),
+# ])
+
+# dl_lut = ref_base.select([
+#     pl.col("mcs_index"),
+#     pl.col("code_rate").alias("dl_code_rate"),
+# ])
+
+# sinr_lut = ref_base.select([
+#     pl.col("mcs_index"),
+#     pl.col("sinr_map").alias("sinr_linear"),
+# ])
+
+# # Ensure left keys are same dtype
+# df = df.with_columns(
+#     pl.col("ulMcs").cast(pl.Float64, strict=False),
+#     pl.col("dlMcs").cast(pl.Float64, strict=False),
+#     pl.col("sinr").cast(pl.Float64, strict=False),
+# )
+
+# df = (
+#     df.join(ul_lut, left_on="ulMcs", right_on="mcs_index", how="left")
+#       .join(dl_lut, left_on="dlMcs", right_on="mcs_index", how="left")
+#       .join(sinr_lut, left_on="sinr", right_on="mcs_index", how="left")
+# )
 
     return (
         df.with_columns(
             ul_num=pl.col("ulBytes").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
             dl_num=pl.col("dlBytes").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
+            ulMcs=pl.col("ulMcs").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
+            dlMcs=pl.col("dlMcs").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
+            ulQm=pl.col("ulQm").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
+            dlQm=pl.col("dlQm").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
+            sinr=pl.col("sinr").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
+            puschSnr=pl.col("puschSnr").cast(pl.Utf8).str.replace_all(",", "").cast(pl.Float64, strict=False),
         )
         .sort("timestamp")
         .with_columns(
             dt=pl.col("timestamp").diff().dt.total_seconds(),
             dul=pl.col("ul_num").diff(),
             ddl=pl.col("dl_num").diff(),
+            puschSnr_linear=pl.lit(10.0).pow(pl.col("puschSnr") / 10.0),
+            sinr_linear=pl.lit(10.0).pow(pl.col("sinr") / 10.0)
         )
+        .join(
+            ref_lut.rename({"mcs_target_code_rate": "ul_code_rate"}),
+            left_on="ulMcs",
+            right_on="index",
+            how="left",
+        )
+        .join(
+            ref_lut.rename({"mcs_target_code_rate": "dl_code_rate"}),
+            left_on="dlMcs",
+            right_on="index",
+            how="left",
+        )
+        # .join(
+        #     ref_lut.rename({"sinr_map": "sinr_linear"}),
+        #     left_on="sinr",
+        #     right_on="index",
+        #     how="left",
+        # )
         .with_columns(
             ul_throughput_mbps=pl.when((pl.col("dt") > 0) & (pl.col("dul") >= 0)).then((pl.col("dul") * 8 / 1_000_000) / pl.col("dt")).otherwise(None),
             dl_throughput_mbps=pl.when((pl.col("dt") > 0) & (pl.col("ddl") >= 0)).then((pl.col("ddl") * 8 / 1_000_000) / pl.col("dt")).otherwise(None),
+            ul_shannon=ul_pct*bw*(1+pl.col("puschSnr_linear")).log(base=2),
+            dl_shannon=dl_pct*bw*(1+pl.col("puschSnr_linear")).log(base=2),
+            ul_shannon_sinr=ul_pct*bw*(1+pl.col("sinr_linear")).log(base=2),
+            dl_shannon_sinr=dl_pct*bw*(1+pl.col("sinr_linear")).log(base=2),
+            ul_3gpp = theoretical_throughput(bw, pl.col("ulQm"), pl.col("ul_code_rate"), tdd, "ul"),
+            dl_3gpp = theoretical_throughput(bw, pl.col("dlQm"), pl.col("dl_code_rate"), tdd, "dl")
         )
         .drop("ul_num", "dl_num")
     )
 
 
-def load_experiment_data(exp_path: Path, metrics: List[str]) -> Dict[str, pl.DataFrame]:
+def load_experiment_data(exp: dict, metrics: List[str]) -> Dict[str, pl.DataFrame]:
+    exp_path = exp["path"]
     phys = exp_path / "phys_layer"
     if not phys.exists():
         return {}
@@ -172,7 +311,7 @@ def load_experiment_data(exp_path: Path, metrics: List[str]) -> Dict[str, pl.Dat
             continue
         rnti = n.split("_")[1].split(".")[0]
         df = _read_joined_csv(str(phys / "common.csv"), str(fp), load_cols)
-        out[rnti] = _add_throughput(df)
+        out[rnti] = _add_throughput(df, exp)
 
     return out
 
@@ -182,6 +321,7 @@ def build_iperf_experiment_index(root_dir: Path) -> List[dict]:
     location_dirs = [
         ("normal", root_dir / "iperf_normal_locations"),
         ("fair", root_dir / "iperf_fair"),
+        ("all_connected", root_dir / "iperf_all_connected")
     ]
 
     for location, base in location_dirs:
@@ -436,10 +576,159 @@ def compute_round_average_profile(
     if not aligned:
         return pd.DataFrame()
 
+    # arr = np.vstack(aligned)
+    # return pd.DataFrame(
+    #     {"round_t": grid, "mean": np.nanmean(arr, axis=0), "std": np.nanstd(arr, axis=0)}
+    # )
     arr = np.vstack(aligned)
     return pd.DataFrame(
-        {"round_t": grid, "mean": np.nanmean(arr, axis=0), "std": np.nanstd(arr, axis=0)}
+        {
+            "round_t": grid,
+            "mean": np.nanmean(arr, axis=0),
+            "std": np.nanstd(arr, axis=0),
+            "n": np.sum(np.isfinite(arr), axis=0),
+        }
     )
+
+
+def compute_round_average_profile_real_time(
+    annotated_trial_data: pl.DataFrame,
+    metric: str,
+    bin_s: float = 0.25,
+    phase_filter=None,
+    round_ids: Optional[List[int]] = None,
+) -> pd.DataFrame:
+    if metric not in annotated_trial_data.columns:
+        return pd.DataFrame()
+
+    df = annotated_trial_data.to_pandas()
+    phases = _phase_list(phase_filter)
+    if phases is not None and "phase" in df.columns:
+        df = df[df["phase"].isin(phases)]
+    if round_ids is not None and "round_id" in df.columns:
+        df = df[df["round_id"].isin(round_ids)]
+
+    needed = {"timestamp", "round_start", "round_id", metric}
+    if not needed.issubset(df.columns):
+        return pd.DataFrame()
+
+    ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+    rs = pd.to_datetime(df["round_start"], utc=True, errors="coerce")
+    y = pd.to_numeric(df[metric], errors="coerce")
+
+    work = pd.DataFrame({
+        "round_id": df["round_id"],
+        "t_since_start_s": (ts - rs).dt.total_seconds(),   # >= 0 during round
+        "value": y
+    }).dropna()
+
+    if work.empty:
+        return pd.DataFrame()
+
+    # Bin by real time from round start
+    b = float(bin_s)
+    work["t_bin"] = np.round(work["t_since_start_s"] / b) * b
+
+    g = work.groupby("t_bin")["value"]
+    out = g.agg(mean="mean", std="std", n="count").reset_index().sort_values("t_bin")
+    return out.rename(columns={"t_bin": "t_since_start_s"})
+
+
+def compute_round_curves_for_one_rnti(
+    annotated_trial_data: pl.DataFrame,
+    metric: str,
+    cfg: PlotConfig,
+) -> Dict[int, pd.DataFrame]:
+    if metric not in annotated_trial_data.columns:
+        return {}
+
+    mode = (cfg.round_profile_time_mode or "normalized").lower()
+    phases = _phase_list(cfg.round_profile_phase_filter)
+
+    df = annotated_trial_data.to_pandas()
+    if phases is not None and "phase" in df.columns:
+        df = df[df["phase"].isin(phases)]
+    if cfg.round_profile_round_ids is not None and "round_id" in df.columns:
+        df = df[df["round_id"].isin(cfg.round_profile_round_ids)]
+
+    if mode == "real_from_round_start":
+        needed = {"timestamp", "round_start", "round_id", metric}
+        if not needed.issubset(df.columns):
+            return {}
+        ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+        rs = pd.to_datetime(df["round_start"], utc=True, errors="coerce")
+        df["x"] = (ts - rs).dt.total_seconds()
+    else:
+        # round_t may not exist in compact pipeline; compute if missing.
+        if "round_t" not in df.columns:
+            needed = {"round_start", "round_end", "timestamp"}
+            if not needed.issubset(df.columns):
+                return {}
+            rs = pd.to_datetime(df["round_start"], utc=True, errors="coerce")
+            re = pd.to_datetime(df["round_end"], utc=True, errors="coerce")
+            ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+            dur = (re - rs).dt.total_seconds()
+            el = (ts - rs).dt.total_seconds()
+            df["round_t"] = np.where(dur > 0, el / dur, np.nan)
+        df["x"] = pd.to_numeric(df["round_t"], errors="coerce")
+
+    df["value"] = pd.to_numeric(df[metric], errors="coerce")
+    work = df.dropna(subset=["round_id", "x", "value"]).copy()
+    if work.empty:
+        return {}
+
+    curves: Dict[int, pd.DataFrame] = {}
+    for rid, grp in work.groupby("round_id"):
+        g = grp.sort_values("x").copy()
+        x = g["x"].to_numpy(dtype=float)
+        y = g["value"].to_numpy(dtype=float)
+
+        mask = np.isfinite(x) & np.isfinite(y)
+        x, y = x[mask], y[mask]
+        if len(x) < 2:
+            continue
+
+        # Keep monotonic x for clean lines.
+        keep = np.r_[True, np.diff(x) > 0]
+        x, y = x[keep], y[keep]
+        if len(x) < 2:
+            continue
+
+        curves[int(rid)] = pd.DataFrame({"x": x, "value": y})
+
+    return curves
+
+
+def _selected_round_ids(available_round_ids: List[int], cfg: PlotConfig) -> List[int]:
+    available = set(int(r) for r in available_round_ids)
+    if cfg.round_profile_round_ids:
+        return [int(r) for r in cfg.round_profile_round_ids if int(r) in available]
+
+    ordered = sorted(available)
+    max_curves = int(cfg.round_profile_max_curves)
+    if max_curves <= 0:
+        return ordered
+    return ordered[:max_curves]
+
+
+def _selected_rntis_for_per_round(ue_dfs: Dict[str, pl.DataFrame], cfg: PlotConfig) -> List[str]:
+    all_rntis = sorted(str(k) for k in ue_dfs.keys())
+    if not all_rntis:
+        return []
+
+    layout = (cfg.round_profile_per_round_rnti_layout or "single").lower()
+    if layout == "single":
+        target = str(cfg.round_profile_target_rnti) if cfg.round_profile_target_rnti is not None else all_rntis[0]
+        return [target] if target in ue_dfs else []
+
+    if cfg.round_profile_target_rntis:
+        chosen = [str(r) for r in cfg.round_profile_target_rntis if str(r) in ue_dfs]
+        return chosen
+
+    if cfg.round_profile_target_rnti is not None and str(cfg.round_profile_target_rnti) in ue_dfs:
+        return [str(cfg.round_profile_target_rnti)]
+
+    return all_rntis
 
 
 def plot_round_profiles(
@@ -459,36 +748,159 @@ def plot_round_profiles(
     phases = _phase_list(cfg.round_profile_phase_filter)
     phase_suffix = "" if phases is None else f" ({'/'.join(phases)})"
 
-    # build profiles once
+    mode = (cfg.round_profile_time_mode or "normalized").lower()
+    curve_mode = (cfg.round_profile_curve_mode or "average").lower()
+    xlabel = "Time since round start (s)" if mode == "real_from_round_start" else "Normalized Round Time"
+
+    # -------- per-round raw curves mode (no averaging, no binning) --------
+    if curve_mode == "per_round":
+        ue_by_rnti = {str(k): v for k, v in ue_dfs.items()}
+        if not ue_by_rnti:
+            return
+
+        layout_mode = (cfg.round_profile_per_round_rnti_layout or "single").lower()
+        selected_rntis = _selected_rntis_for_per_round(ue_by_rnti, cfg)
+        if not selected_rntis:
+            print(f"[round profile] no matching RNTIs found, available={sorted(ue_by_rnti.keys())}")
+            return
+
+        curves_by_rnti: Dict[str, Dict[int, pd.DataFrame]] = {}
+        for rnti in selected_rntis:
+            curves = compute_round_curves_for_one_rnti(ue_by_rnti[rnti], metric=metric, cfg=cfg)
+            if curves:
+                curves_by_rnti[rnti] = curves
+
+        if not curves_by_rnti:
+            return
+
+        # Keep only requested rounds (if provided) or apply max-curves cap.
+        rounds_for_rnti: Dict[str, List[int]] = {}
+        for rnti, curves in curves_by_rnti.items():
+            chosen = _selected_round_ids(list(curves.keys()), cfg)
+            if chosen:
+                rounds_for_rnti[rnti] = chosen
+
+        if not rounds_for_rnti:
+            print(f"[round profile] requested rounds not found: {cfg.round_profile_round_ids}")
+            return
+
+        if paired_metric:
+            print("[round profile] per_round mode currently plots only the primary metric")
+
+        if layout_mode == "same_axes" and len(rounds_for_rnti) > 1:
+            fig, ax = plt.subplots(figsize=(11, 5))
+            rntis = sorted(rounds_for_rnti.keys())
+            palette = sns.color_palette("tab10", n_colors=max(1, len(rntis)))
+            color_map = {r: palette[i % len(palette)] for i, r in enumerate(rntis)}
+
+            # Legend denotes RNTI color, not round number.
+            for rnti in rntis:
+                first = True
+                for rid in rounds_for_rnti[rnti]:
+                    p = curves_by_rnti[rnti][rid]
+                    ax.plot(
+                        p["x"],
+                        p["value"],
+                        linewidth=1.4,
+                        alpha=0.55,
+                        color=color_map[rnti],
+                        label=rnti if first else "_nolegend_",
+                    )
+                    first = False
+
+            rounds_txt = "all" if cfg.round_profile_round_ids is None else ",".join(str(r) for r in cfg.round_profile_round_ids)
+            title = f"{metric} round curves [{run_label}] [rounds={rounds_txt}]{phase_suffix}"
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(metric)
+            ax.set_title(title)
+            ax.grid(True)
+            ax.legend(title="RNTI", ncol=2, fontsize=8)
+
+            fig.tight_layout()
+            if cfg.output_dir is not None:
+                plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+            if cfg.show_plots:
+                plt.show()
+            else:
+                plt.close(fig)
+            return
+
+        # single or separate_figures mode
+        for rnti, chosen_rounds in rounds_for_rnti.items():
+            fig, ax = plt.subplots(figsize=(11, 5))
+            colors = sns.color_palette("tab20", n_colors=max(1, len(chosen_rounds)))
+            for i, rid in enumerate(chosen_rounds):
+                p = curves_by_rnti[rnti][rid]
+                ax.plot(p["x"], p["value"], linewidth=1.6, color=colors[i % len(colors)], label=f"round {rid}")
+
+            rounds_txt = "all" if cfg.round_profile_round_ids is None else ",".join(str(r) for r in cfg.round_profile_round_ids)
+            title = f"{metric} round curves [{run_label}] [RNTI {rnti}] [rounds={rounds_txt}]{phase_suffix}"
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(metric)
+            ax.set_title(title)
+            ax.grid(True)
+            ax.legend(ncol=2, fontsize=8)
+
+            fig.tight_layout()
+            if cfg.output_dir is not None:
+                plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+            if cfg.show_plots:
+                plt.show()
+            else:
+                plt.close(fig)
+        return
+
+    # -------- averaged profile mode --------
     prof_a, prof_b = {}, {}
     for dev, df in ue_dfs.items():
         if "round_id" not in df.columns:
             continue
-        p1 = compute_round_average_profile(df, metric, n_points=cfg.round_profile_points, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
+        if cfg.round_profile_time_mode == "real_from_round_start":
+            p1 = compute_round_average_profile_real_time(df, metric, bin_s=cfg.round_profile_bin_s, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
+        else:
+            p1 = compute_round_average_profile(df, metric, n_points=cfg.round_profile_points, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
+
         if not p1.empty:
             prof_a[str(dev)] = p1
         if paired_metric:
-            p2 = compute_round_average_profile(df, paired_metric, n_points=cfg.round_profile_points, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
+            if cfg.round_profile_time_mode == "real_from_round_start":
+                p2 = compute_round_average_profile_real_time(df, paired_metric, bin_s=cfg.round_profile_bin_s, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
+            else:
+                p2 = compute_round_average_profile(df, paired_metric, n_points=cfg.round_profile_points, phase_filter=cfg.round_profile_phase_filter, round_ids=cfg.round_profile_round_ids)
             if not p2.empty:
                 prof_b[str(dev)] = p2
 
     if not prof_a and not prof_b:
         return
+    
+    xcol = "t_since_start_s" if mode == "real_from_round_start" else "round_t"
 
     # -------- paired UL/DL mode --------
     if paired_metric:
         if layout == "subplots":
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 8), sharex=True)
             for dev, p in prof_a.items():
-                ax1.plot(p["round_t"], p["mean"], linewidth=2, label=dev)
+                ax1.plot(p[xcol], p["mean"], linewidth=2, label=dev)
+                if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
+                    hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+                    m = p["mean"].to_numpy(float)
+                    x = p[xcol].to_numpy(float)
+                    ax.fill_between(x, m - hw, m + hw, alpha=0.18)
             for dev, p in prof_b.items():
-                ax2.plot(p["round_t"], p["mean"], linewidth=2, label=dev)
+                ax2.plot(p[xcol], p["mean"], linewidth=2, label=dev)
+                if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
+                    hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+                    m = p["mean"].to_numpy(float)
+                    x = p[xcol].to_numpy(float)
+                    ax.fill_between(x, m - hw, m + hw, alpha=0.18)
+            
+            
 
             ax1.set_ylabel(metric)
             ax2.set_ylabel(paired_metric)
-            ax2.set_xlabel("Normalized Round Time")
-            ax1.set_title(f"{metric} round profile [{run_label}]{phase_suffix}")
-            title = f"{paired_metric} round profile [{run_label}]{phase_suffix}"
+            ax2.set_xlabel(xlabel)
+            ax1.set_title(f"{metric} round profile [{xlabel}]{phase_suffix}")
+            title = f"{paired_metric} round profile [{xlabel}]{phase_suffix}"
             ax2.set_title(title)
             ax1.grid(True); ax2.grid(True)
             ax1.legend(ncol=2, fontsize=8); ax2.legend(ncol=2, fontsize=8)
@@ -499,13 +911,24 @@ def plot_round_profiles(
             c = {d: colors[i % len(colors)] for i, d in enumerate(devices)}
 
             for dev, p in prof_a.items():
-                ax.plot(p["round_t"], p["mean"], "-", color=c[dev], linewidth=2, label=f"{dev} UL")
+                ax.plot(p[xcol], p["mean"], "-", color=c[dev], linewidth=2, label=f"{dev} UL")
+                if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
+                    hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+                    m = p["mean"].to_numpy(float)
+                    x = p[xcol].to_numpy(float)
+                    ax.fill_between(x, m - hw, m + hw, alpha=0.9,color=c[dev])
             for dev, p in prof_b.items():
-                ax.plot(p["round_t"], p["mean"], "--", color=c[dev], linewidth=2, label=f"{dev} DL")
+                ax.plot(p[xcol], p["mean"], "--", color=c[dev], linewidth=2, label=f"{dev} DL")
+            
+                if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
+                    hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+                    m = p["mean"].to_numpy(float)
+                    x = p[xcol].to_numpy(float)
+                    ax.fill_between(x, m - hw, m + hw, alpha=0.9,color=c[dev])
 
-            ax.set_xlabel("Normalized Round Time")
+            ax.set_xlabel(xlabel)
             ax.set_ylabel(f"{metric} / {paired_metric}")
-            title = f"UL-DL round profile [{run_label}]{phase_suffix}"
+            title = f"UL-DL round profile [{xlabel}]{phase_suffix}"
             ax.set_title(title)
             ax.grid(True)
             ax.legend(ncol=2, fontsize=8)
@@ -525,13 +948,19 @@ def plot_round_profiles(
     grid = None
 
     for dev, p in prof_a.items():
-        ax.plot(p["round_t"], p["mean"], linewidth=2, label=dev)
+        ax.plot(p[xcol], p["mean"], linewidth=2, label=dev)
+
+        if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
+            hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+            m = p["mean"].to_numpy(float)
+            x = p[xcol].to_numpy(float)
+            ax.fill_between(x, m - hw, m + hw, alpha=0.18)
 
         if cfg.round_profile_error_bars:
             step = max(1, int(cfg.round_profile_errorbar_step))
             idx = np.arange(0, len(p), step)
             ax.errorbar(
-                p["round_t"].to_numpy()[idx],
+                p[xcol].to_numpy()[idx],
                 p["mean"].to_numpy()[idx],
                 yerr=p["std"].to_numpy()[idx],
                 fmt="none",
@@ -542,7 +971,7 @@ def plot_round_profiles(
         if cfg.round_profile_include_effective_sum and metric in THROUGHPUT_METRICS:
             if effective is None:
                 effective = np.zeros(len(p), dtype=float)
-                grid = p["round_t"].to_numpy(dtype=float)
+                grid = p[xcol].to_numpy(dtype=float)
             effective += p["mean"].to_numpy(dtype=float)
 
     if effective is not None:
@@ -553,7 +982,7 @@ def plot_round_profiles(
         else:
             ax.plot(grid, effective, "k--", linewidth=2, label="effective total")
 
-    ax.set_xlabel("Normalized Round Time")
+    ax.set_xlabel(xlabel)
     ax.set_ylabel(metric)
     title = f"{metric} round profile [{run_label}]{phase_suffix}"
     ax.set_title(title)
@@ -591,7 +1020,7 @@ def _distribution_df(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: D
 def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cfg: PlotConfig, paired_metric: Optional[str] = None):
     thresholds = _norm_thresholds(cfg.min_thresholds)
 
-    if cfg.plot_mode == "time":
+    if "time" in cfg.plot_mode:
         fig, ax = plt.subplots(figsize=(10, 6))
         rows = []
         for rnti, df in ue_dfs.items():
@@ -643,7 +1072,7 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
             plt.close(fig)
 
     # distribution mode
-    elif cfg.plot_mode == "dist":
+    if "dist" in cfg.plot_mode:
         df = _distribution_df(ue_dfs, metric, thresholds, paired_metric)
         if df.empty:
             return
@@ -773,7 +1202,7 @@ def run_analysis(exp: dict, cfg: PlotConfig):
             direction_filter=cfg.direction_filter,
         )
     else:
-        ue_dfs = load_experiment_data(exp["path"], cfg.metrics)
+        ue_dfs = load_experiment_data(exp, cfg.metrics)
     
     if not ue_dfs:
         print(f"[{label}] no UE data")
@@ -852,41 +1281,61 @@ def main():
         data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
         output_dir=Path.cwd() / "phys_layer_plots",
         filters={
-            "bandwidth": "100 MHz",
+            # "bandwidth": "20 MHz",
+            # "distribution": "dirichlet",
+            # "tdd": "2-7",
+            # "nodes": "9N",
             "rank": "2x2",
-            "distribution": "dirichlet",
-            "congestion": False,
-            "tdd": "7-2",
-            "nodes": "6N",
+            # "congestion": False,
         },
         sweep="network",
-        metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
-        min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
+        # metrics=["ulMcs", "dlMcs", "puschSnr", "rssi", "ul_throughput_mbps", "dl_throughput_mbps", "phr", "ulBler", "dlBler", "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp"],
+        metrics=["ul_throughput_mbps", "dl_throughput_mbps"],#["ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp", "ul_shannon_sinr", "dl_shannon_sinr"],
+        # min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
         filter_rounds=True,
         annotate_phases=True,
-        pair_ul_dl=True,
-        plot_mode=None,
-        smoothing=True,
-        pts_to_plot = 100,
-        pts_offset = 1000,
+        pair_ul_dl=False,
+        plot_mode=["time"],
+        smoothing=False,
+        pts_to_plot = 1000,
+        pts_offset = 0,
         distribution_plot_type="box",
         show_plots=True,
         round_profiles_enabled=True,
+        # round_profile_round_ids=[2,3,4,5,6],
+        round_profile_include_effective_sum = False,
+        round_profile_points = 10000,
+        use_relative_time=False,
+        # round_profile_round_ids=[3,77,180],  # choose exact rounds in per_round mode
+        round_profile_curve_mode = "average",   # "average" | "per_round"
+        round_profile_target_rnti = None,        # e.g. "65" for per_round mode
+        round_profile_target_rntis = None,       # e.g. ["65", "66"]; None means all in multi modes
+        round_profile_per_round_rnti_layout = "single",  # "single" | "same_axes" | "separate_figures"
+        round_profile_max_curves = 12,
+        round_profile_time_mode = "real_from_round_start",   # "normalized" | "real_from_round_start"
+        round_profile_ci_bands = True,
+        round_profile_ci_level = 0.95,
+        round_profile_bin_s = 0.1,   # for real-time mode binning
     )
+
+    # ["segment", "pucchSnr", "ranUeId", "dlBytes", "dlMcs", "ulQm", "rsrp", "ueId", "amfUeId", "dlQm",
+    #  "ulMcs", "ulBler", "puschSnr", "dlBler", "ulBytes", "pmi", "rssi", "cqi", "inSync", "ri", "phr",
+    #  "pcmax", "sinr", "rsrq"]
+
     # cfg = PlotConfig(
     #     data_dir=Path("/unused/for/iperf"),
     #     iperf_root_dir=Path("/Users/kmcomer/Documents/5G Experiment Data"),
     #     output_dir=Path.cwd() / "iperf_plots",
     #     dataset_type="iperf",
     #     filters={
-    #         "bandwidth": ["20", "40", "80"],   # also accepts "20 MHz"
-    #         "tdd": ["7-2", "5-4"],
-    #         "location": ["normal", "fair"],
+    #         "bandwidth": ["100",],   # also accepts "20 MHz"
+    #         "tdd": ["2-7"],
+    #         "location": ["all_connected"],
     #     },
     #     cid_filter=["1", "2", "3", "4", "5", "6"],
-    #     direction_filter=["UL"], # ["UL", "DL"]
-    #     metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps"],
-    #     plot_mode="dist",
+    #     direction_filter=["UL", "DL"], # ["UL", "DL"]
+    #     metrics=["rssi", "ul_throughput_mbps", "dl_throughput_mbps", "rsrp"],
+    #     plot_mode="time",
     #     use_relative_time=False,
     #     pair_ul_dl=False,
     #     show_plots=True,
@@ -897,3 +1346,14 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# round_profiles_enabled: bool = False
+#     round_profile_points: int = 100000
+#     round_profile_phase_filter: Optional[List[str]] = None
+#     round_profile_round_ids: Optional[List[int]] = None
+#     round_profile_layout: str = "same_axes" # use 'subplots' for stacked UL/DL panels
+#     round_profile_error_bars: bool = False
+#     round_profile_errorbar_step: int = 10
+#     round_profile_include_effective_sum: bool = True
+#     round_profile_effective_secondary_axis: bool = True
