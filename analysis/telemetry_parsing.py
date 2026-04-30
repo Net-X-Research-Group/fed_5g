@@ -36,7 +36,7 @@ def filter_out_inactivity(agg_metrics_file, trial_data):
     agg_metrics['timestamp'] = pd.to_datetime(agg_metrics['timestamp'], unit='s', utc=True)
     
     agg_metrics = pl.from_pandas(agg_metrics)
-    agg_metrics = agg_metrics.with_columns(pl.col('timestamp').dt.cast_time_unit("ms")).set_sorted('timestamp')
+    agg_metrics = agg_metrics.with_columns(pl.col('timestamp').dt.cast_time_unit("us")).set_sorted('timestamp')
 
     # Initial filter: remove values not within first and last timestamps of agg_metrics
     trial_data.filter(pl.col('timestamp').is_between(agg_metrics['timestamp'][0], agg_metrics['timestamp'][-1]))
@@ -62,6 +62,7 @@ def filter_out_inactivity(agg_metrics_file, trial_data):
 
 def sort_telemetry_into_trials(runs, telemetry_df, runs_dir, parser, file):
     telemetry_df=telemetry_df.with_columns(timestamp=pl.from_epoch(telemetry_df['timestamp'], time_unit="ms").dt.replace_time_zone(time_zone="UTC"))
+    print(f"telemetry_df['timestamp']: {telemetry_df['timestamp']}")
 
     for _, trial in runs.iterrows():
         try:
@@ -142,9 +143,15 @@ def combine_uedfs_by_rnti(ue_dfs, first, second, trial_path, drop_timestamp=True
 
     new_name = first+'-'+second
     print(f'Merging {new_name} (from {first} and {second})')
-    ue_dfs[new_name] = pl.concat([ue_dfs[first],ue_dfs[second]], how="vertical_relaxed")
+    # ue_dfs[first] = ue_dfs[first].drop('timestamp_right')
+    # ue_dfs[second] = ue_dfs[second].drop('timestamp_right')
+    try:
+        ue_dfs[new_name] = pl.concat([ue_dfs[first],ue_dfs[second]], how="vertical_relaxed")
+    except pl.exceptions.ComputeError:
+        print(ue_dfs[first],ue_dfs[second])
+        raise pl.exceptions.ComputeError
     if drop_timestamp:
-        ue_dfs[new_name].drop('timestamp')
+        ue_dfs[new_name].drop('timestamp')#.drop('timestamp_right')
     ue_dfs[new_name].write_csv(f'{trial_path}/ue_{new_name}.csv')
     os.remove(f'{trial_path}/ue_{first}.csv')
     os.remove(f'{trial_path}/ue_{second}.csv')
@@ -153,7 +160,7 @@ def combine_uedfs_by_rnti(ue_dfs, first, second, trial_path, drop_timestamp=True
     return new_name
 
 
-def merge_uedfs_single_disconnect(savepath, drop_timestamp=True, iperf=False): # Combination by only looking at whether one UE dropped and another joined at one time. Will not combine if multiple possible pairs (simultaneous disconnection)
+def merge_uedfs_single_disconnect(savepath, drop_timestamp=True, iperf=False, print_pts=False): # Combination by only looking at whether one UE dropped and another joined at one time. Will not combine if multiple possible pairs (simultaneous disconnection)
     if iperf:
         ue_dfs = {(file.name.split('_')[1]).split('.')[0] : pl.read_csv(savepath / file.name, try_parse_dates=True) for file in savepath.iterdir() if 'ue' in file.name}
     else:
@@ -172,7 +179,9 @@ def merge_uedfs_single_disconnect(savepath, drop_timestamp=True, iperf=False): #
             if rnti not in ue_dfs: # may have been merged and no longer exist
                 rnti = [name for name in ue_dfs if rnti in name][0] # there should only be one match
             first_pt = ue_dfs[rnti]['segment'][0]
-            # print(f'{rnti, first_pt, ue_dfs[rnti]['segment'][-1]}')
+            if print_pts:
+                last = ue_dfs[rnti]['segment'][-1]
+                print(f'{rnti}: {first_pt} to {last}. {last-first_pt} overall segments of data')
             if first_pt != 0:
                 possible_pairs = [ue_df for ue_df in ue_dfs if ue_dfs[ue_df]['segment'][-1] < first_pt]
                 if len(possible_pairs) == 1:
@@ -248,19 +257,19 @@ def sort_telemetry_into_iperf(runs, telemetry_df, run_dir, parser, file):
 
 
 def main():
-    dir = '/Users/kmcomer/Documents/5G Experiment Data/'
+    dir = '/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/'
 
     # # Parse phys layer data from iperf trials
     # for f in Path(dir).iterdir():
-    #     if 'iperf' in f.name and 'zip' not in f.name:
+    #     if 'iperf_all' in f.name and 'zip' not in f.name:
     #         print(f'{f.name}')
     #         for t in f.iterdir():
     #             print(f'Processing {t.name}')
     #             if '0_' in t.name:
-    #                 # Merge disconnected/segmented data from same device
-    #                 for s in t.iterdir():
-    #                     if s.is_dir():
-    #                         merge_uedfs_single_disconnect(s, drop_timestamp=False, iperf=True)
+    #                 # # Merge disconnected/segmented data from same device
+    #                 # for s in t.iterdir():
+    #                 #     if s.is_dir():
+    #                 #         merge_uedfs_single_disconnect(s, drop_timestamp=False, iperf=True)
                     
     #                 # Parse iperf data from gNB telemetry
     #                 runs = get_runs_list(t, 'UL.csv', ['start', 'device', 'end'], 'start', 'end')
@@ -269,14 +278,16 @@ def main():
     #                 parse(dir, t, sort_telemetry_into_iperf, runs)
                     
     
-    # # Parse phys layer data from FL experiments
-    # runs = get_runs_list(dir, 'Runs', ['Run ID', 'Created At', 'Finished At'], 'Created At', 'Finished At')
-    # parse(dir, dir, sort_telemetry_into_trials, runs)
+    # Parse phys layer data from FL experiments
+    runs = get_runs_list(dir, 'Runs', ['Run ID', 'Created At', 'Finished At'], 'Created At', 'Finished At')
+    parse(dir, dir, sort_telemetry_into_trials, runs)
 
-    # Combine RNTIs by name (manually) -- only if certain about data belonging to same device
-    # trial_path = Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed/7222719212451226563_6N_20MHz_7-2_MIMO2x2_Dirichlet')
+    # # Combine RNTIs by name (manually) -- only if certain about data belonging to same device
+    # trial_path = Path('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/6133849358380166098_4N_40MHz_2-2_MIMO2x2_Dirichlet/phys_layer')
+    # merge_uedfs_single_disconnect(trial_path, print_pts=True)
     # ue_dfs = gather_metrics_by_rnti(trial_path)
-    # combine_uedfs_by_rnti(ue_dfs, 'abca', '105c', trial_path) # should return error (105c precedes abca)
+    # print(ue_dfs.keys())
+    # combine_uedfs_by_rnti(ue_dfs, 'e336-8ef1-b304', '155d-c98e-c0a2', trial_path, drop_timestamp=True) # should return error (105c precedes abca)
 
     # # Combine RNTIs that must belong to the same device (one disconnect & reconnect only)
     # for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed').iterdir():
