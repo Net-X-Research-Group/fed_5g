@@ -1,3 +1,6 @@
 venv/
 .idea/
 flwr-application/pyproject.toml
+.DS_Store
+settings.json
+__pycache__/
