@@ -345,7 +345,7 @@ def load_experiment_data(exp: dict, metrics: List[str]) -> Dict[str, pl.DataFram
 
     exp_with_users = {**exp, "_num_users": max(1, len(ue_files))}
 
-    for fp in ue_files:
+    for fp in sorted(ue_files):
         n = fp.name
         rnti = n.split("_")[1].split(".")[0]
         df = _read_joined_csv(str(phys / "common.csv"), str(fp), load_cols)
@@ -639,9 +639,47 @@ def build_round_windows(agg_metrics_file: str, max_gap_s=200, exp_path: Optional
     return r
 
 
+def _with_round_anchor_timestamp(trial_data: pl.DataFrame) -> pl.DataFrame:
+    """
+    Add `round_anchor_ts` used for round/phase attribution.
+
+    Throughput samples are computed over [t-dt, t]; using interval-start (t-dt)
+    gives stricter causal attribution at boundaries and minimizes prior-round UL
+    leakage into the next round's downlink window.
+    """
+    if "timestamp" not in trial_data.columns:
+        return trial_data
+
+    if "dt" in trial_data.columns:
+        dt_s = pl.col("dt").cast(pl.Float64, strict=False)
+        dt_us = (dt_s * 1_000_000.0).round(0).cast(pl.Int64)
+        anchor_candidate = pl.col("timestamp") - pl.duration(microseconds=dt_us)
+        anchor_expr = (
+            pl.when(dt_s.is_not_null() & (dt_s > 0.0))
+            .then(anchor_candidate)
+            .otherwise(pl.col("timestamp"))
+        )
+        return trial_data.with_columns(anchor_expr.alias("round_anchor_ts"))
+
+    if "dt_s" in trial_data.columns:
+        dt_s = pl.col("dt_s").cast(pl.Float64, strict=False)
+        dt_us = (dt_s * 1_000_000.0).round(0).cast(pl.Int64)
+        anchor_candidate = pl.col("timestamp") - pl.duration(microseconds=dt_us)
+        anchor_expr = (
+            pl.when(dt_s.is_not_null() & (dt_s > 0.0))
+            .then(anchor_candidate)
+            .otherwise(pl.col("timestamp"))
+        )
+        return trial_data.with_columns(anchor_expr.alias("round_anchor_ts"))
+
+    return trial_data.with_columns(pl.col("timestamp").alias("round_anchor_ts"))
+
+
 def annotate_telemetry_with_rounds_and_phases(trial_data: pl.DataFrame, rounds: pd.DataFrame) -> pl.DataFrame:
     if rounds.empty:
         return trial_data
+
+    trial_data = _with_round_anchor_timestamp(trial_data)
 
     rp = pl.from_pandas(rounds[["round_id", "round_start", "round_end", "downlink_end", "training_end", "evaluation_end", "uplink_end"]])
     ts_dtype = trial_data.schema.get("timestamp")
@@ -656,17 +694,17 @@ def annotate_telemetry_with_rounds_and_phases(trial_data: pl.DataFrame, rounds: 
         )
     rp = rp.set_sorted("round_start")
 
-    out = trial_data.join_asof(rp, left_on="timestamp", right_on="round_start", strategy="backward", check_sortedness=False)
-    out = out.filter(pl.col("round_id").is_not_null() & (pl.col("timestamp") <= pl.col("round_end")))
+    out = trial_data.join_asof(rp, left_on="round_anchor_ts", right_on="round_start", strategy="backward", check_sortedness=False)
+    out = out.filter(pl.col("round_id").is_not_null() & (pl.col("round_anchor_ts") <= pl.col("round_end")))
 
     out = out.with_columns(
-        phase=pl.when(pl.col("timestamp") <= pl.col("downlink_end")).then(pl.lit("downlink"))
-        .when(pl.col("timestamp") <= pl.col("training_end")).then(pl.lit("training"))
-        .when(pl.col("timestamp") <= pl.col("evaluation_end")).then(pl.lit("evaluation"))
-        .when(pl.col("timestamp") <= pl.col("uplink_end")).then(pl.lit("uplink"))
+        phase=pl.when(pl.col("round_anchor_ts") <= pl.col("downlink_end")).then(pl.lit("downlink"))
+        .when(pl.col("round_anchor_ts") <= pl.col("training_end")).then(pl.lit("training"))
+        .when(pl.col("round_anchor_ts") <= pl.col("evaluation_end")).then(pl.lit("evaluation"))
+        .when(pl.col("round_anchor_ts") <= pl.col("uplink_end")).then(pl.lit("uplink"))
         .otherwise(pl.lit("idle"))
     )
-    return out
+    return out.drop("round_anchor_ts")
 
 
 def apply_round_processing(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], cfg: PlotConfig):
@@ -684,6 +722,7 @@ def apply_round_processing(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], cfg:
     out = {}
     for rnti, df in ue_dfs.items():
         d = df.sort("timestamp")
+        d = _with_round_anchor_timestamp(d)
 
         intervals = pl.from_pandas(rounds[["round_start", "round_end"]])
         ts_dtype = d.schema.get("timestamp")
@@ -696,18 +735,20 @@ def apply_round_processing(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], cfg:
 
         d = d.join_asof(
             intervals,
-            left_on="timestamp",
+            left_on="round_anchor_ts",
             right_on="round_start",
             strategy="backward",
             check_sortedness=False,
         )
         d = d.filter(
             pl.col("round_start").is_not_null() &
-            (pl.col("timestamp") <= pl.col("round_end"))
+            (pl.col("round_anchor_ts") <= pl.col("round_end"))
         ).drop("round_start", "round_end")
 
         if cfg.annotate_phases:
             d = annotate_telemetry_with_rounds_and_phases(d, rounds)
+        else:
+            d = d.drop("round_anchor_ts")
 
         out[rnti] = d
 
@@ -908,7 +949,7 @@ def compute_round_average_profile(
         x = grp["round_t"].to_numpy(dtype=float)
         y = pd.to_numeric(grp[metric], errors="coerce").to_numpy(dtype=float)
 
-        mask = np.isfinite(x) & np.isfinite(y)
+        mask = np.isfinite(x) & np.isfinite(y) & np.less(x,75) & np.less(y,75)
         x, y = x[mask], y[mask]
         if len(x) < 2:
             continue
@@ -980,6 +1021,26 @@ def compute_round_average_profile_real_time(
     if work.empty:
         return pd.DataFrame()
 
+    # Drop rounds with pathological duration estimates before point-level trimming.
+    dur_by_round = (
+        work.groupby("round_id", as_index=False)["round_duration_s"]
+        .median()
+        .rename(columns={"round_duration_s": "dur_s"})
+    )
+    dur_vals = pd.to_numeric(dur_by_round["dur_s"], errors="coerce")
+    dur_vals = dur_vals[np.isfinite(dur_vals) & (dur_vals > 0)]
+    if len(dur_vals) >= 8:
+        q1 = float(dur_vals.quantile(0.25))
+        q3 = float(dur_vals.quantile(0.75))
+        q99 = float(dur_vals.quantile(0.99))
+        iqr = max(0.0, q3 - q1)
+        dur_cap = max(q99, q3 + 3.0 * iqr)
+        keep_rounds = set(dur_by_round.loc[pd.to_numeric(dur_by_round["dur_s"], errors="coerce") <= dur_cap, "round_id"].tolist())
+        if keep_rounds:
+            work = work[work["round_id"].isin(keep_rounds)].copy()
+            if work.empty:
+                return pd.DataFrame()
+
     # Keep values within each round's expected duration when available.
     has_dur = pd.to_numeric(work["round_duration_s"], errors="coerce")
     dur_mask = has_dur.notna() & (has_dur > 0)
@@ -1041,6 +1102,27 @@ def compute_round_curves_for_one_rnti(
             round_dur = (re - rs).dt.total_seconds()
             df = df[(pd.to_numeric(df["x"], errors="coerce") >= 0) & ((round_dur.isna()) | (pd.to_numeric(df["x"], errors="coerce") <= (round_dur + 1.0)))].copy()
 
+            # Remove entire rounds with outlier durations to avoid very long tails.
+            tmp = pd.DataFrame({
+                "round_id": pd.to_numeric(df.get("round_id"), errors="coerce"),
+                "dur_s": pd.to_numeric(round_dur.loc[df.index], errors="coerce"),
+            }).dropna()
+            tmp = tmp[tmp["dur_s"] > 0]
+            if not tmp.empty:
+                dur_by_round = tmp.groupby("round_id", as_index=False)["dur_s"].median()
+                if len(dur_by_round) >= 8:
+                    vals = pd.to_numeric(dur_by_round["dur_s"], errors="coerce")
+                    vals = vals[np.isfinite(vals) & (vals > 0)]
+                    if len(vals) >= 8:
+                        q1 = float(vals.quantile(0.25))
+                        q3 = float(vals.quantile(0.75))
+                        q99 = float(vals.quantile(0.99))
+                        iqr = max(0.0, q3 - q1)
+                        dur_cap = max(q99, q3 + 3.0 * iqr)
+                        keep_rounds = set(dur_by_round.loc[pd.to_numeric(dur_by_round["dur_s"], errors="coerce") <= dur_cap, "round_id"].tolist())
+                        if keep_rounds:
+                            df = df[pd.to_numeric(df["round_id"], errors="coerce").isin(keep_rounds)].copy()
+
         max_time_s = cfg.round_profile_real_time_max_s
         if max_time_s is not None and np.isfinite(float(max_time_s)) and float(max_time_s) > 0:
             df = df[pd.to_numeric(df["x"], errors="coerce") <= float(max_time_s)].copy()
@@ -1075,7 +1157,7 @@ def compute_round_curves_for_one_rnti(
         x = g["x"].to_numpy(dtype=float)
         y = g["value"].to_numpy(dtype=float)
 
-        mask = np.isfinite(x) & np.isfinite(y)
+        mask = np.isfinite(x) & np.isfinite(y) & np.less(x,75) & np.less(y,75)
         x, y = x[mask], y[mask]
         if len(x) < 2:
             continue
@@ -1181,7 +1263,7 @@ def plot_round_profiles(
             print("[round profile] per_round mode currently plots only the primary metric")
 
         if layout_mode == "same_axes" and len(rounds_for_rnti) > 1:
-            fig, ax = plt.subplots(figsize=(11, 5))
+            fig, ax = plt.subplots()
             rntis = sorted(rounds_for_rnti.keys())
             palette = sns.color_palette("tab10", n_colors=max(1, len(rntis)))
             color_map = {r: palette[i % len(palette)] for i, r in enumerate(rntis)}
@@ -1205,7 +1287,7 @@ def plot_round_profiles(
                     ax.plot(
                         p["x"],
                         p["value"],
-                        linewidth=1.4,
+                        # linewidth=1.4,
                         alpha=0.55,
                         color=color_map[rnti],
                         label=rnti if first else "_nolegend_",
@@ -1215,10 +1297,16 @@ def plot_round_profiles(
             rounds_txt = "all" if cfg.round_profile_round_ids is None else ",".join(str(r) for r in cfg.round_profile_round_ids)
             title = f"{metric} round curves [{run_label}] [rounds={rounds_txt}]{phase_suffix}"
             ax.set_xlabel(xlabel)
-            ax.set_ylabel(metric)
-            ax.set_title(title)
+            t = metric.title().split('_')
+            if len(t) == 1:
+                y=metric.upper()
+            else:
+                y = t[0].upper() + ' ' + ' '.join(t[1:-1]) + f' ({t[-1]})'
+            ax.set_ylabel(y)
+            # ax.set_title(title)
+            print(title)
             ax.grid(True)
-            ax.legend(title="RNTI", ncol=2, fontsize=8)
+            ax.legend(title="CID",ncols=2)
 
             fig.tight_layout()
             if cfg.output_dir is not None:
@@ -1231,19 +1319,24 @@ def plot_round_profiles(
 
         # single or separate_figures mode
         for rnti, chosen_rounds in rounds_for_rnti.items():
-            fig, ax = plt.subplots(figsize=(11, 5))
+            fig, ax = plt.subplots()
             colors = sns.color_palette("tab20", n_colors=max(1, len(chosen_rounds)))
             for i, rid in enumerate(chosen_rounds):
                 p = curves_by_rnti[rnti][rid]
-                ax.plot(p["x"], p["value"], linewidth=1.6, color=colors[i % len(colors)], label=f"round {rid}")
+                ax.plot(p["x"], p["value"], color=colors[i % len(colors)], label=f"round {rid}")
 
             rounds_txt = "all" if cfg.round_profile_round_ids is None else ",".join(str(r) for r in cfg.round_profile_round_ids)
             title = f"{metric} round curves [{run_label}] [RNTI {rnti}] [rounds={rounds_txt}]{phase_suffix}"
             ax.set_xlabel(xlabel)
-            ax.set_ylabel(metric)
-            ax.set_title(title)
+            t = metric.title().split('_')
+            if len(t) == 1:
+                y=metric.upper()
+            else:
+                y = t[0].upper() + ' ' + ' '.join(t[1:-1]) + f' ({t[-1]})'
+            ax.set_ylabel(y)
+            # ax.set_title(title)
             ax.grid(True)
-            ax.legend(ncol=2, fontsize=8)
+            ax.legend(title="CID",ncols=2)
 
             fig.tight_layout()
             if cfg.output_dir is not None:
@@ -1331,14 +1424,14 @@ def plot_round_profiles(
         if layout == "subplots":
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 8), sharex=True)
             for dev, p in prof_a.items():
-                ax1.plot(p[xcol], p["mean"], linewidth=2, label=dev)
+                ax1.plot(p[xcol], p["mean"], label=dev)
                 if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
                     hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
                     m = p["mean"].to_numpy(float)
                     x = p[xcol].to_numpy(float)
                     ax.fill_between(x, m - hw, m + hw, alpha=0.18)
             for dev, p in prof_b.items():
-                ax2.plot(p[xcol], p["mean"], linewidth=2, label=dev)
+                ax2.plot(p[xcol], p["mean"], label=dev)
                 if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
                     hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
                     m = p["mean"].to_numpy(float)
@@ -1347,29 +1440,31 @@ def plot_round_profiles(
             
             
 
-            ax1.set_ylabel(metric)
+            ax1.set_ylabel(metric.upper())
             ax2.set_ylabel(paired_metric)
             ax2.set_xlabel(xlabel)
-            ax1.set_title(f"{metric} round profile [{xlabel}]{phase_suffix}")
+            # ax1.set_title(f"{metric} round profile [{xlabel}]{phase_suffix}")
+            print("{metric} round profile [{xlabel}]{phase_suffix}")
             title = f"{paired_metric} round profile [{xlabel}]{phase_suffix}"
-            ax2.set_title(title)
+            # ax2.set_title(title)
+            print(title)
             ax1.grid(True); ax2.grid(True)
-            ax1.legend(ncol=2, fontsize=8); ax2.legend(ncol=2, fontsize=8)
+            ax1.legend(title="CID"); ax2.legend(title="CID")
         else:
-            fig, ax = plt.subplots(figsize=(11, 5))
+            fig, ax = plt.subplots()
             devices = sorted(set(list(prof_a.keys()) + list(prof_b.keys())))
             colors = sns.color_palette("tab10", n_colors=max(1, len(devices)))
             c = {d: colors[i % len(colors)] for i, d in enumerate(devices)}
 
             for dev, p in prof_a.items():
-                ax.plot(p[xcol], p["mean"], "-", color=c[dev], linewidth=2, label=f"{dev} UL")
+                ax.plot(p[xcol], p["mean"], "-", color=c[dev], label=f"{dev} UL")
                 if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
                     hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
                     m = p["mean"].to_numpy(float)
                     x = p[xcol].to_numpy(float)
                     ax.fill_between(x, m - hw, m + hw, alpha=0.9,color=c[dev])
             for dev, p in prof_b.items():
-                ax.plot(p[xcol], p["mean"], "--", color=c[dev], linewidth=2, label=f"{dev} DL")
+                ax.plot(p[xcol], p["mean"], "--", color=c[dev], label=f"{dev} DL")
             
                 if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
                     hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
@@ -1380,9 +1475,10 @@ def plot_round_profiles(
             ax.set_xlabel(xlabel)
             ax.set_ylabel(f"{metric} / {paired_metric}")
             title = f"UL-DL round profile [{xlabel}]{phase_suffix}"
-            ax.set_title(title)
+            # ax.set_title(title)
+            print(title)
             ax.grid(True)
-            ax.legend(ncol=2, fontsize=8)
+            ax.legend(title="CID",ncols=2)
 
         fig.tight_layout()
         if cfg.output_dir is not None:
@@ -1394,12 +1490,12 @@ def plot_round_profiles(
         return
 
     # -------- single-metric mode --------
-    fig, ax = plt.subplots(figsize=(11, 5))
+    fig, ax = plt.subplots()
     effective = None
     grid = None
 
     for dev, p in prof_a.items():
-        ax.plot(p[xcol], p["mean"], linewidth=2, label=dev)
+        ax.plot(p[xcol], p["mean"],label=dev)
 
         if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
             hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
@@ -1431,7 +1527,7 @@ def plot_round_profiles(
                     pth[xcol],
                     pth["mean"],
                     linestyle="--" if theory_label == "Shannon" else ":",
-                    linewidth=1.8,
+                    # linewidth=1.8,
                     alpha=0.95,
                     label=f"{dev} {theory_label}",
                 )
@@ -1439,17 +1535,23 @@ def plot_round_profiles(
     if effective is not None:
         if cfg.round_profile_effective_secondary_axis:
             ax2 = ax.twinx()
-            ax2.plot(grid, effective, "k--", linewidth=2, label="effective total")
+            ax2.plot(grid, effective, "k--", label="effective total")
             ax2.set_ylabel(f"effective {metric}")
         else:
-            ax.plot(grid, effective, "k--", linewidth=2, label="effective total")
+            ax.plot(grid, effective, "k--", label="effective total")
 
     ax.set_xlabel(xlabel)
-    ax.set_ylabel(metric)
+    t = metric.title().split('_')
+    if len(t) == 1:
+        y=metric.upper()
+    else:
+        y = t[0].upper() + ' ' + ' '.join(t[1:-1]) + f' ({t[-1]})'
+    ax.set_ylabel(y)
     title = f"{metric} round profile [{run_label}]{phase_suffix}"
-    ax.set_title(title)
+    # ax.set_title(title)
+    print(title)
     ax.grid(True)
-    ax.legend(ncol=2, fontsize=8)
+    ax.legend(title="CID",ncols=2)
 
     fig.tight_layout()
     if cfg.output_dir is not None:
@@ -1607,11 +1709,92 @@ def plot_throughput_overlay(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_la
         plt.close(fig)
 
 
+def plot_throughput_overlay(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cfg: PlotConfig):
+    if "time" not in cfg.plot_mode:
+        return
+
+    series_cols = _throughput_overlay_columns(metric, cfg.throughput_overlay_models)
+    if len(series_cols) <= 1:
+        return
+
+    fig, ax = plt.subplots()
+    rows = []
+
+    for rnti, df in ue_dfs.items():
+        needed = ["timestamp"] + [c for c, _ in series_cols if c in df.columns]
+        if len(needed) <= 1:
+            continue
+
+        pdf = df.select(needed).to_pandas()
+        pdf["timestamp"] = pd.to_datetime(pdf["timestamp"], utc=True, errors="coerce")
+        pdf = pdf.dropna(subset=["timestamp"])
+        if pdf.empty:
+            continue
+
+        if cfg.use_relative_time:
+            pdf["relative_time_s"] = (pdf["timestamp"] - pdf["timestamp"].min()).dt.total_seconds()
+
+        pdf = pdf.iloc[cfg.pts_offset: cfg.pts_offset + cfg.pts_to_plot].copy()
+        if pdf.empty:
+            continue
+
+        threshold = cfg.min_thresholds.get(metric)
+        for col, series_label in series_cols:
+            if col not in pdf.columns:
+                continue
+            y = pd.to_numeric(pdf[col], errors="coerce")
+            if col == metric and threshold is not None:
+                y = y.where(y >= threshold)
+
+            x = pdf["relative_time_s"] if cfg.use_relative_time else pdf["timestamp"]
+            valid = pd.notna(x) & pd.notna(y)
+            if not valid.any():
+                continue
+
+            rows.append(pd.DataFrame({
+                "x": x[valid],
+                "value": y[valid],
+                "device": str(rnti),
+                "series": series_label,
+            }))
+
+    if not rows:
+        plt.close(fig)
+        return
+
+    plot_df = pd.concat(rows, ignore_index=True)
+    sns.lineplot(
+        data=plot_df,
+        x="x",
+        y="value",
+        hue="device",
+        style="series",
+        # linewidth=1.6,
+        alpha=0.9,
+        ax=ax,
+    )
+
+    prefix = "UL" if metric.startswith("ul_") else "DL"
+    title = f"{prefix} actual vs theoretical throughput [{run_label}]"
+    # ax.set_title(title)
+    print(title)
+    ax.set_ylabel("Throughput (Mbps)")
+    ax.set_xlabel("Relative Time (s)" if cfg.use_relative_time else "Timestamp")
+    ax.grid(True)
+
+    if cfg.save_plots:
+        plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+    if cfg.show_plots:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
 def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cfg: PlotConfig, paired_metric: Optional[str] = None):
     thresholds = _norm_thresholds(cfg.min_thresholds)
 
     if "time" in cfg.plot_mode:
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots()
         rows = []
         for rnti, df in ue_dfs.items():
             if metric not in df.columns:
@@ -1652,7 +1835,8 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
         # sns.scatterplot(data=plot_df, x="timestamp", y="value", hue="device", alpha=0.8, ax=ax)
         # ax.plot(plot_df['timestamp'], plot_df['value'])
         title = f"{metric} over time [{run_label}]"
-        ax.set_title(title)
+        # ax.set_title(title)
+        print(title)
         ax.grid(True)
         if cfg.save_plots:
             plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
@@ -1683,7 +1867,8 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
         g = sns.catplot(**kwargs)
         ax = g.ax
         title = f"{metric} distribution [{run_label}]" if not paired_metric else f"{metric} vs {paired_metric} [{run_label}]"
-        ax.set_title(title)
+        # ax.set_title(title)
+        print(title)
         ax.grid(True)
 
         if cfg.save_plots:
@@ -1878,21 +2063,21 @@ def main():
         data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
         output_dir=Path.cwd() / "phys_layer_plots",
         filters={
-            "bandwidth": "80 MHz",
+            "bandwidth": "40 MHz",
             "distribution": "dirichlet",
-            # "tdd": "2-7",
-            # "nodes": "9N",
+            "tdd": "2-2",
+            "nodes": "4N",
             "rank": "2x2",
-            # "congestion": False,
+            "congestion": False,
         },
         sweep="network",
         # metrics=["ulMcs", "dlMcs", "puschSnr", "rssi", "ul_throughput_mbps", "dl_throughput_mbps", "phr", "ulBler", "dlBler", "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp"],
-        metrics=["ul_throughput_mbps", "dl_throughput_mbps"],#, "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp", "ul_shannon_sinr", "dl_shannon_sinr"],
+        metrics=["rssi","ul_throughput_mbps", "dl_throughput_mbps"],#, "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp", "ul_shannon_sinr", "dl_shannon_sinr"],
         # min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
         filter_rounds=True,
         annotate_phases=True,
         pair_ul_dl=False,
-        plot_mode=["time"],
+        plot_mode=[],#["time"],
         smoothing=False,
         pts_to_plot = 1000,
         pts_offset = 0,
@@ -1904,7 +2089,7 @@ def main():
         round_profile_points = 10000,
         use_relative_time=False,
         # round_profile_round_ids=[3,77,180],  # choose exact rounds in per_round mode
-        round_profile_curve_mode = "per_round",   # "average" | "per_round"
+        round_profile_curve_mode = "average",   # "average" | "per_round"
         round_profile_target_rnti = None,        # e.g. "65" for per_round mode
         round_profile_target_rntis = None,       # e.g. ["65", "66"]; None means all in multi modes
         round_profile_per_round_rnti_layout = "same_axes",  # "single" | "same_axes" | "separate_figures"
