@@ -143,8 +143,15 @@ def combine_uedfs_by_rnti(ue_dfs, first, second, trial_path, drop_timestamp=True
 
     new_name = first+'-'+second
     print(f'Merging {new_name} (from {first} and {second})')
-    # ue_dfs[first] = ue_dfs[first].drop('timestamp_right')
+    try:
+        ue_dfs[first] = ue_dfs[first].drop('timestamp_right')
+    except pl.exceptions.ColumnNotFoundError:
+        x=0
     # ue_dfs[second] = ue_dfs[second].drop('timestamp_right')
+    try:
+        ue_dfs[second] = ue_dfs[second].drop('timestamp_right')
+    except pl.exceptions.ColumnNotFoundError:
+        x=0
     try:
         ue_dfs[new_name] = pl.concat([ue_dfs[first],ue_dfs[second]], how="vertical_relaxed")
     except pl.exceptions.ComputeError:
@@ -152,7 +159,13 @@ def combine_uedfs_by_rnti(ue_dfs, first, second, trial_path, drop_timestamp=True
         raise pl.exceptions.ComputeError
     if drop_timestamp:
         ue_dfs[new_name].drop('timestamp')#.drop('timestamp_right')
-    ue_dfs[new_name].write_csv(f'{trial_path}/ue_{new_name}.csv')
+    
+    try:
+        ue_dfs[new_name].write_csv(f'{trial_path}/ue_{new_name}.csv')
+    except OSError:
+        name = first.split('-')[0] + '-' + second.split('-')[-1]
+        ue_dfs[new_name].write_csv(f'{trial_path}/ue_{name}.csv')
+        new_name = name
     os.remove(f'{trial_path}/ue_{first}.csv')
     os.remove(f'{trial_path}/ue_{second}.csv')
     del ue_dfs[first]
@@ -278,9 +291,9 @@ def main():
     #                 parse(dir, t, sort_telemetry_into_iperf, runs)
                     
     
-    # Parse phys layer data from FL experiments
-    runs = get_runs_list(dir, 'Runs', ['Run ID', 'Created At', 'Finished At'], 'Created At', 'Finished At')
-    parse(dir, dir, sort_telemetry_into_trials, runs)
+    # # Parse phys layer data from FL experiments
+    # runs = get_runs_list(dir, 'Runs', ['Run ID', 'Created At', 'Finished At'], 'Created At', 'Finished At')
+    # parse(dir, dir, sort_telemetry_into_trials, runs)
 
     # # Combine RNTIs by name (manually) -- only if certain about data belonging to same device
     # trial_path = Path('/Users/kmcomer/Documents/5G Experiment Data/FedAvg/6133849358380166098_4N_40MHz_2-2_MIMO2x2_Dirichlet/phys_layer')
@@ -289,13 +302,13 @@ def main():
     # print(ue_dfs.keys())
     # combine_uedfs_by_rnti(ue_dfs, 'e336-8ef1-b304', '155d-c98e-c0a2', trial_path, drop_timestamp=True) # should return error (105c precedes abca)
 
-    # # Combine RNTIs that must belong to the same device (one disconnect & reconnect only)
-    # for path in Path('/Users/kmcomer/Documents/5G Experiment Data/Phys-layer-unparsed').iterdir():
-    #     if path.is_dir():
-    #         if 'iperf' in str(path):
-    #             pass
-    #         else:
-    #             merge_uedfs_single_disconnect(path / 'phys_layer')
+    # Combine RNTIs that must belong to the same device (one disconnect & reconnect only)
+    for path in Path('/Users/kmcomer/Library/Mobile Documents/com~apple~CloudDocs/fed5g_analysis/data/FedAvg').iterdir():
+        if path.is_dir():
+            if 'iperf' in str(path):
+                pass
+            else:
+                merge_uedfs_single_disconnect(path / 'phys_layer')
 
 if __name__ == '__main__':
     main()
