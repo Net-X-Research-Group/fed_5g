@@ -70,6 +70,8 @@ fi
 # fi
 
 # i could also automate oaibox setup and teardown through running oaibox offline...
+# SERVER_IP="10.106.4.27" #WiFi
+SERVER_IP='172.31.0.135"
 
 for ((CID=START_CLIENT;CID<=END_CLIENT;CID++)); do
     LOGIN=$DEVICE_NAME_PREFIX$CID@$IP_PREFIX${IP_SUFFIXES[$CID-1]}
@@ -78,6 +80,7 @@ for ((CID=START_CLIENT;CID<=END_CLIENT;CID++)); do
 
     # connect device to 5G
     ssh "$LOGIN" 'sudo nmcli r wwan on && sudo nmcli connection up OAI && sudo route add -net 172.31.0.0/24 wwan0'
+    # ssh "$LOGIN" 'sudo route add -net 172.31.0.0/24 wwan0'
     wwan=$(ssh "$LOGIN" ip addr show wwan0 | grep "inet " | awk '{print $2}' | cut -d'/' -f1)
     echo ${wwan}
     sleep 3
@@ -88,6 +91,7 @@ for ((CID=START_CLIENT;CID<=END_CLIENT;CID++)); do
     start=$(date -u -Ins)
     echo start ${start}
     ssh user@10.105.46.208 docker exec oai-ext-dn iperf -t ${TIME} -i 1 -fm -B 172.31.0.135 -p 5001 -c ${wwan} --trip-times #--txdelay-time 1
+    #iperf -t ${TIME} -i 1 -fm -B ${SERVER_IP} -p 5001 -c ${wwan} --trip-times # WiFi
     end=$(date -u -Ins)
     # scp "$LOGIN":"${BW}_${TDD}_pi0${CID}_DL.txt" "iperf/${BW}_${TDD}/pi0${CID}_DL.txt"
     # ssh  > "iperf/${BW}_${TDD}/pi0${CID}_DL.txt"
@@ -113,10 +117,12 @@ for ((CID=START_CLIENT;CID<=END_CLIENT;CID++)); do
 
     # uplink test
     ssh user@10.105.46.208 docker exec oai-ext-dn iperf -s -i 1 -B 172.31.0.135 -p 5001 -t ${TIME} -fm > "iperf/${BW}_${TDD}/pi0${CID}_UL.txt" &
+    #iperf -s -i 1 -B ${SERVER_IP} -p 5001 -t ${TIME} -fm > "iperf/${BW}_${TDD}/pi0${CID}_UL.txt" & # WiFi
+    
     sleep 2
     start=$(date -u -Ins)
     echo start ${start}
-    ssh "$LOGIN" iperf -t ${TIME} -i 1 -fm -c 172.31.0.135 -B "$wwan" --trip-times #--txdelay-time 3
+    ssh "$LOGIN" iperf -t ${TIME} -i 1 -fm -c ${SERVER_IP} -B "$wwan" --trip-times #--txdelay-time 3
     end=$(date -u -Ins)
     echo end ${end}
     
