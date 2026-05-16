@@ -300,6 +300,9 @@ def plot_cellular_sweep(experiment_paths: list, filters: dict, sweep: str, outpu
     latency_metrics = []
 
     for exp in filtered:
+        print(exp)
+        if 'Special cases' in exp['path'].name:
+            continue
         metrics = load(exp)
         common_data = {**exp, 'execution_time': metrics.get('execution_time', None),
                        'start_time': metrics.get('start_time', None), 'sweep': sweep}
@@ -614,7 +617,7 @@ def grid_plot(experiments, output_dir):
     plt.close()
 
 if __name__ == '__main__':
-    directory = Path("/Users/roberthayek/Documents/git_repos/fed_5g/IMC")
+    directory = Path('/Users/kmcomer/Documents/5G Experiment Data/FedAvg')
     output_dir = Path.cwd()
     print(output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
@@ -631,8 +634,8 @@ if __name__ == '__main__':
 
 
     # NETWORK COMPARISON: 7-2 TDD, 40 MHz, 2x2, iid, no congestion
-    plot_cellular_sweep(all_experiments, {'bandwidth': '40 MHz', 'rank': '2x2',
-                                          'distribution': 'dirichlet', 'congestion': False, 'tdd': '7-2', 'nodes': '6N'},
+    plot_cellular_sweep(all_experiments, {'rank': '2x2', 'tdd': '7-2', 'bandwidth': '40 MHz', 
+                                          'distribution': 'dirichlet', 'congestion': False, 'nodes': '6N', 'gcloud': False},
                         sweep='network', output_dir=output_dir)
 
 
