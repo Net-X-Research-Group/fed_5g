@@ -13,7 +13,8 @@ def parse_experiment_name(name):
         'rank': '1x1',
         'distribution': 'dirichlet',
         'congestion': False,
-        'network': 'wwan'
+        'network': 'wwan',
+        'gcloud': False
     }
 
     parts = name.split('_')
@@ -37,19 +38,19 @@ def parse_experiment_name(name):
             params['distribution'] = 'iid'
         elif re.search('Congestion', part, re.IGNORECASE):
             params['congestion'] = True
-        elif re.search(r"wlan", part, re.IGNORECASE):
+        elif re.search('gcloud', part, re.IGNORECASE):
+            params['gcloud'] = True
+        elif re.search(r"WiFi", part, re.IGNORECASE):
             params['network'] = 'wlan'
             params['rank'] = None
             params['tdd'] = None
-            params['congestion'] = None
             params['bandwidth'] = None
         elif re.search(r"wwan", part, re.IGNORECASE):
             params['network'] = 'wwan'
-        elif re.search(r"lan", part, re.IGNORECASE):
+        elif re.search(r"Ethernet", part, re.IGNORECASE):
             params['network'] = 'lan'
             params['rank'] = None
             params['tdd'] = None
-            params['congestion'] = None
             params['bandwidth'] = None
 
     return params
