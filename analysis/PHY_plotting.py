@@ -64,7 +64,7 @@ def theoretical_throughput(bw, Qm, R_max=948/1024, slot_config='7:2', direction=
     return 1e-6 * v_layers * Qm * f * R_max * ((N_PRB[bw] * 12) / T_s) * (1 - oh) * allocated_slots
 
 
-def _num_users_from_exp(exp: dict) -> int:
+def num_users_from_exp(exp: dict) -> int:
     if exp is None:
         return 1
 
@@ -153,14 +153,14 @@ class PlotConfig:
 # Small utilities
 # =========================
 
-def _safe_filename(name: str) -> str:
+def safe_filename(name: str) -> str:
     return re.sub(r'[^A-Za-z0-9._-]+', '_', name).strip('_')
 
-def _norm_thresholds(d: Optional[Dict[str, float]]) -> Dict[str, float]:
+def norm_thresholds(d: Optional[Dict[str, float]]) -> Dict[str, float]:
     return {} if d is None else dict(d)
 
 
-def _phase_list(phase_filter):
+def phase_list(phase_filter):
     if phase_filter is None:
         return None
     if isinstance(phase_filter, str):
@@ -169,7 +169,7 @@ def _phase_list(phase_filter):
     return out or None
 
 
-def _metric_values(df: pl.DataFrame, metric: str, thresholds: Dict[str, float]) -> List[float]:
+def metric_values(df: pl.DataFrame, metric: str, thresholds: Dict[str, float]) -> List[float]:
     if metric not in df.columns:
         return []
     threshold = thresholds.get(metric)
@@ -187,16 +187,16 @@ def _metric_values(df: pl.DataFrame, metric: str, thresholds: Dict[str, float]) 
     return out
 
 
-def _compute_mean_std(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: Dict[str, float]) -> Tuple[Optional[float], Optional[float]]:
+def compute_mean_std(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: Dict[str, float]) -> Tuple[Optional[float], Optional[float]]:
     vals = []
     for df in ue_dfs.values():
-        vals.extend(_metric_values(df, metric, thresholds))
+        vals.extend(metric_values(df, metric, thresholds))
     if not vals:
         return None, None
     s = pd.Series(vals)
     return float(s.mean()), (float(s.std()) if len(s) > 1 else None)
 
-def _ci_halfwidth(std: np.ndarray, n: np.ndarray, level: float = 0.95) -> np.ndarray:
+def ci_halfwidth(std: np.ndarray, n: np.ndarray, level: float = 0.95) -> np.ndarray:
     # normal approx; switch to t-dist if you want exact small-sample behavior
     z = 1.96 if abs(level - 0.95) < 1e-9 else 1.96
     out = np.full_like(std, np.nan, dtype=float)
@@ -208,14 +208,14 @@ def _ci_halfwidth(std: np.ndarray, n: np.ndarray, level: float = 0.95) -> np.nda
 # =========================
 # Data loading
 # =========================
-def _metrics_to_load(metrics: List[str]) -> List[str]:
+def metrics_to_load(metrics: List[str]) -> List[str]:
     base = [m for m in metrics if m not in THROUGHPUT_METRICS]
     if any(m in THROUGHPUT_METRICS for m in metrics):
         base += ["ulBytes", "dlBytes", "ulMcs", "dlMcs", "ulQm", "dlQm", "puschSnr", "sinr"]
     return list(dict.fromkeys(base))
 
 
-def _read_joined_csv(main_fp: str, secondary_fp: Optional[str], columns: Optional[List[str]] = None) -> pl.DataFrame:
+def read_joined_csv(main_fp: str, secondary_fp: Optional[str], columns: Optional[List[str]] = None) -> pl.DataFrame:
     if secondary_fp:
         left = pl.read_csv(main_fp, columns=["timestamp"], try_parse_dates=True).with_row_index("segment")
         right = pl.read_csv(secondary_fp, columns=(["segment"] + columns) if columns else None)
@@ -223,7 +223,7 @@ def _read_joined_csv(main_fp: str, secondary_fp: Optional[str], columns: Optiona
     return pl.read_csv(main_fp, columns=(["timestamp"] + columns) if columns else None, try_parse_dates=True)
 
 
-def _add_throughput(df: pl.DataFrame, exp: dict) -> pl.DataFrame:
+def add_throughput(df: pl.DataFrame, exp: dict) -> pl.DataFrame:
     # def theoretical_throughput(bw, Qm, R_max, slot_config='7:2', direction='dl', num_users=1):
     needed = {"timestamp", "ulBytes", "dlBytes", "ulQm", "dlQm", "ulMcs", "dlMcs", "puschSnr", "sinr"}
     if not needed.issubset(df.columns):
@@ -237,7 +237,7 @@ def _add_throughput(df: pl.DataFrame, exp: dict) -> pl.DataFrame:
     )
     bw = int(exp['bandwidth'].split(" ")[0])
     tdd = exp['tdd']
-    num_users = _num_users_from_exp(exp)
+    num_users = num_users_from_exp(exp)
     num_users = 1
     dl_parts, ul_parts = map(int, tdd.split('-'))
     dl_pct = dl_parts / (dl_parts + ul_parts + 1)
@@ -334,7 +334,7 @@ def load_experiment_data(exp: dict, metrics: List[str]) -> Dict[str, pl.DataFram
     if not phys.exists():
         return {}
 
-    load_cols = _metrics_to_load(metrics)
+    load_cols = metrics_to_load(metrics)
     out = {}
 
     ue_files = []
@@ -348,8 +348,8 @@ def load_experiment_data(exp: dict, metrics: List[str]) -> Dict[str, pl.DataFram
     for fp in sorted(ue_files):
         n = fp.name
         rnti = n.split("_")[1].split(".")[0]
-        df = _read_joined_csv(str(phys / "common.csv"), str(fp), load_cols)
-        out[rnti] = _add_throughput(df, exp_with_users)
+        df = read_joined_csv(str(phys / "common.csv"), str(fp), load_cols)
+        out[rnti] = add_throughput(df, exp_with_users)
 
     return out
 
@@ -381,7 +381,7 @@ def build_iperf_experiment_index(root_dir: Path) -> List[dict]:
     return exps
 
 
-def _normalize_cid(cid: str) -> str:
+def normalize_cid(cid: str) -> str:
     # "05" -> "5", "5" -> "5"
     return str(int(str(cid)))
 
@@ -393,7 +393,7 @@ def load_iperf_experiment_data(
     direction_filter: Optional[List[str]] = None,
 ) -> Dict[str, pl.DataFrame]:
     bw, tdd = exp_path.name.split('_')
-    cid_filter_norm = set(_normalize_cid(c) for c in cid_filter) if cid_filter else None
+    cid_filter_norm = set(normalize_cid(c) for c in cid_filter) if cid_filter else None
     direction_filter_norm = set(d.upper() for d in direction_filter) if direction_filter else None
 
     out = {}
@@ -407,7 +407,7 @@ def load_iperf_experiment_data(
         if not m:
             continue
         cid_raw = m.group(1)           # e.g. "05" or "5"
-        cid_norm = _normalize_cid(cid_raw)
+        cid_norm = normalize_cid(cid_raw)
         direction = m.group(2).upper()
 
         if cid_filter_norm and cid_norm not in cid_filter_norm:
@@ -423,7 +423,7 @@ def load_iperf_experiment_data(
                     pl.col("timestamp").str.to_datetime(time_zone="UTC", strict=False)
                 )
 
-            df = _add_throughput(df, {"bandwidth": bw, "tdd": tdd})
+            df = add_throughput(df, {"bandwidth": bw, "tdd": tdd})
 
             rnti = fp.stem.replace("ue_", "")
             key = f"pi{int(cid_norm):02d}_{direction}_{rnti}"
@@ -437,7 +437,7 @@ def load_iperf_experiment_data(
 # (compact versions)
 # =========================
 
-def _get_duration_column(df: pd.DataFrame, candidates: List[str], default=0.0):
+def get_duration_column(df: pd.DataFrame, candidates: List[str], default=0.0):
     for c in candidates:
         if c in df.columns:
             vals = pd.to_numeric(df[c], errors="coerce").fillna(default)
@@ -445,7 +445,7 @@ def _get_duration_column(df: pd.DataFrame, candidates: List[str], default=0.0):
     return pd.Series(default, index=df.index, dtype="float64")
 
 
-def _load_start_time_s(exp_path: Path) -> Optional[float]:
+def load_start_time_s(exp_path: Path) -> Optional[float]:
     fp = exp_path / "start_time.txt"
     if not fp.exists():
         return None
@@ -456,7 +456,7 @@ def _load_start_time_s(exp_path: Path) -> Optional[float]:
         return None
 
 
-def _load_individual_timing_records(exp_path: Path) -> pd.DataFrame:
+def load_individual_timing_records(exp_path: Path) -> pd.DataFrame:
     ind_fp = exp_path / "individual_metrics.json"
     if not ind_fp.exists():
         return pd.DataFrame()
@@ -518,8 +518,8 @@ def _load_individual_timing_records(exp_path: Path) -> pd.DataFrame:
 
     if lat_rows:
         lat = pd.concat(lat_rows, ignore_index=True)
-        lat["uplink_s"] = _get_duration_column(lat, ["uplink_latency", "uplink_time", "ul_time_s"], default=0.0)
-        lat["downlink_s"] = _get_duration_column(lat, ["downlink_latency", "downlink_time", "dl_time_s"], default=0.0)
+        lat["uplink_s"] = get_duration_column(lat, ["uplink_latency", "uplink_time", "ul_time_s"], default=0.0)
+        lat["downlink_s"] = get_duration_column(lat, ["downlink_latency", "downlink_time", "dl_time_s"], default=0.0)
         keep = lat[["round_id", "cid", "uplink_s", "downlink_s"]]
         base = base.merge(keep, on=["round_id", "cid"], how="left")
     else:
@@ -533,8 +533,8 @@ def _load_individual_timing_records(exp_path: Path) -> pd.DataFrame:
     return base
 
 
-def _build_round_windows_from_individual(exp_path: Path, max_gap_s=200) -> pd.DataFrame:
-    rows = _load_individual_timing_records(exp_path)
+def build_round_windows_from_individual(exp_path: Path, max_gap_s=200) -> pd.DataFrame:
+    rows = load_individual_timing_records(exp_path)
     if rows.empty:
         return pd.DataFrame()
 
@@ -560,7 +560,7 @@ def _build_round_windows_from_individual(exp_path: Path, max_gap_s=200) -> pd.Da
     if g.empty:
         return pd.DataFrame()
 
-    start_time_s = _load_start_time_s(exp_path)
+    start_time_s = load_start_time_s(exp_path)
     prev_end = None
     starts = []
     for i, r in g.iterrows():
@@ -598,7 +598,7 @@ def build_round_windows(agg_metrics_file: str, max_gap_s=200, exp_path: Optional
         exp_path = Path(agg_metrics_file).parent
 
     # Prefer per-device timings because aggregate timestamps are not aligned to true round boundaries.
-    from_individual = _build_round_windows_from_individual(exp_path, max_gap_s=max_gap_s)
+    from_individual = build_round_windows_from_individual(exp_path, max_gap_s=max_gap_s)
     if not from_individual.empty:
         return from_individual
 
@@ -607,7 +607,7 @@ def build_round_windows(agg_metrics_file: str, max_gap_s=200, exp_path: Optional
     agg = agg.sort_values("timestamp").reset_index(drop=True)
 
     gap_s = agg["timestamp"].diff().dt.total_seconds()
-    agg["round_duration"] = _get_duration_column(agg, ["round_duration", "round_time", "duration_s"], default=np.nan)
+    agg["round_duration"] = get_duration_column(agg, ["round_duration", "round_time", "duration_s"], default=np.nan)
 
     if agg["round_duration"].isna().all():
         inf = gap_s.copy()
@@ -627,10 +627,10 @@ def build_round_windows(agg_metrics_file: str, max_gap_s=200, exp_path: Optional
     r["round_end"] = r["timestamp"]
     r["round_start"] = r["round_end"] - pd.to_timedelta(r["round_duration"], unit="s")
 
-    r["downlink_s"] = _get_duration_column(r, ["downlink_latency", "downlink_time", "dl_time_s"])
-    r["train_s"] = _get_duration_column(r, ["train_time", "local_train_time", "training_time"])
-    r["eval_s"] = _get_duration_column(r, ["eval_time", "evaluation_time"])
-    r["uplink_s"] = _get_duration_column(r, ["uplink_latency", "uplink_time", "ul_time_s"])
+    r["downlink_s"] = get_duration_column(r, ["downlink_latency", "downlink_time", "dl_time_s"])
+    r["train_s"] = get_duration_column(r, ["train_time", "local_train_time", "training_time"])
+    r["eval_s"] = get_duration_column(r, ["eval_time", "evaluation_time"])
+    r["uplink_s"] = get_duration_column(r, ["uplink_latency", "uplink_time", "ul_time_s"])
 
     r["downlink_end"] = r["round_start"] + pd.to_timedelta(r["downlink_s"], unit="s")
     r["training_end"] = r["downlink_end"] + pd.to_timedelta(r["train_s"], unit="s")
@@ -639,7 +639,7 @@ def build_round_windows(agg_metrics_file: str, max_gap_s=200, exp_path: Optional
     return r
 
 
-def _with_round_anchor_timestamp(trial_data: pl.DataFrame) -> pl.DataFrame:
+def with_round_anchor_timestamp(trial_data: pl.DataFrame) -> pl.DataFrame:
     """
     Add `round_anchor_ts` used for round/phase attribution.
 
@@ -679,7 +679,7 @@ def annotate_telemetry_with_rounds_and_phases(trial_data: pl.DataFrame, rounds: 
     if rounds.empty:
         return trial_data
 
-    trial_data = _with_round_anchor_timestamp(trial_data)
+    trial_data = with_round_anchor_timestamp(trial_data)
 
     rp = pl.from_pandas(rounds[["round_id", "round_start", "round_end", "downlink_end", "training_end", "evaluation_end", "uplink_end"]])
     ts_dtype = trial_data.schema.get("timestamp")
@@ -722,7 +722,7 @@ def apply_round_processing(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], cfg:
     out = {}
     for rnti, df in ue_dfs.items():
         d = df.sort("timestamp")
-        d = _with_round_anchor_timestamp(d)
+        d = with_round_anchor_timestamp(d)
 
         intervals = pl.from_pandas(rounds[["round_start", "round_end"]])
         ts_dtype = d.schema.get("timestamp")
@@ -755,8 +755,8 @@ def apply_round_processing(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], cfg:
     return out, rounds
 
 
-def _fl_ul_order_by_round(exp_path: Path) -> Dict[int, List[int]]:
-    rows = _load_individual_timing_records(exp_path)
+def fl_ul_order_by_round(exp_path: Path) -> Dict[int, List[int]]:
+    rows = load_individual_timing_records(exp_path)
     if rows.empty:
         return {}
 
@@ -769,7 +769,7 @@ def _fl_ul_order_by_round(exp_path: Path) -> Dict[int, List[int]]:
     return out
 
 
-def _phy_ul_order_by_round(ue_dfs: Dict[str, pl.DataFrame]) -> Dict[int, List[str]]:
+def phy_ul_order_by_round(ue_dfs: Dict[str, pl.DataFrame]) -> Dict[int, List[str]]:
     peak_rows: List[Dict[str, Any]] = []
     for rnti, df in ue_dfs.items():
         needed = {"round_id", "timestamp", "ul_throughput_mbps"}
@@ -807,7 +807,7 @@ def _phy_ul_order_by_round(ue_dfs: Dict[str, pl.DataFrame]) -> Dict[int, List[st
     return out
 
 
-def _rnti_segment_window_and_rounds(ue_dfs: Dict[str, pl.DataFrame]) -> Dict[str, Dict[str, Any]]:
+def rnti_segment_window_and_rounds(ue_dfs: Dict[str, pl.DataFrame]) -> Dict[str, Dict[str, Any]]:
     out: Dict[str, Dict[str, Any]] = {}
     for rnti, df in ue_dfs.items():
         key = str(rnti)
@@ -834,10 +834,10 @@ def _rnti_segment_window_and_rounds(ue_dfs: Dict[str, pl.DataFrame]) -> Dict[str
 
 
 def print_rnti_cid_mapping(exp_path: Path, ue_dfs: Dict[str, pl.DataFrame], run_label: str):
-    fl_orders = _fl_ul_order_by_round(exp_path)
-    phy_orders = _phy_ul_order_by_round(ue_dfs)
+    fl_orders = fl_ul_order_by_round(exp_path)
+    phy_orders = phy_ul_order_by_round(ue_dfs)
     common_rounds = sorted(set(fl_orders.keys()) & set(phy_orders.keys()))
-    rnti_windows = _rnti_segment_window_and_rounds(ue_dfs)
+    rnti_windows = rnti_segment_window_and_rounds(ue_dfs)
 
     if not common_rounds:
         print(f"[{run_label}] mapping skipped: no overlapping FL/PHY UL-order rounds")
@@ -920,7 +920,7 @@ def compute_round_average_profile(
         return pd.DataFrame()
 
     df = annotated_trial_data.to_pandas()
-    phases = _phase_list(phase_filter)
+    phases = phase_list(phase_filter)
     if phases is not None and "phase" in df.columns:
         df = df[df["phase"].isin(phases)]
     if round_ids is not None and "round_id" in df.columns:
@@ -992,7 +992,7 @@ def compute_round_average_profile_real_time(
         return pd.DataFrame()
 
     df = annotated_trial_data.to_pandas()
-    phases = _phase_list(phase_filter)
+    phases = phase_list(phase_filter)
     if phases is not None and "phase" in df.columns:
         df = df[df["phase"].isin(phases)]
     if round_ids is not None and "round_id" in df.columns:
@@ -1080,7 +1080,7 @@ def compute_round_curves_for_one_rnti(
         return {}
 
     mode = (cfg.round_profile_time_mode or "normalized").lower()
-    phases = _phase_list(cfg.round_profile_phase_filter)
+    phases = phase_list(cfg.round_profile_phase_filter)
 
     df = annotated_trial_data.to_pandas()
     if phases is not None and "phase" in df.columns:
@@ -1173,7 +1173,7 @@ def compute_round_curves_for_one_rnti(
     return curves
 
 
-def _selected_round_ids(available_round_ids: List[int], cfg: PlotConfig) -> List[int]:
+def selected_round_ids(available_round_ids: List[int], cfg: PlotConfig) -> List[int]:
     available = set(int(r) for r in available_round_ids)
     if cfg.round_profile_round_ids:
         return [int(r) for r in cfg.round_profile_round_ids if int(r) in available]
@@ -1185,7 +1185,7 @@ def _selected_round_ids(available_round_ids: List[int], cfg: PlotConfig) -> List
     return ordered[:max_curves]
 
 
-def _selected_rntis_for_per_round(ue_dfs: Dict[str, pl.DataFrame], cfg: PlotConfig) -> List[str]:
+def selected_rntis_for_per_round(ue_dfs: Dict[str, pl.DataFrame], cfg: PlotConfig) -> List[str]:
     all_rntis = sorted(str(k) for k in ue_dfs.keys())
     if not all_rntis:
         return []
@@ -1220,7 +1220,7 @@ def plot_round_profiles(
       - optional effective sum line for throughput metrics
     """
     layout = (cfg.round_profile_layout or "same_axes").lower()
-    phases = _phase_list(cfg.round_profile_phase_filter)
+    phases = phase_list(cfg.round_profile_phase_filter)
     phase_suffix = "" if phases is None else f" ({'/'.join(phases)})"
 
     mode = (cfg.round_profile_time_mode or "normalized").lower()
@@ -1234,7 +1234,7 @@ def plot_round_profiles(
             return
 
         layout_mode = (cfg.round_profile_per_round_rnti_layout or "single").lower()
-        selected_rntis = _selected_rntis_for_per_round(ue_by_rnti, cfg)
+        selected_rntis = selected_rntis_for_per_round(ue_by_rnti, cfg)
         if not selected_rntis:
             print(f"[round profile] no matching RNTIs found, available={sorted(ue_by_rnti.keys())}")
             return
@@ -1251,7 +1251,7 @@ def plot_round_profiles(
         # Keep only requested rounds (if provided) or apply max-curves cap.
         rounds_for_rnti: Dict[str, List[int]] = {}
         for rnti, curves in curves_by_rnti.items():
-            chosen = _selected_round_ids(list(curves.keys()), cfg)
+            chosen = selected_round_ids(list(curves.keys()), cfg)
             if chosen:
                 rounds_for_rnti[rnti] = chosen
 
@@ -1270,7 +1270,7 @@ def plot_round_profiles(
 
             # Print FL CID order for the same rounds used in this overlay.
             if exp_path is not None:
-                fl_orders = _fl_ul_order_by_round(exp_path)
+                fl_orders = fl_ul_order_by_round(exp_path)
                 plotted_rounds = sorted({rid for rr in rounds_for_rnti.values() for rid in rr})
                 if plotted_rounds:
                     print(f"[{run_label}] FL CID UL-order for same_axes plotted rounds:")
@@ -1310,7 +1310,7 @@ def plot_round_profiles(
 
             fig.tight_layout()
             if cfg.output_dir is not None:
-                plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+                plt.savefig(cfg.output_dir / f"{safe_filename(title)}.pdf")
             if cfg.show_plots:
                 plt.show()
             else:
@@ -1340,7 +1340,7 @@ def plot_round_profiles(
 
             fig.tight_layout()
             if cfg.output_dir is not None:
-                plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+                plt.savefig(cfg.output_dir / f"{safe_filename(title)}.pdf")
             if cfg.show_plots:
                 plt.show()
             else:
@@ -1350,7 +1350,7 @@ def plot_round_profiles(
     # -------- averaged profile mode --------
     prof_a, prof_b = {}, {}
     prof_theory: Dict[str, Dict[str, pd.DataFrame]] = {}
-    theory_cols = _round_profile_theory_columns(metric, cfg.round_profile_theoretical_models) if cfg.round_profile_include_theoretical else []
+    theory_cols = round_profile_theory_columns(metric, cfg.round_profile_theoretical_models) if cfg.round_profile_include_theoretical else []
     for dev, df in ue_dfs.items():
         if "round_id" not in df.columns:
             continue
@@ -1426,14 +1426,14 @@ def plot_round_profiles(
             for dev, p in prof_a.items():
                 ax1.plot(p[xcol], p["mean"], label=dev)
                 if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
-                    hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+                    hw = ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
                     m = p["mean"].to_numpy(float)
                     x = p[xcol].to_numpy(float)
                     ax.fill_between(x, m - hw, m + hw, alpha=0.18)
             for dev, p in prof_b.items():
                 ax2.plot(p[xcol], p["mean"], label=dev)
                 if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
-                    hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+                    hw = ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
                     m = p["mean"].to_numpy(float)
                     x = p[xcol].to_numpy(float)
                     ax.fill_between(x, m - hw, m + hw, alpha=0.18)
@@ -1459,7 +1459,7 @@ def plot_round_profiles(
             for dev, p in prof_a.items():
                 ax.plot(p[xcol], p["mean"], "-", color=c[dev], label=f"{dev} UL")
                 if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
-                    hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+                    hw = ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
                     m = p["mean"].to_numpy(float)
                     x = p[xcol].to_numpy(float)
                     ax.fill_between(x, m - hw, m + hw, alpha=0.9,color=c[dev])
@@ -1467,7 +1467,7 @@ def plot_round_profiles(
                 ax.plot(p[xcol], p["mean"], "--", color=c[dev], label=f"{dev} DL")
             
                 if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
-                    hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+                    hw = ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
                     m = p["mean"].to_numpy(float)
                     x = p[xcol].to_numpy(float)
                     ax.fill_between(x, m - hw, m + hw, alpha=0.9,color=c[dev])
@@ -1482,7 +1482,7 @@ def plot_round_profiles(
 
         fig.tight_layout()
         if cfg.output_dir is not None:
-            plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+            plt.savefig(cfg.output_dir / f"{safe_filename(title)}.pdf")
         if cfg.show_plots:
             plt.show()
         else:
@@ -1498,7 +1498,7 @@ def plot_round_profiles(
         ax.plot(p[xcol], p["mean"],label=dev)
 
         if cfg.round_profile_ci_bands and {"mean", "std", "n"}.issubset(p.columns):
-            hw = _ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
+            hw = ci_halfwidth(p["std"].to_numpy(float), p["n"].to_numpy(float), cfg.round_profile_ci_level)
             m = p["mean"].to_numpy(float)
             x = p[xcol].to_numpy(float)
             ax.fill_between(x, m - hw, m + hw, alpha=0.18)
@@ -1555,7 +1555,7 @@ def plot_round_profiles(
 
     fig.tight_layout()
     if cfg.output_dir is not None:
-        plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+        plt.savefig(cfg.output_dir / f"{safe_filename(title)}.pdf")
     if cfg.show_plots:
         plt.show()
     else:
@@ -1565,23 +1565,23 @@ def plot_round_profiles(
 # Plotting
 # =========================
 
-def _distribution_df(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: Dict[str, float], paired_metric: Optional[str]):
+def distribution_df(ue_dfs: Dict[str, pl.DataFrame], metric: str, thresholds: Dict[str, float], paired_metric: Optional[str]):
     rows = []
     for rnti, df in ue_dfs.items():
-        for v in _metric_values(df, metric, thresholds):
+        for v in metric_values(df, metric, thresholds):
             row = {"device": str(rnti), "value": v, "series": metric}
             if paired_metric:
                 row["direction"] = "UL"
             rows.append(row)
 
         if paired_metric and paired_metric in df.columns:
-            for v in _metric_values(df, paired_metric, thresholds):
+            for v in metric_values(df, paired_metric, thresholds):
                 rows.append({"device": str(rnti), "value": v, "series": paired_metric, "direction": "DL"})
 
     return pd.DataFrame(rows)
 
 
-def _throughput_overlay_columns(metric: str, models: List[str]) -> List[Tuple[str, str]]:
+def throughput_overlay_columns(metric: str, models: List[str]) -> List[Tuple[str, str]]:
     if metric not in {"ul_throughput_mbps", "dl_throughput_mbps"}:
         return []
 
@@ -1610,7 +1610,7 @@ def _throughput_overlay_columns(metric: str, models: List[str]) -> List[Tuple[st
     return deduped
 
 
-def _round_profile_theory_columns(metric: str, models: List[str]) -> List[Tuple[str, str]]:
+def round_profile_theory_columns(metric: str, models: List[str]) -> List[Tuple[str, str]]:
     if metric not in {"ul_throughput_mbps", "dl_throughput_mbps"}:
         return []
 
@@ -1633,7 +1633,7 @@ def plot_throughput_overlay(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_la
     if "time" not in cfg.plot_mode:
         return
 
-    series_cols = _throughput_overlay_columns(metric, cfg.throughput_overlay_models)
+    series_cols = throughput_overlay_columns(metric, cfg.throughput_overlay_models)
     if len(series_cols) <= 1:
         return
 
@@ -1702,7 +1702,7 @@ def plot_throughput_overlay(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_la
     ax.grid(True)
 
     if cfg.save_plots:
-        plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+        plt.savefig(cfg.output_dir / f"{safe_filename(title)}.pdf")
     if cfg.show_plots:
         plt.show()
     else:
@@ -1713,7 +1713,7 @@ def plot_throughput_overlay(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_la
     if "time" not in cfg.plot_mode:
         return
 
-    series_cols = _throughput_overlay_columns(metric, cfg.throughput_overlay_models)
+    series_cols = throughput_overlay_columns(metric, cfg.throughput_overlay_models)
     if len(series_cols) <= 1:
         return
 
@@ -1783,7 +1783,7 @@ def plot_throughput_overlay(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_la
     ax.grid(True)
 
     if cfg.save_plots:
-        plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+        plt.savefig(cfg.output_dir / f"{safe_filename(title)}.pdf")
     if cfg.show_plots:
         plt.show()
     else:
@@ -1791,7 +1791,7 @@ def plot_throughput_overlay(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_la
 
 
 def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cfg: PlotConfig, paired_metric: Optional[str] = None):
-    thresholds = _norm_thresholds(cfg.min_thresholds)
+    thresholds = norm_thresholds(cfg.min_thresholds)
 
     if "time" in cfg.plot_mode:
         fig, ax = plt.subplots()
@@ -1839,7 +1839,7 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
         print(title)
         ax.grid(True)
         if cfg.save_plots:
-            plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+            plt.savefig(cfg.output_dir / f"{safe_filename(title)}.pdf")
         if cfg.show_plots:
             plt.show()
         else:
@@ -1847,7 +1847,7 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
 
     # distribution mode
     if "dist" in cfg.plot_mode:
-        df = _distribution_df(ue_dfs, metric, thresholds, paired_metric)
+        df = distribution_df(ue_dfs, metric, thresholds, paired_metric)
         if df.empty:
             return
 
@@ -1872,7 +1872,7 @@ def plot_metric(ue_dfs: Dict[str, pl.DataFrame], metric: str, run_label: str, cf
         ax.grid(True)
 
         if cfg.save_plots:
-            plt.savefig(cfg.output_dir / f"{_safe_filename(title)}.pdf")
+            plt.savefig(cfg.output_dir / f"{safe_filename(title)}.pdf")
         if cfg.show_plots:
             plt.show()
         else:
@@ -1952,8 +1952,8 @@ def summarize_throughput(ue_dfs: Dict[str, pl.DataFrame], run_label: str, thresh
     for rnti, df in ue_dfs.items():
         if not {"ul_throughput_mbps", "dl_throughput_mbps"}.issubset(df.columns):
             continue
-        ul = _metric_values(df, "ul_throughput_mbps", thresholds)
-        dl = _metric_values(df, "dl_throughput_mbps", thresholds)
+        ul = metric_values(df, "ul_throughput_mbps", thresholds)
+        dl = metric_values(df, "dl_throughput_mbps", thresholds)
         rows.append({
             "run_id": run_label,
             "device": rnti,
@@ -1967,7 +1967,7 @@ def summarize_throughput(ue_dfs: Dict[str, pl.DataFrame], run_label: str, thresh
 
 def run_analysis(exp: dict, cfg: PlotConfig):
     label = run_label_for(exp, cfg.sweep)
-    thresholds = _norm_thresholds(cfg.min_thresholds)
+    thresholds = norm_thresholds(cfg.min_thresholds)
 
     if cfg.dataset_type.lower() == "iperf":
         ue_dfs = load_iperf_experiment_data(
@@ -2000,9 +2000,9 @@ def run_analysis(exp: dict, cfg: PlotConfig):
                 paired = candidate
                 processed.add(candidate)
 
-        m, _s = _compute_mean_std(ue_dfs, metric, thresholds)
+        m, _s = compute_mean_std(ue_dfs, metric, thresholds)
         if paired:
-            pm, _ps = _compute_mean_std(ue_dfs, paired, thresholds)
+            pm, _ps = compute_mean_std(ue_dfs, paired, thresholds)
             if m is None and pm is None:
                 continue
         else:
@@ -2059,25 +2059,25 @@ def run_pipeline(cfg: PlotConfig):
 
 
 def main():
-    cfg = PlotConfig(
-        data_dir=Path("/Users/kmcomer/Documents/5G Experiment Data/FedAvg/"),
+    cfg = PlotConfig(#'/Users/kmcomer/Library/Mobile Documents/com~apple~CloudDocs/fed5g_analysis/data/FedAvg/7468668250861472956_5N_40MHz_2-2_MIMO2x2_Dirichlet'
+        data_dir=Path('/Users/kmcomer/Library/Mobile Documents/com~apple~CloudDocs/fed5g_analysis/data/FedAvg'),
         output_dir=Path.cwd() / "phys_layer_plots",
         filters={
             "bandwidth": "40 MHz",
             "distribution": "dirichlet",
             "tdd": "2-2",
-            "nodes": "4N",
+            "nodes": "5N",
             "rank": "2x2",
             "congestion": False,
         },
         sweep="network",
         # metrics=["ulMcs", "dlMcs", "puschSnr", "rssi", "ul_throughput_mbps", "dl_throughput_mbps", "phr", "ulBler", "dlBler", "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp"],
-        metrics=["rssi","ul_throughput_mbps", "dl_throughput_mbps"],#, "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp", "ul_shannon_sinr", "dl_shannon_sinr"],
+        metrics=["ul_throughput_mbps"],#["rssi","ul_throughput_mbps", "dl_throughput_mbps"],#, "ul_shannon", "dl_shannon", "ul_3gpp", "dl_3gpp", "ul_shannon_sinr", "dl_shannon_sinr"],
         # min_thresholds={"ul_throughput_mbps": 0.01, "dl_throughput_mbps": 0.01},
         filter_rounds=True,
         annotate_phases=True,
         pair_ul_dl=False,
-        plot_mode=[],#["time"],
+        plot_mode=[],#["time","dist"],
         smoothing=False,
         pts_to_plot = 1000,
         pts_offset = 0,
