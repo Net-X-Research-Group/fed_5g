@@ -23,11 +23,20 @@ def format_sweep_label(sweep_param, sweep_value, exp=None):
         if sweep_value == 'wwan' and exp:
             base_label = network_map.get(sweep_value, sweep_value)
             config_parts = []
-            for param in ['tdd', 'bandwidth', 'rank']:
+            for param in ['tdd', 'bandwidth', 'rank', 'nodes', 'distribution', 'congestion', 'gcloud']:
+                value = exp.get(param)
+                if value is None:
+                    continue
                 if param == 'tdd':
-                    config_parts.append(exp[param].replace('-', ':'))
+                    config_parts.append(str(value).replace('-', ':'))
+                elif param == 'congestion':
+                    if value:
+                        config_parts.append('Congestion')
+                elif param == 'gcloud':
+                    if value:
+                        config_parts.append('Cloud')
                 else:
-                    config_parts.append(str(exp[param]))
+                    config_parts.append(str(value))
             if config_parts:
                 return f'{base_label} - ({", ".join(config_parts)})'
             return base_label
